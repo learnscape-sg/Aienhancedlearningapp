@@ -2,8 +2,9 @@ import React, { useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
-import { BookOpen, Users, TrendingUp, MoreVertical, Search, Edit, Trash2, Eye, Copy } from 'lucide-react';
+import { BookOpen, Users, TrendingUp, MoreVertical, Search, Edit, Trash2, Eye, UserPlus, X } from 'lucide-react';
 import { Badge } from './ui/badge';
+import { usePublishedCourses } from './PublishedCoursesContext';
 
 interface Course {
   id: string;
@@ -16,64 +17,58 @@ interface Course {
   lastUpdated: string;
 }
 
+interface Class {
+  id: string;
+  name: string;
+  grade: string;
+  studentCount: number;
+}
+
 export function CourseManagementPage() {
+  const { publishedCourses } = usePublishedCourses();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedFilter, setSelectedFilter] = useState('all');
+  const [assignDialogOpen, setAssignDialogOpen] = useState(false);
+  const [selectedCourse, setSelectedCourse] = useState<Course | null>(null);
+  const [selectedClasses, setSelectedClasses] = useState<string[]>([]);
 
-  const courses: Course[] = [
-    {
-      id: '1',
-      title: '高中物理 - 牛顿定律',
-      subject: '物理',
-      grade: '高一',
-      students: 45,
-      completion: 92,
-      status: 'published',
-      lastUpdated: '2天前'
-    },
-    {
-      id: '2',
-      title: '初中数学 - 几何基础',
-      subject: '数学',
-      grade: '初二',
-      students: 38,
-      completion: 88,
-      status: 'published',
-      lastUpdated: '5天前'
-    },
-    {
-      id: '3',
-      title: '高中化学 - 有机化学入门',
-      subject: '化学',
-      grade: '高二',
-      students: 32,
-      completion: 85,
-      status: 'published',
-      lastUpdated: '1周前'
-    },
-    {
-      id: '4',
-      title: '初中生物 - 细胞结构',
-      subject: '生物',
-      grade: '初一',
-      students: 28,
-      completion: 90,
-      status: 'published',
-      lastUpdated: '3天前'
-    },
-    {
-      id: '5',
-      title: '高中物理 - 电磁学',
-      subject: '物理',
-      grade: '高二',
-      students: 0,
-      completion: 0,
-      status: 'draft',
-      lastUpdated: '今天'
-    },
+  // Mock class data - in real app, this would come from a context or API
+  const classes: Class[] = [
+    { id: '1', name: '高一3班', grade: '高一', studentCount: 42 },
+    { id: '2', name: '高二1班', grade: '高二', studentCount: 38 },
+    { id: '3', name: '高一5班', grade: '高一', studentCount: 40 },
+    { id: '4', name: '初三2班', grade: '初三', studentCount: 35 },
+    { id: '5', name: '高二3班', grade: '高二', studentCount: 36 },
   ];
 
-  const filteredCourses = courses.filter(course => {
+  const handleAssignClick = (course: Course) => {
+    setSelectedCourse(course);
+    setSelectedClasses([]);
+    setAssignDialogOpen(true);
+  };
+
+  const handleClassToggle = (classId: string) => {
+    setSelectedClasses(prev => 
+      prev.includes(classId) 
+        ? prev.filter(id => id !== classId)
+        : [...prev, classId]
+    );
+  };
+
+  const handleConfirmAssign = () => {
+    if (selectedCourse && selectedClasses.length > 0) {
+      const classNames = classes
+        .filter(c => selectedClasses.includes(c.id))
+        .map(c => c.name)
+        .join('、');
+      alert(`成功将课程"${selectedCourse.title}"分配给：${classNames}`);
+      setAssignDialogOpen(false);
+      setSelectedCourse(null);
+      setSelectedClasses([]);
+    }
+  };
+
+  const filteredCourses = publishedCourses.filter(course => {
     const matchesSearch = course.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
                          course.subject.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesFilter = selectedFilter === 'all' || 
@@ -97,7 +92,7 @@ export function CourseManagementPage() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-muted-foreground">总课程数</p>
-                <p className="text-2xl font-bold">{courses.length}</p>
+                <p className="text-2xl font-bold">{publishedCourses.length}</p>
               </div>
               <BookOpen className="w-8 h-8 text-blue-600" />
             </div>
@@ -108,7 +103,7 @@ export function CourseManagementPage() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-muted-foreground">已发布</p>
-                <p className="text-2xl font-bold">{courses.filter(c => c.status === 'published').length}</p>
+                <p className="text-2xl font-bold">{publishedCourses.filter(c => c.status === 'published').length}</p>
               </div>
               <TrendingUp className="w-8 h-8 text-green-600" />
             </div>
@@ -119,7 +114,7 @@ export function CourseManagementPage() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-muted-foreground">总学生数</p>
-                <p className="text-2xl font-bold">{courses.reduce((sum, c) => sum + c.students, 0)}</p>
+                <p className="text-2xl font-bold">{publishedCourses.reduce((sum, c) => sum + c.students, 0)}</p>
               </div>
               <Users className="w-8 h-8 text-purple-600" />
             </div>
@@ -131,7 +126,7 @@ export function CourseManagementPage() {
               <div>
                 <p className="text-sm text-muted-foreground">平均完成率</p>
                 <p className="text-2xl font-bold">
-                  {Math.round(courses.filter(c => c.status === 'published').reduce((sum, c) => sum + c.completion, 0) / courses.filter(c => c.status === 'published').length)}%
+                  {Math.round(publishedCourses.filter(c => c.status === 'published').reduce((sum, c) => sum + c.completion, 0) / publishedCourses.filter(c => c.status === 'published').length)}%
                 </p>
               </div>
               <TrendingUp className="w-8 h-8 text-orange-600" />
@@ -228,9 +223,9 @@ export function CourseManagementPage() {
                     <Edit className="w-4 h-4 mr-1" />
                     编辑
                   </Button>
-                  <Button variant="ghost" size="sm">
-                    <Copy className="w-4 h-4 mr-1" />
-                    复制
+                  <Button variant="ghost" size="sm" onClick={() => handleAssignClick(course)}>
+                    <UserPlus className="w-4 h-4 mr-1" />
+                    分配
                   </Button>
                   <Button variant="ghost" size="sm">
                     <MoreVertical className="w-4 h-4" />
@@ -241,6 +236,93 @@ export function CourseManagementPage() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Assign Dialog */}
+      {assignDialogOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <Card className="w-[500px] max-h-[80vh] flex flex-col overflow-hidden">
+            <CardHeader className="border-b flex-shrink-0">
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle>分配课程自学任务</CardTitle>
+                  <CardDescription className="mt-1">
+                    课程：{selectedCourse?.title}
+                  </CardDescription>
+                </div>
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  onClick={() => setAssignDialogOpen(false)}
+                  className="h-8 w-8 p-0"
+                >
+                  <X className="w-4 h-4" />
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent className="p-6 flex-1 overflow-y-auto">
+              <p className="text-sm text-muted-foreground mb-4">
+                选择要分配此课程的班级（可多选）
+              </p>
+              <div className="space-y-2">
+                {classes.map(c => (
+                  <div 
+                    key={c.id} 
+                    className={`flex items-center p-3 border rounded-lg cursor-pointer transition-colors hover:bg-gray-50 ${
+                      selectedClasses.includes(c.id) ? 'bg-blue-50 border-blue-300' : ''
+                    }`}
+                    onClick={() => handleClassToggle(c.id)}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selectedClasses.includes(c.id)}
+                      onChange={() => handleClassToggle(c.id)}
+                      className="mr-3 w-4 h-4 text-blue-600 rounded"
+                    />
+                    <div className="flex-1">
+                      <div className="flex items-center space-x-2">
+                        <Users className="w-4 h-4 text-gray-500" />
+                        <span className="font-medium">{c.name}</span>
+                        <Badge variant="secondary" className="text-xs">
+                          {c.grade}
+                        </Badge>
+                      </div>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        {c.studentCount} 名学生
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              {selectedClasses.length > 0 && (
+                <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                  <p className="text-sm text-blue-900">
+                    已选择 <span className="font-semibold">{selectedClasses.length}</span> 个班级，
+                    共 <span className="font-semibold">
+                      {classes.filter(c => selectedClasses.includes(c.id)).reduce((sum, c) => sum + c.studentCount, 0)}
+                    </span> 名学生
+                  </p>
+                </div>
+              )}
+            </CardContent>
+            <div className="border-t p-4 flex justify-end space-x-3 bg-gray-50 flex-shrink-0">
+              <Button
+                variant="outline"
+                onClick={() => setAssignDialogOpen(false)}
+              >
+                取消
+              </Button>
+              <Button
+                onClick={handleConfirmAssign}
+                disabled={selectedClasses.length === 0}
+                className="bg-blue-600 hover:bg-blue-700"
+              >
+                <UserPlus className="w-4 h-4 mr-2" />
+                确认分配
+              </Button>
+            </div>
+          </Card>
+        </div>
+      )}
     </div>
   );
 }

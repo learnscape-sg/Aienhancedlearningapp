@@ -75,7 +75,6 @@
     --font-sans: ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
     --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
     --color-red-50: oklch(.971 .013 17.38);
-    --color-red-100: oklch(.936 .032 17.717);
     --color-red-200: oklch(.885 .062 18.334);
     --color-red-500: oklch(.637 .237 25.331);
     --color-red-600: oklch(.577 .245 27.325);
@@ -92,6 +91,8 @@
     --color-amber-600: oklch(.666 .179 58.318);
     --color-yellow-50: oklch(.987 .026 102.212);
     --color-yellow-100: oklch(.973 .071 103.193);
+    --color-yellow-200: oklch(.945 .129 101.54);
+    --color-yellow-300: oklch(.905 .182 98.111);
     --color-yellow-400: oklch(.852 .199 91.936);
     --color-yellow-800: oklch(.476 .114 61.907);
     --color-green-50: oklch(.982 .018 155.826);
@@ -103,8 +104,11 @@
     --color-green-600: oklch(.627 .194 149.214);
     --color-green-700: oklch(.527 .154 150.069);
     --color-green-800: oklch(.448 .119 151.328);
+    --color-green-900: oklch(.393 .095 152.535);
     --color-teal-500: oklch(.704 .14 182.503);
     --color-cyan-500: oklch(.715 .143 215.221);
+    --color-cyan-600: oklch(.609 .126 221.723);
+    --color-cyan-700: oklch(.52 .105 223.128);
     --color-blue-50: oklch(.97 .014 254.604);
     --color-blue-100: oklch(.932 .032 255.585);
     --color-blue-200: oklch(.882 .059 254.128);
@@ -325,6 +329,9 @@
     letter-spacing: inherit;
     color: inherit;
     opacity: 1;
+    --lightningcss-light: initial;
+    --lightningcss-dark: ;
+    color-scheme: light;
     background-color: #0000;
     border-radius: 0;
   }
@@ -336,6 +343,9 @@
     letter-spacing: inherit;
     color: inherit;
     opacity: 1;
+    --lightningcss-light: initial;
+    --lightningcss-dark: ;
+    color-scheme: light;
     background-color: #0000;
     border-radius: 0;
   }
@@ -861,6 +871,10 @@
     margin-bottom: calc(var(--spacing) * 12);
   }
 
+  .-ml-1\.5 {
+    margin-left: calc(var(--spacing) * -1.5);
+  }
+
   .ml-0\.5 {
     margin-left: calc(var(--spacing) * .5);
   }
@@ -871,6 +885,10 @@
 
   .ml-2 {
     margin-left: calc(var(--spacing) * 2);
+  }
+
+  .ml-4 {
+    margin-left: calc(var(--spacing) * 4);
   }
 
   .ml-6 {
@@ -1078,8 +1096,24 @@
     max-height: calc(var(--spacing) * 40);
   }
 
+  .max-h-\[80vh\] {
+    max-height: 80vh;
+  }
+
+  .max-h-\[600px\] {
+    max-height: 600px;
+  }
+
   .min-h-16 {
     min-height: calc(var(--spacing) * 16);
+  }
+
+  .min-h-\[60px\] {
+    min-height: 60px;
+  }
+
+  .min-h-\[80px\] {
+    min-height: 80px;
   }
 
   .min-h-\[400px\] {
@@ -1186,6 +1220,10 @@
     width: calc(var(--spacing) * 32);
   }
 
+  .w-40 {
+    width: calc(var(--spacing) * 40);
+  }
+
   .w-48 {
     width: calc(var(--spacing) * 48);
   }
@@ -1208,6 +1246,10 @@
 
   .w-\[400px\] {
     width: 400px;
+  }
+
+  .w-\[500px\] {
+    width: 500px;
   }
 
   .w-fit {
@@ -1314,10 +1356,6 @@
 
   .cursor-default {
     cursor: default;
-  }
-
-  .cursor-move {
-    cursor: move;
   }
 
   .cursor-not-allowed {
@@ -1672,6 +1710,11 @@
     border-bottom-width: 1px;
   }
 
+  .border-b-2 {
+    border-bottom-style: var(--tw-border-style);
+    border-bottom-width: 2px;
+  }
+
   .border-b-\[4px\] {
     border-bottom-style: var(--tw-border-style);
     border-bottom-width: 4px;
@@ -1778,6 +1821,10 @@
     border-color: var(--color-blue-300);
   }
 
+  .border-blue-400 {
+    border-color: var(--color-blue-400);
+  }
+
   .border-blue-500 {
     border-color: var(--color-blue-500);
   }
@@ -1788,6 +1835,10 @@
 
   .border-border {
     border-color: var(--border);
+  }
+
+  .border-cyan-600 {
+    border-color: var(--color-cyan-600);
   }
 
   .border-destructive\/20 {
@@ -1818,6 +1869,10 @@
 
   .border-green-400 {
     border-color: var(--color-green-400);
+  }
+
+  .border-green-600 {
+    border-color: var(--color-green-600);
   }
 
   .border-indigo-300 {
@@ -1908,6 +1963,14 @@
     .border-white\/50 {
       border-color: color-mix(in oklab, var(--color-white) 50%, transparent);
     }
+  }
+
+  .border-yellow-200 {
+    border-color: var(--color-yellow-200);
+  }
+
+  .border-yellow-300 {
+    border-color: var(--color-yellow-300);
   }
 
   .border-yellow-400 {
@@ -2098,6 +2161,10 @@
     background-color: var(--background);
   }
 
+  .bg-black {
+    background-color: var(--color-black);
+  }
+
   .bg-black\/10 {
     background-color: #0000001a;
   }
@@ -2140,6 +2207,10 @@
 
   .bg-card {
     background-color: var(--card);
+  }
+
+  .bg-cyan-600 {
+    background-color: var(--color-cyan-600);
   }
 
   .bg-destructive {
@@ -2238,6 +2309,10 @@
     background-color: var(--color-orange-500);
   }
 
+  .bg-orange-600 {
+    background-color: var(--color-orange-600);
+  }
+
   .bg-pink-50 {
     background-color: var(--color-pink-50);
   }
@@ -2282,10 +2357,6 @@
 
   .bg-red-50 {
     background-color: var(--color-red-50);
-  }
-
-  .bg-red-100 {
-    background-color: var(--color-red-100);
   }
 
   .bg-red-500 {
@@ -2746,6 +2817,10 @@
     padding-block: calc(var(--spacing) * 4);
   }
 
+  .py-6 {
+    padding-block: calc(var(--spacing) * 6);
+  }
+
   .py-8 {
     padding-block: calc(var(--spacing) * 8);
   }
@@ -2788,6 +2863,10 @@
 
   .pb-2 {
     padding-bottom: calc(var(--spacing) * 2);
+  }
+
+  .pb-3 {
+    padding-bottom: calc(var(--spacing) * 3);
   }
 
   .pb-4 {
@@ -2909,6 +2988,11 @@
     font-weight: var(--font-weight-medium);
   }
 
+  .font-normal {
+    --tw-font-weight: var(--font-weight-normal);
+    font-weight: var(--font-weight-normal);
+  }
+
   .font-semibold {
     --tw-font-weight: var(--font-weight-semibold);
     font-weight: var(--font-weight-semibold);
@@ -2990,6 +3074,10 @@
     color: var(--card-foreground);
   }
 
+  .text-cyan-600 {
+    color: var(--color-cyan-600);
+  }
+
   .text-destructive {
     color: var(--destructive);
   }
@@ -3044,6 +3132,10 @@
 
   .text-green-800 {
     color: var(--color-green-800);
+  }
+
+  .text-green-900 {
+    color: var(--color-green-900);
   }
 
   .text-indigo-600 {
@@ -3437,12 +3529,6 @@
   }
 
   @media (hover: hover) {
-    .hover\:border-blue-500:hover {
-      border-color: var(--color-blue-500);
-    }
-  }
-
-  @media (hover: hover) {
     .hover\:bg-\[\#1A73E8\]:hover {
       background-color: #1a73e8;
     }
@@ -3551,6 +3637,12 @@
   }
 
   @media (hover: hover) {
+    .hover\:bg-cyan-700:hover {
+      background-color: var(--color-cyan-700);
+    }
+  }
+
+  @media (hover: hover) {
     .hover\:bg-destructive\/90:hover {
       background-color: var(--destructive);
     }
@@ -3575,6 +3667,12 @@
   }
 
   @media (hover: hover) {
+    .hover\:bg-green-50:hover {
+      background-color: var(--color-green-50);
+    }
+  }
+
+  @media (hover: hover) {
     .hover\:bg-green-700:hover {
       background-color: var(--color-green-700);
     }
@@ -3595,6 +3693,12 @@
   @media (hover: hover) {
     .hover\:bg-orange-600:hover {
       background-color: var(--color-orange-600);
+    }
+  }
+
+  @media (hover: hover) {
+    .hover\:bg-orange-700:hover {
+      background-color: var(--color-orange-700);
     }
   }
 
@@ -3728,6 +3832,12 @@
   }
 
   @media (hover: hover) {
+    .hover\:text-gray-700:hover {
+      color: var(--color-gray-700);
+    }
+  }
+
+  @media (hover: hover) {
     .hover\:text-gray-800:hover {
       color: var(--color-gray-800);
     }
@@ -3777,6 +3887,10 @@
     border-color: var(--color-blue-500);
   }
 
+  .focus\:border-cyan-500:focus {
+    border-color: var(--color-cyan-500);
+  }
+
   .focus\:border-primary:focus {
     border-color: var(--primary);
   }
@@ -3798,10 +3912,6 @@
     box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);
   }
 
-  .focus\:ring-blue-500:focus {
-    --tw-ring-color: var(--color-blue-500);
-  }
-
   .focus\:ring-blue-500\/50:focus {
     --tw-ring-color: color-mix(in srgb, oklch(.623 .214 259.815) 50%, transparent);
   }
@@ -3810,6 +3920,10 @@
     .focus\:ring-blue-500\/50:focus {
       --tw-ring-color: color-mix(in oklab, var(--color-blue-500) 50%, transparent);
     }
+  }
+
+  .focus\:ring-cyan-500:focus {
+    --tw-ring-color: var(--color-cyan-500);
   }
 
   .focus\:ring-primary:focus {
