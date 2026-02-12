@@ -20,10 +20,10 @@ interface TeacherSidebarProps {
 
 const navigationItems = [
   { id: 'overview', name: '概览', icon: LayoutDashboard },
+  { id: 'materials', name: '任务设计', icon: FileText },
   { id: 'course-design', name: '课程设计', icon: PlusCircle },
   { id: 'courses', name: '课程管理', icon: BookOpen },
   { id: 'classes', name: '班级管理', icon: Users },
-  { id: 'materials', name: '教学资源', icon: FileText },
   { id: 'settings', name: '设置', icon: Settings },
 ];
 
@@ -35,11 +35,11 @@ export function TeacherSidebar({ activeSection, onSectionChange }: TeacherSideba
       {/* Header */}
       <div className="p-6 border-b border-sidebar-border">
         <div className="flex items-center space-x-3">
-          <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
-            <GraduationCap className="w-5 h-5 text-white" />
+          <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
+            <GraduationCap className="w-5 h-5 text-primary-foreground" />
           </div>
           <div>
-            <h1 className="text-lg text-blue-600 font-semibold">教师平台</h1>
+            <h1 className="text-lg text-primary font-semibold">教师平台</h1>
             <p className="text-xs text-muted-foreground">AI随心学</p>
           </div>
         </div>
@@ -50,7 +50,7 @@ export function TeacherSidebar({ activeSection, onSectionChange }: TeacherSideba
         <div className="flex items-center space-x-3">
           <Avatar>
             <AvatarImage src="" />
-            <AvatarFallback className="bg-blue-600 text-white">
+            <AvatarFallback className="bg-primary text-primary-foreground">
               {user?.name?.charAt(0) || 'T'}
             </AvatarFallback>
           </Avatar>
@@ -77,7 +77,7 @@ export function TeacherSidebar({ activeSection, onSectionChange }: TeacherSideba
               variant={isActive ? "secondary" : "ghost"}
               className={`w-full justify-start ${
                 isActive 
-                  ? 'bg-blue-50 text-blue-600 hover:bg-blue-100' 
+                  ? 'bg-primary/10 text-primary hover:bg-primary/20' 
                   : 'text-muted-foreground hover:text-sidebar-foreground hover:bg-sidebar-accent'
               }`}
               onClick={() => onSectionChange(item.id)}

@@ -24,12 +24,13 @@ import { AITutor } from './components/AITutor';
 
 // Teacher platform components
 import { TeacherOverview } from './components/TeacherOverview';
-import { CourseDesignPage } from './components/CourseDesignPage';
+import { AICourseDesignPage } from './components/AICourseDesignPage';
 import { CoreDesignPage } from './components/CoreDesignPage';
 import { TeachingDocumentPage } from './components/TeachingDocumentPage';
 import { TaskConfigurationPage } from './components/TaskConfigurationPage';
 import { CourseManagementPage } from './components/CourseManagementPage';
 import { ClassManagementPage } from './components/ClassManagementPage';
+import { TeachingResourcesPage } from './components/TeachingResourcesPage';
 
 type AppState = 'login' | 'onboarding' | 'dashboard' | 'chapter' | 'quiz' | 'learning-mode-selection' | 'immersive-text' | 'slides-narration' | 'audio-lesson' | 'mindmap' | 'game' | 'video' | 'core-design' | 'teaching-document' | 'task-configuration';
 
@@ -83,10 +84,10 @@ function AppContent() {
   // Loading state
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#F8F9FA] flex items-center justify-center">
+      <div className="min-h-screen bg-muted flex items-center justify-center">
         <div className="text-center">
-          <div className="w-8 h-8 border-4 border-[#1A73E8] border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-[#5F6368]">加载中...</p>
+          <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-muted-foreground">加载中...</p>
         </div>
       </div>
     );
@@ -273,10 +274,10 @@ function AppContent() {
         return <TeacherOverview />;
       case 'course-design':
         return (
-          <CourseDesignPage 
+          <AICourseDesignPage 
             onNextStep={(data) => {
-              setCourseDesignData(data);
-              setAppState('core-design');
+              if (data?.plan) setCourseDesignData({ ...courseDesignData, plan: data.plan, courseId: data.courseId, courseUrl: data.courseUrl });
+              if (data?.courseId) setAppState('dashboard');
             }}
           />
         );
@@ -285,7 +286,7 @@ function AppContent() {
       case 'classes':
         return <ClassManagementPage />;
       case 'materials':
-        return <div className="p-8"><h1 className="text-3xl font-bold">教学资源</h1><p className="text-muted-foreground mt-2">教学资源管理功能开发中...</p></div>;
+        return <TeachingResourcesPage />;
       case 'settings':
         return <SettingsPage />;
       default:
@@ -436,7 +437,7 @@ function AppContent() {
   // Render teacher platform
   if (user?.role === 'teacher') {
     return (
-      <div className="flex h-screen bg-[#F8F9FA]">
+      <div className="flex h-screen bg-muted">
         <TeacherSidebar
           activeSection={activeSection}
           onSectionChange={handleSectionChange}
@@ -450,7 +451,7 @@ function AppContent() {
 
   // Render student platform
   return (
-    <div className="flex h-screen bg-[#F8F9FA]">
+    <div className="flex h-screen bg-muted">
       {/* 条件性渲染侧边栏 */}
       {!shouldHideSidebar && (
         <Sidebar

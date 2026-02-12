@@ -108,33 +108,33 @@ export function TaskConfigurationPage({ courseData, designData, documentData, on
 
   const getMaterialBadgeClass = (color: string) => {
     const colorClasses: Record<string, string> = {
-      purple: 'bg-purple-100 text-purple-700 border-purple-300',
-      orange: 'bg-orange-100 text-orange-700 border-orange-300',
-      blue: 'bg-blue-100 text-blue-700 border-blue-300',
-      green: 'bg-green-100 text-green-700 border-green-300',
-      pink: 'bg-pink-100 text-pink-700 border-pink-300'
+      purple: 'bg-primary/10 text-primary border-primary/30',
+      orange: 'bg-accent/10 text-accent-foreground border-accent/30',
+      blue: 'bg-secondary/10 text-secondary-foreground border-secondary/30',
+      green: 'bg-primary/10 text-primary border-primary/30',
+      pink: 'bg-accent/10 text-accent-foreground border-accent/30'
     };
-    return colorClasses[color] || 'bg-gray-100 text-gray-700 border-gray-300';
+    return colorClasses[color] || 'bg-muted text-muted-foreground border-border';
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-muted">
       {/* Header with Title */}
-      <div className="bg-white border-b">
+      <div className="bg-background border-b border-border">
         <div className="max-w-7xl mx-auto px-8 py-6">
-          <h1 className="text-2xl font-bold text-center">自学任务教师控制台 (v0.5)</h1>
+          <h1 className="text-2xl font-bold text-center text-foreground">自学任务教师控制台 (v0.5)</h1>
         </div>
       </div>
 
       {/* Progress Indicator */}
-      <div className="bg-white border-b">
+      <div className="bg-background border-b border-border">
         <div className="max-w-7xl mx-auto px-8 py-4">
           <div className="flex items-center justify-center">
             <div className="flex items-center space-x-2">
-              <div className="w-40 h-1 bg-cyan-600 rounded-full"></div>
-              <div className="w-40 h-1 bg-cyan-600 rounded-full"></div>
-              <div className="w-40 h-1 bg-cyan-600 rounded-full"></div>
-              <div className="w-40 h-1 bg-cyan-600 rounded-full"></div>
+              <div className="w-40 h-1 bg-primary rounded-full"></div>
+              <div className="w-40 h-1 bg-primary rounded-full"></div>
+              <div className="w-40 h-1 bg-primary rounded-full"></div>
+              <div className="w-40 h-1 bg-primary rounded-full"></div>
             </div>
           </div>
         </div>
@@ -147,11 +147,11 @@ export function TaskConfigurationPage({ courseData, designData, documentData, on
             {/* Header */}
             <div className="flex items-center justify-between mb-6">
               <div className="flex items-center space-x-2">
-                <span className="text-purple-600 text-xl">{'<>'}</span>
-                <h2 className="text-lg font-semibold">4. 系统任务配置 & 素材工坊 (v0.5)</h2>
+                <span className="text-primary text-xl">{'<>'}</span>
+                <h2 className="text-lg font-semibold text-foreground">4. 系统任务配置 & 素材工坊 (v0.5)</h2>
               </div>
               <div className="flex items-center space-x-3">
-                <Button variant="outline" size="sm" className="text-purple-600 border-purple-300">
+                <Button variant="outline" size="sm" className="text-primary border-primary">
                   一键生成所有素材
                 </Button>
                 <Button variant="outline" size="sm">
@@ -164,23 +164,23 @@ export function TaskConfigurationPage({ courseData, designData, documentData, on
             <div className="space-y-3">
               {tasks.map((task) => (
                 <div 
-                  key={task.id}
-                  className="border rounded-lg bg-white hover:shadow-md transition-shadow"
-                >
+                key={task.id}
+                className="border border-border rounded-lg bg-background hover:shadow-md transition-shadow"
+              >
                   <div className="p-4 flex items-start justify-between">
                     <div className="flex-1">
                       <div className="flex items-start space-x-3">
-                        <span className="text-gray-400 font-medium">{task.id}</span>
+                        <span className="text-muted-foreground font-medium">{task.id}</span>
                         <div className="flex-1">
-                          <h3 className="font-medium text-gray-900 mb-2">{task.title}</h3>
-                          <p className="text-sm text-gray-500 leading-relaxed">{task.description}</p>
+                          <h3 className="font-medium text-foreground mb-2">{task.title}</h3>
+                          <p className="text-sm text-muted-foreground leading-relaxed">{task.description}</p>
                         </div>
                       </div>
                     </div>
                     <div className="flex items-center space-x-3 ml-4">
                       <Badge 
                         variant="secondary" 
-                        className={`${task.status === 'PENDING' ? 'bg-gray-100 text-gray-600' : 'bg-green-100 text-green-700'} border`}
+                        className={`${task.status === 'PENDING' ? 'bg-muted text-muted-foreground' : 'bg-primary/10 text-primary'} border border-border`}
                       >
                         {task.status}
                       </Badge>
@@ -191,12 +191,12 @@ export function TaskConfigurationPage({ courseData, designData, documentData, on
                         {task.materialType}
                       </Badge>
                       <div className="flex flex-col space-y-1">
-                        <button className="text-gray-400 hover:text-gray-600">
+                        <button className="text-muted-foreground hover:text-foreground">
                           <ChevronUp className="w-4 h-4" />
                         </button>
                         <button 
                           onClick={() => toggleTask(task.id)}
-                          className="text-gray-400 hover:text-gray-600"
+                          className="text-muted-foreground hover:text-foreground"
                         >
                           <ChevronDown className="w-4 h-4" />
                         </button>
@@ -206,9 +206,9 @@ export function TaskConfigurationPage({ courseData, designData, documentData, on
                   
                   {/* Expanded content can be added here if needed */}
                   {task.expanded && (
-                    <div className="px-4 pb-4 border-t bg-gray-50">
+                    <div className="px-4 pb-4 border-t border-border bg-muted">
                       <div className="pt-4">
-                        <p className="text-sm text-gray-600">任务详细配置和素材编辑区域...</p>
+                        <p className="text-sm text-muted-foreground">任务详细配置和素材编辑区域...</p>
                       </div>
                     </div>
                   )}
@@ -220,23 +220,23 @@ export function TaskConfigurationPage({ courseData, designData, documentData, on
 
         {/* Success Message */}
         {showSuccess && (
-          <Card className="mt-6 bg-green-50 border-green-200 shadow-lg">
+          <Card className="mt-6 bg-primary/10 border-primary/30 shadow-lg">
             <CardContent className="p-6">
               <div className="flex items-start space-x-3">
-                <CheckCircle className="w-6 h-6 text-green-600 mt-1" />
+                <CheckCircle className="w-6 h-6 text-primary mt-1" />
                 <div className="flex-1">
-                  <h3 className="font-semibold text-green-900 mb-2">课程已发布！</h3>
-                  <div className="bg-white p-3 rounded border border-green-200 mb-3">
-                    <code className="text-sm text-gray-700">{courseUrl}</code>
+                  <h3 className="font-semibold text-foreground mb-2">课程已发布！</h3>
+                  <div className="bg-background p-3 rounded border border-border mb-3">
+                    <code className="text-sm text-foreground">{courseUrl}</code>
                   </div>
-                  <p className="text-sm text-green-800">将链接分享给学生，学生可以遵循设计的课程线。</p>
+                  <p className="text-sm text-muted-foreground">将链接分享给学生，学生可以遵循设计的课程线。</p>
                 </div>
                 <div className="flex space-x-2">
-                  <Button onClick={copyUrl} size="sm" className="bg-green-600 hover:bg-green-700">
+                  <Button onClick={copyUrl} size="sm">
                     <Copy className="w-4 h-4 mr-2" />
                     复制
                   </Button>
-                  <Button variant="outline" size="sm" className="border-green-600 text-green-700 hover:bg-green-50">
+                  <Button variant="outline" size="sm" className="border-primary text-primary hover:bg-primary/10">
                     <ExternalLink className="w-4 h-4" />
                   </Button>
                 </div>
@@ -257,7 +257,7 @@ export function TaskConfigurationPage({ courseData, designData, documentData, on
                 <Eye className="w-4 h-4 mr-2" />
                 预览
               </Button>
-              <Button onClick={handlePublish} size="lg" className="bg-cyan-600 hover:bg-cyan-700 text-white px-8">
+              <Button onClick={handlePublish} size="lg" className="px-8">
                 <Rocket className="w-4 h-4 mr-2" />
                 发布
               </Button>

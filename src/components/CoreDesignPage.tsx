@@ -67,7 +67,7 @@ export function CoreDesignPage({ courseData, onBack, onComplete }: CoreDesignPag
       {/* Page Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">课程设计</h1>
+          <h1 className="text-3xl font-bold text-foreground">课程设计</h1>
           <p className="text-muted-foreground mt-2">核心设计阶段</p>
         </div>
       </div>
@@ -76,20 +76,20 @@ export function CoreDesignPage({ courseData, onBack, onComplete }: CoreDesignPag
       <div className="flex items-center justify-center mb-8">
         <div className="flex items-center space-x-4">
           <div className="flex items-center">
-            <div className="w-40 h-1 bg-cyan-600 rounded-full"></div>
-            <div className="w-3 h-3 bg-cyan-600 rounded-full -ml-1.5"></div>
+            <div className="w-40 h-1 bg-primary rounded-full"></div>
+            <div className="w-3 h-3 bg-primary rounded-full -ml-1.5"></div>
           </div>
           <div className="flex items-center">
-            <div className="w-40 h-1 bg-cyan-600 rounded-full"></div>
-            <div className="w-3 h-3 bg-cyan-600 rounded-full -ml-1.5"></div>
+            <div className="w-40 h-1 bg-primary rounded-full"></div>
+            <div className="w-3 h-3 bg-primary rounded-full -ml-1.5"></div>
           </div>
           <div className="flex items-center">
-            <div className="w-40 h-1 bg-gray-200 rounded-full"></div>
-            <div className="w-3 h-3 bg-gray-200 rounded-full -ml-1.5"></div>
+            <div className="w-40 h-1 bg-muted rounded-full"></div>
+            <div className="w-3 h-3 bg-muted rounded-full -ml-1.5"></div>
           </div>
           <div className="flex items-center">
-            <div className="w-40 h-1 bg-gray-200 rounded-full"></div>
-            <div className="w-3 h-3 bg-gray-200 rounded-full -ml-1.5"></div>
+            <div className="w-40 h-1 bg-muted rounded-full"></div>
+            <div className="w-3 h-3 bg-muted rounded-full -ml-1.5"></div>
           </div>
         </div>
       </div>
@@ -99,12 +99,12 @@ export function CoreDesignPage({ courseData, onBack, onComplete }: CoreDesignPag
         <CardHeader>
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-2">
-              <Target className="w-5 h-5 text-orange-600" />
-              <CardTitle className="text-lg">2. 核心设计 <span className="text-sm text-gray-500">(可编辑)</span></CardTitle>
+              <Target className="w-5 h-5 text-primary" />
+              <CardTitle className="text-lg">2. 核心设计 <span className="text-sm text-muted-foreground">(可编辑)</span></CardTitle>
             </div>
             <div className="flex items-center space-x-2">
               <Button variant="outline" size="sm">重新生成</Button>
-              <Badge variant="secondary" className="bg-yellow-100 text-yellow-800 border-yellow-300">
+              <Badge variant="secondary" className="bg-accent/10 text-accent-foreground border-accent/30">
                 {selectedModule}
               </Badge>
             </div>
@@ -113,32 +113,32 @@ export function CoreDesignPage({ courseData, onBack, onComplete }: CoreDesignPag
         <CardContent className="space-y-6">
           {/* Logic Chain */}
           <div className="space-y-2">
-            <h3 className="text-sm font-medium text-orange-600">设计逻辑链 (Logic Chain)</h3>
+            <h3 className="text-sm font-medium text-primary">设计逻辑链 (Logic Chain)</h3>
             <Textarea
               value={logicChain}
               onChange={(e) => setLogicChain(e.target.value)}
-              className="min-h-[80px] bg-yellow-50 border-yellow-200"
+              className="min-h-[80px] bg-accent/5 border-accent/20"
               placeholder="输入设计逻辑链..."
             />
           </div>
 
           {/* Big Concept */}
           <div className="space-y-2">
-            <h3 className="text-sm font-medium text-blue-600">大概念 (BIG CONCEPT)</h3>
+            <h3 className="text-sm font-medium text-primary">大概念 (BIG CONCEPT)</h3>
             <Textarea
               value={bigConcept}
               onChange={(e) => setBigConcept(e.target.value)}
-              className="min-h-[80px] bg-blue-50 border-blue-200"
+              className="min-h-[80px] bg-primary/5 border-primary/20"
               placeholder="输入大概念..."
             />
           </div>
 
           {/* Essential Questions */}
           <div className="space-y-3">
-            <h3 className="text-sm font-medium text-gray-700">基本问题 (ESSENTIAL QUESTIONS)</h3>
+            <h3 className="text-sm font-medium text-foreground">基本问题 (ESSENTIAL QUESTIONS)</h3>
             {essentialQuestions.map((question, index) => (
               <div key={index} className="flex items-start space-x-2">
-                <span className="text-sm text-gray-500 mt-2">{index + 1}.</span>
+                <span className="text-sm text-muted-foreground mt-2">{index + 1}.</span>
                 <Input
                   value={question}
                   onChange={(e) => {
@@ -162,7 +162,7 @@ export function CoreDesignPage({ courseData, onBack, onComplete }: CoreDesignPag
                   }
                 }}
               />
-              <Button onClick={addQuestion} variant="ghost" size="sm" className="text-cyan-600">
+              <Button onClick={addQuestion} variant="ghost" size="sm" className="text-primary">
                 <Plus className="w-4 h-4 mr-1" />
                 添加问题
               </Button>
@@ -171,13 +171,13 @@ export function CoreDesignPage({ courseData, onBack, onComplete }: CoreDesignPag
 
           {/* Learning Goals (MARZANO) */}
           <div className="space-y-3">
-            <h3 className="text-sm font-medium text-gray-700">学习目标 (MARZANO分类)</h3>
+            <h3 className="text-sm font-medium text-foreground">学习目标 (MARZANO分类)</h3>
             {learningGoals.map((goal, index) => (
-              <div key={index} className="flex items-start space-x-3 p-3 border rounded-lg">
+              <div key={index} className="flex items-start space-x-3 p-3 border border-border rounded-lg">
                 <select
                   value={goal.level}
                   onChange={(e) => updateGoal(index, 'level', e.target.value)}
-                  className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-cyan-500 focus:border-cyan-500"
+                  className="px-3 py-2 border border-input rounded-md text-sm focus:outline-none focus:ring-ring focus:border-ring bg-input-background"
                 >
                   <option value="RETRIEVAL">RETRIEVAL</option>
                   <option value="COMPREHENSION">COMPREHENSION</option>
@@ -192,7 +192,7 @@ export function CoreDesignPage({ courseData, onBack, onComplete }: CoreDesignPag
                 />
               </div>
             ))}
-            <Button onClick={addGoal} variant="ghost" size="sm" className="text-cyan-600">
+            <Button onClick={addGoal} variant="ghost" size="sm" className="text-primary">
               <Plus className="w-4 h-4 mr-1" />
               添加目标
             </Button>
@@ -206,7 +206,7 @@ export function CoreDesignPage({ courseData, onBack, onComplete }: CoreDesignPag
           <ArrowLeft className="w-4 h-4 mr-2" />
           返回
         </Button>
-        <Button onClick={handleComplete} size="lg" className="bg-orange-600 hover:bg-orange-700 text-white">
+        <Button onClick={handleComplete} size="lg">
           <FileText className="w-4 h-4 mr-2" />
           确认设计 & 生成教学文档
         </Button>

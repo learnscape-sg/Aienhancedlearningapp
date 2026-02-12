@@ -22,7 +22,7 @@ export function TeacherOverview() {
       bgColor: 'bg-green-50'
     },
     { 
-      title: '教学资源', 
+      title: '任务设计', 
       value: '86', 
       icon: FileText, 
       trend: '+8 本月',

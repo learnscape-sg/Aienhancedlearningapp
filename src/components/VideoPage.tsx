@@ -131,14 +131,14 @@ export function VideoPage({ pdfData, onBack, onSwitchMode, onAskTutor }: VideoPa
       {/* Main content container */}
       <div className="w-full max-w-7xl mx-auto p-6">
         {/* Content area */}
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+        <div className="bg-background rounded-lg shadow-sm border border-border">
           <div className="p-8">
             {/* Content header */}
             <div className="flex items-center justify-between mb-8">
-              <h1 className="text-3xl font-medium text-gray-900">
+              <h1 className="text-3xl font-medium text-foreground">
                 牛顿第三定律：作用力与反作用力
               </h1>
-              <Button variant="ghost" size="sm" className="text-gray-400">
+              <Button variant="ghost" size="sm" className="text-muted-foreground">
                 →
               </Button>
             </div>
@@ -152,15 +152,15 @@ export function VideoPage({ pdfData, onBack, onSwitchMode, onAskTutor }: VideoPa
                       type="checkbox" 
                       checked={currentSectionCompleted} 
                       onChange={(e) => setCurrentSectionCompleted(e.target.checked)}
-                      className="w-4 h-4 text-blue-600" 
+                      className="w-4 h-4 text-primary" 
                     />
-                    <span className="text-sm text-gray-700">视频动画</span>
+                    <span className="text-sm text-muted-foreground">视频动画</span>
                   </div>
                   <div className="ml-6 space-y-2">
-                    <div className="bg-orange-100 text-orange-700 px-2 py-1 rounded text-xs">
+                    <div className="bg-accent/10 text-accent-foreground px-2 py-1 rounded text-xs">
                       YouTube视频播放中
                     </div>
-                    <div className="text-xs text-gray-500">
+                    <div className="text-xs text-muted-foreground">
                       牛顿第三定律教学视频
                     </div>
                   </div>
@@ -172,12 +172,12 @@ export function VideoPage({ pdfData, onBack, onSwitchMode, onAskTutor }: VideoPa
                       onChange={(e) => setNextSectionCompleted(e.target.checked)}
                       className="w-4 h-4" 
                     />
-                    <span className="text-sm text-gray-500">课后练习</span>
+                    <span className="text-sm text-muted-foreground">课后练习</span>
                   </div>
 
                   {/* Chapter List */}
                   <div className="mt-8">
-                    <h4 className="font-medium text-sm mb-3 text-gray-700">章节目录</h4>
+                    <h4 className="font-medium text-sm mb-3 text-foreground">章节目录</h4>
                     <div className="space-y-2">
                       {videoChapters.map((chapter, index) => (
                         <button
@@ -185,8 +185,8 @@ export function VideoPage({ pdfData, onBack, onSwitchMode, onAskTutor }: VideoPa
                           onClick={() => jumpToChapter(index)}
                           className={`w-full text-left p-2 rounded-lg border transition-all text-xs ${
                             currentChapter === index
-                              ? 'bg-blue-50 border-blue-300 text-blue-900'
-                              : 'hover:bg-gray-50 border-gray-200'
+                              ? 'bg-primary/10 border-primary text-foreground'
+                              : 'hover:bg-muted border-border'
                           }`}
                         >
                           <div className="flex items-start justify-between">
@@ -194,10 +194,10 @@ export function VideoPage({ pdfData, onBack, onSwitchMode, onAskTutor }: VideoPa
                               <div className="flex items-center space-x-1 mb-1">
                                 <span className="font-medium">{chapter.title}</span>
                                 {chapter.completed && (
-                                  <CheckCircle className="w-3 h-3 text-green-600" />
+                                  <CheckCircle className="w-3 h-3 text-primary" />
                                 )}
                               </div>
-                              <div className="flex items-center space-x-1 text-gray-500">
+                              <div className="flex items-center space-x-1 text-muted-foreground">
                                 <Clock className="w-2 h-2" />
                                 <span>{formatTime(chapter.duration)}</span>
                               </div>
@@ -213,7 +213,7 @@ export function VideoPage({ pdfData, onBack, onSwitchMode, onAskTutor }: VideoPa
               {/* Main content area */}
               <div className="lg:col-span-3 space-y-6">
                 {/* YouTube Video Player */}
-                <div className="relative bg-gray-900 rounded-lg aspect-video overflow-hidden">
+                <div className="relative bg-foreground rounded-lg aspect-video overflow-hidden">
                   <iframe
                     ref={videoRef}
                     src={youtubeEmbedUrl}
@@ -226,14 +226,14 @@ export function VideoPage({ pdfData, onBack, onSwitchMode, onAskTutor }: VideoPa
                 </div>
 
                 {/* Video Information */}
-                <div className="bg-gray-50 rounded-lg p-4">
+                <div className="bg-muted rounded-lg p-4">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center space-x-4">
                       <div className="flex items-center space-x-2">
-                        <Video className="w-5 h-5 text-indigo-600" />
-                        <span className="font-medium text-gray-900">牛顿第三定律教学视频</span>
+                        <Video className="w-5 h-5 text-primary" />
+                        <span className="font-medium text-foreground">牛顿第三定律教学视频</span>
                       </div>
-                      <Badge variant="secondary" className="bg-indigo-100 text-indigo-700">
+                      <Badge variant="secondary" className="bg-primary/10 text-primary">
                         高质量视频
                       </Badge>
                     </div>
@@ -251,19 +251,19 @@ export function VideoPage({ pdfData, onBack, onSwitchMode, onAskTutor }: VideoPa
                 </div>
 
                 {/* Video Description */}
-                <div className="bg-gray-50 rounded-lg p-4">
-                  <h3 className="font-medium text-gray-900 mb-2">视频介绍</h3>
-                  <p className="text-gray-600 mb-4">
+                <div className="bg-muted rounded-lg p-4">
+                  <h3 className="font-medium text-foreground mb-2">视频介绍</h3>
+                  <p className="text-muted-foreground mb-4">
                     这是一个关于牛顿第三定律的高质量教学视频，结合您上传的PDF《{pdfData.fileName}》中的知识点，通过视觉化的方式帮助您更好地理解作用力与反作用力的概念。
                   </p>
                   <div className="flex flex-wrap gap-2 mb-4">
-                    <Badge variant="secondary" className="bg-blue-100 text-blue-700">
+                    <Badge variant="secondary" className="bg-primary/10 text-primary">
                       物理学
                     </Badge>
-                    <Badge variant="secondary" className="bg-green-100 text-green-700">
+                    <Badge variant="secondary" className="bg-primary/10 text-primary">
                       牛顿定律
                     </Badge>
-                    <Badge variant="secondary" className="bg-purple-100 text-purple-700">
+                    <Badge variant="secondary" className="bg-secondary/10 text-secondary-foreground">
                       教学视频
                     </Badge>
                     {pdfData.interests.map((interest, index) => (
@@ -272,7 +272,7 @@ export function VideoPage({ pdfData, onBack, onSwitchMode, onAskTutor }: VideoPa
                       </Badge>
                     ))}
                   </div>
-                  <div className="text-sm text-gray-500 space-y-1">
+                  <div className="text-sm text-muted-foreground space-y-1">
                     <p>📺 来源：YouTube教育视频</p>
                     <p>🎯 适合年级：{pdfData.grade}</p>
                     <p>⏱️ 建议学习时间：15-20分钟</p>
@@ -284,7 +284,7 @@ export function VideoPage({ pdfData, onBack, onSwitchMode, onAskTutor }: VideoPa
                   <div className="mt-6 text-center">
                     <Button 
                       variant="outline" 
-                      className="border-blue-300 text-blue-700 hover:bg-blue-50"
+                      className="border-primary text-primary hover:bg-primary/10"
                       onClick={() => onAskTutor('视频动画学习', '牛顿第三定律视频内容')}
                     >
                       <HelpCircle className="w-4 h-4 mr-2" />

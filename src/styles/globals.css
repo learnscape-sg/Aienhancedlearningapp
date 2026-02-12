@@ -2,104 +2,105 @@
 
 :root {
   --font-size: 16px;
-  /* Figma Base Colors */
-  --background: #FFFFFF;
-  --foreground: #202124;
-  --card: #FFFFFF;
-  --card-foreground: #202124;
-  --popover: #FFFFFF;
-  --popover-foreground: #202124;
-  --primary: #1A73E8;
+  /* Brand Core */
+  --primary: #4F46E5;
   --primary-foreground: #FFFFFF;
-  --primary-hover: #1557B0;
-  --secondary: #F8F9FA;
-  --secondary-foreground: #202124;
-  --muted: #F8F9FA;
-  --muted-foreground: #5F6368;
-  --accent: #4285F4;
-  --accent-foreground: #FFFFFF;
-  --destructive: #EA4335;
+  --primary-hover: #4338CA;
+  --secondary: #22D3EE;
+  --accent: #FBBF24;
+  --danger: #DC2626;
+  /* Text */
+  --ink: #0F172A;
+  --ink-secondary: #475569;
+  --ink-weak: #94A3B8;
+  /* Surface */
+  --surface: #FFFFFF;
+  --surface-secondary: #F8FAFC;
+  --surface-tertiary: #EEF2FF;
+  --stroke: #E2E8F0;
+  /* Mapped to theme tokens */
+  --background: var(--surface);
+  --foreground: var(--ink);
+  --card: var(--surface);
+  --card-foreground: var(--ink);
+  --popover: var(--surface);
+  --popover-foreground: var(--ink);
+  --secondary-foreground: var(--ink);
+  --muted: var(--surface-secondary);
+  --muted-foreground: var(--ink-secondary);
+  --accent-foreground: var(--ink);
+  --destructive: var(--danger);
   --destructive-foreground: #FFFFFF;
-  --border: #E0E0E0;
+  --border: var(--stroke);
   --input: transparent;
-  --input-background: #F8F9FA;
-  --switch-background: #E0E0E0;
+  --input-background: var(--surface-secondary);
+  --switch-background: var(--stroke);
   --font-weight-medium: 500;
   --font-weight-normal: 400;
-  --ring: #1A73E8;
-  /* Google Accent Colors for Charts */
-  --chart-1: #4285F4;
+  --ring: var(--primary);
+  /* Chart Colors */
+  --chart-1: var(--primary);
   --chart-2: #34A853;
-  --chart-3: #FBBC05;
-  --chart-4: #EA4335;
-  --chart-5: #1A73E8;
+  --chart-3: var(--accent);
+  --chart-4: var(--danger);
+  --chart-5: var(--secondary);
   --radius: 0.625rem;
-  /* Sidebar Colors */
-  --sidebar: #FFFFFF;
-  --sidebar-foreground: #202124;
-  --sidebar-primary: #1A73E8;
+  /* Sidebar */
+  --sidebar: var(--surface);
+  --sidebar-foreground: var(--ink);
+  --sidebar-primary: var(--primary);
   --sidebar-primary-foreground: #FFFFFF;
-  --sidebar-accent: #F8F9FA;
-  --sidebar-accent-foreground: #202124;
-  --sidebar-border: #E0E0E0;
-  --sidebar-ring: #1A73E8;
-  /* Figma Utility Colors */
+  --sidebar-accent: var(--surface-tertiary);
+  --sidebar-accent-foreground: var(--ink);
+  --sidebar-border: var(--stroke);
+  --sidebar-ring: var(--primary);
+  /* Utility */
   --shadow-light: rgba(0, 0, 0, 0.1);
   --shadow-strong: rgba(0, 0, 0, 0.2);
   --text-inverse: #FFFFFF;
-  --footer-dark: #202124;
-  /* Google Accent Colors as separate variables */
-  --google-blue: #4285F4;
-  --google-red: #EA4335;
-  --google-yellow: #FBBC05;
-  --google-green: #34A853;
+  --footer-dark: var(--ink);
 }
 
 .dark {
-  /* Dark mode adaptation of Figma colors */
-  --background: #202124;
-  --foreground: #FFFFFF;
-  --card: #202124;
-  --card-foreground: #FFFFFF;
-  --popover: #202124;
-  --popover-foreground: #FFFFFF;
-  --primary: #4285F4;
+  /* Dark mode - Indigo theme adaptation */
+  --background: #0F172A;
+  --foreground: #F8FAFC;
+  --card: #1E293B;
+  --card-foreground: #F8FAFC;
+  --popover: #1E293B;
+  --popover-foreground: #F8FAFC;
+  --primary: #6366F1;
   --primary-foreground: #FFFFFF;
-  --primary-hover: #1A73E8;
-  --secondary: #5F6368;
-  --secondary-foreground: #FFFFFF;
-  --muted: #5F6368;
-  --muted-foreground: #FFFFFF;
-  --accent: #4285F4;
-  --accent-foreground: #FFFFFF;
-  --destructive: #EA4335;
+  --primary-hover: #818CF8;
+  --secondary: #22D3EE;
+  --secondary-foreground: #0F172A;
+  --muted: #334155;
+  --muted-foreground: #94A3B8;
+  --accent: #FBBF24;
+  --accent-foreground: #0F172A;
+  --destructive: #DC2626;
   --destructive-foreground: #FFFFFF;
-  --border: #5F6368;
-  --input: #5F6368;
-  --input-background: #5F6368;
-  --switch-background: #5F6368;
-  --ring: #4285F4;
-  --font-weight-medium: 500;
-  --font-weight-normal: 400;
-  /* Darker theme Google colors */
-  --chart-1: #4285F4;
+  --border: #334155;
+  --input: #334155;
+  --input-background: #334155;
+  --switch-background: #475569;
+  --ring: #6366F1;
+  --chart-1: #6366F1;
   --chart-2: #34A853;
-  --chart-3: #FBBC05;
-  --chart-4: #EA4335;
-  --chart-5: #1A73E8;
-  /* Dark sidebar */
-  --sidebar: #202124;
-  --sidebar-foreground: #FFFFFF;
-  --sidebar-primary: #4285F4;
+  --chart-3: #FBBF24;
+  --chart-4: #DC2626;
+  --chart-5: #22D3EE;
+  --sidebar: #1E293B;
+  --sidebar-foreground: #F8FAFC;
+  --sidebar-primary: #6366F1;
   --sidebar-primary-foreground: #FFFFFF;
-  --sidebar-accent: #5F6368;
-  --sidebar-accent-foreground: #FFFFFF;
-  --sidebar-border: #5F6368;
-  --sidebar-ring: #4285F4;
-  /* Dark utility colors */
-  --shadow-light: rgba(255, 255, 255, 0.1);
-  --shadow-strong: rgba(255, 255, 255, 0.2);
-  --text-inverse: #202124;
+  --sidebar-accent: #334155;
+  --sidebar-accent-foreground: #F8FAFC;
+  --sidebar-border: #334155;
+  --sidebar-ring: #6366F1;
+  --shadow-light: rgba(0, 0, 0, 0.2);
+  --shadow-strong: rgba(0, 0, 0, 0.3);
+  --text-inverse: #0F172A;
 }
 
 @theme inline {

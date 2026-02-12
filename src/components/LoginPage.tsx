@@ -52,7 +52,7 @@ export function LoginPage({ onSuccess, onQuickExperience }: LoginPageProps) {
   };
 
   return (
-    <div className="min-h-screen flex bg-background">
+    <div className="min-h-screen flex bg-[#F8F9FA]">
       <div className="w-full grid lg:grid-cols-2">
         {/* Left side - Hero Design */}
         <div className="hidden lg:block relative overflow-hidden">
@@ -68,7 +68,7 @@ export function LoginPage({ onSuccess, onQuickExperience }: LoginPageProps) {
               <div className="space-y-6">
                 <h1 className="text-4xl lg:text-5xl font-bold text-gray-900 leading-tight">
                   为每位学习者<br />
-                  <span className="text-primary">重塑</span><br />
+                  <span className="text-indigo-600">重塑</span><br />
                   自学体验
                 </h1>
                 
@@ -90,11 +90,11 @@ export function LoginPage({ onSuccess, onQuickExperience }: LoginPageProps) {
         </div>
 
         {/* Right side - Login/Register Form */}
-        <div className="flex items-center justify-center p-8 bg-secondary">
+        <div className="flex items-center justify-center p-8 bg-white">
           <div className="w-full max-w-md">
-            <Card className="w-full shadow-xl border-border">
+            <Card className="w-full shadow-xl border-gray-200">
             <CardHeader className="text-center">
-              <CardTitle className="text-2xl text-primary">欢迎使用</CardTitle>
+              <CardTitle className="text-2xl text-[#1a73e8]">欢迎使用</CardTitle>
               <CardDescription>登录或注册开始您的学习之旅</CardDescription>
             </CardHeader>
             <CardContent>
@@ -107,12 +107,12 @@ export function LoginPage({ onSuccess, onQuickExperience }: LoginPageProps) {
               {/* Demo Credentials */}
               <div className="mb-4 space-y-2">
                 {/* Student Demo */}
-                <div className="p-3 bg-secondary border border-border rounded-lg text-sm">
+                <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg text-sm">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="font-medium text-primary mb-1">学生演示账号:</p>
-                      <p className="text-muted-foreground text-xs">邮箱: student@demo.com</p>
-                      <p className="text-muted-foreground text-xs">密码: 任意密码</p>
+                      <p className="font-medium text-[#1a73e8] mb-1">学生演示账号:</p>
+                      <p className="text-gray-600 text-xs">邮箱: student@demo.com</p>
+                      <p className="text-gray-600 text-xs">密码: 任意密码</p>
                     </div>
                     <Button
                       type="button"
@@ -176,9 +176,9 @@ export function LoginPage({ onSuccess, onQuickExperience }: LoginPageProps) {
               </div>
 
               <Tabs defaultValue="login" className="w-full">
-                <TabsList className="grid w-full grid-cols-2">
-                  <TabsTrigger value="login">登录</TabsTrigger>
-                  <TabsTrigger value="register">注册</TabsTrigger>
+                <TabsList className="grid w-full grid-cols-2 bg-gray-100 p-1 rounded-lg">
+                  <TabsTrigger value="login" className="data-[state=active]:bg-white data-[state=active]:text-[#1a73e8] data-[state=active]:shadow-sm">登录</TabsTrigger>
+                  <TabsTrigger value="register" className="data-[state=active]:bg-white data-[state=active]:text-[#1a73e8] data-[state=active]:shadow-sm">注册</TabsTrigger>
                 </TabsList>
 
                 <TabsContent value="login">
@@ -207,7 +207,8 @@ export function LoginPage({ onSuccess, onQuickExperience }: LoginPageProps) {
                     </div>
                     <Button 
                       type="submit" 
-                      className="w-full bg-primary hover:bg-primary-hover text-primary-foreground"
+                      variant="default"
+                      className="w-full !bg-[#1a73e8] hover:!bg-[#1557b0] !text-white"
                       disabled={isLoading}
                     >
                       {isLoading ? '登录中...' : '登录'}
@@ -256,7 +257,7 @@ export function LoginPage({ onSuccess, onQuickExperience }: LoginPageProps) {
                         id="role"
                         value={role}
                         onChange={(e) => setRole(e.target.value as 'student' | 'teacher')}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary focus:border-primary"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#1a73e8] focus:border-[#1a73e8]"
                       >
                         <option value="student">学生</option>
                         <option value="teacher">教师</option>
@@ -264,7 +265,8 @@ export function LoginPage({ onSuccess, onQuickExperience }: LoginPageProps) {
                     </div>
                     <Button 
                       type="submit" 
-                      className="w-full bg-primary hover:bg-primary-hover text-primary-foreground"
+                      variant="default"
+                      className="w-full !bg-[#1a73e8] hover:!bg-[#1557b0] !text-white"
                       disabled={isLoading}
                     >
                       {isLoading ? '注册中...' : '注册'}
