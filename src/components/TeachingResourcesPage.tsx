@@ -124,6 +124,17 @@ function KeyIdeaBlock({ idea }: { idea: KeyIdea }) {
   );
 }
 
+/** Parse markdown-bold keywords (**...**) into fill-in blanks */
+function parseKeyPointToKeyIdea(raw: string): KeyIdea {
+  const blanks: string[] = [];
+  const text = raw.replace(/\*\*(.+?)\*\*/g, (_match, kw: string) => {
+    const cleaned = kw.trim();
+    if (cleaned) blanks.push(cleaned);
+    return '__KEY__';
+  });
+  return { text, blanks };
+}
+
 /** Build a single SystemTask from the collected task-design data */
 function buildSystemTask(opts: {
   topic: string;
@@ -355,7 +366,7 @@ export function TeachingResourcesPage() {
   const handleViewKeyIdeas = () => {
     const json = taskDesignJsonRef.current;
     const keyPoints = (json?.key_points as string[] | undefined) || [];
-    setKeyIdeas(keyPoints.map((t) => ({ text: t, blanks: [] })));
+    setKeyIdeas(keyPoints.map((t) => parseKeyPointToKeyIdea(t)));
     setStep(3);
   };
 
