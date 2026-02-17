@@ -10,8 +10,6 @@ import type {
   Language,
   VideoSearchItem,
   VideoContentResult,
-  GeneratedQuestion,
-  KeyIdea,
 } from '../types/backend';
 
 const getBaseUrl = (): string => {
@@ -166,17 +164,6 @@ export async function getVideoContent(url: string): Promise<VideoContentResult> 
   });
 }
 
-export async function generateQuestionsFromContent(
-  content: string,
-  count: number = 5,
-  questionType: 'multiple_choice' | 'short_answer' = 'multiple_choice'
-): Promise<{ questions: GeneratedQuestion[] }> {
-  return apiCall<{ questions: GeneratedQuestion[] }>('/api/materials/generate-questions', {
-    method: 'POST',
-    body: JSON.stringify({ content, count, questionType }),
-  });
-}
-
 export type GenerateTaskDesignResult = {
   markdown: string;
   json: Record<string, unknown>;
@@ -205,21 +192,4 @@ export async function generateTaskDesign(params: {
       }),
     }
   );
-}
-
-export async function generateKeyIdeas(content: string): Promise<{ keyIdeas: KeyIdea[] }> {
-  return apiCall<{ keyIdeas: KeyIdea[] }>('/api/materials/generate-key-ideas', {
-    method: 'POST',
-    body: JSON.stringify({ content: content.trim() }),
-  });
-}
-
-export async function improveWithAI(
-  type: 'objective' | 'key_idea' | 'question' | 'exit_ticket',
-  currentText: string
-): Promise<{ improvedText: string }> {
-  return apiCall<{ improvedText: string }>('/api/materials/improve-with-ai', {
-    method: 'POST',
-    body: JSON.stringify({ type, currentText: currentText.trim() }),
-  });
 }

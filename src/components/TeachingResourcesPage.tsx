@@ -65,36 +65,40 @@ function extractYouTubeVideoId(url: string): string | null {
 
 function Stepper({
   currentStep,
+  maxStepReached,
   completedSteps,
   onStepClick,
 }: {
   currentStep: number;
+  maxStepReached: number;
   completedSteps: Set<number>;
   onStepClick: (step: number) => void;
 }) {
   return (
     <div className="flex justify-center gap-1 mb-8 flex-wrap">
       {STEPS.map(({ id, label }) => {
-        const completed = completedSteps.has(id);
+        const reached = id <= maxStepReached;
         const active = currentStep === id;
+        const canClick = reached;
         return (
           <button
             key={id}
             type="button"
-            onClick={() => onStepClick(id)}
+            onClick={() => canClick && onStepClick(id)}
+            disabled={!canClick && !active}
             className={`
               flex items-center gap-2 px-4 py-3 rounded-lg border-2 text-sm font-medium transition-all flex-1 min-w-[100px] max-w-[180px] justify-center
               ${active ? 'border-amber-400 bg-amber-50 text-amber-900 shadow-sm' : ''}
-              ${completed && !active ? 'border-green-300 bg-green-50 text-green-800' : ''}
-              ${!active && !completed ? 'border-gray-200 bg-gray-50 text-gray-500' : ''}
+              ${reached && !active ? 'border-green-300 bg-green-50 text-green-800 cursor-pointer hover:bg-green-100' : ''}
+              ${!reached && !active ? 'border-gray-200 bg-gray-50 text-gray-500 cursor-not-allowed opacity-70' : ''}
             `}
           >
             <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-semibold ${
               active ? 'border-2 border-amber-400 bg-amber-100 text-amber-800' :
-              completed ? 'bg-green-200 text-green-800' :
+              reached ? 'bg-green-200 text-green-800' :
               'border border-gray-300 bg-gray-100 text-gray-500'
             }`}>
-              {completed ? <Check className="w-3 h-3" /> : id}
+              {reached && !active ? <Check className="w-3 h-3" /> : id}
             </span>
             {label}
           </button>
@@ -219,6 +223,7 @@ const TASK_TYPES = [
 
 export function TeachingResourcesPage() {
   const [step, setStep] = useState(0);
+  const [maxStepReached, setMaxStepReached] = useState(0);
   const [taskType, setTaskType] = useState<'mastery' | 'guided' | 'autonomous'>('mastery');
   const [entrySubject, setEntrySubject] = useState('物理');
   const [entryTopic, setEntryTopic] = useState('牛顿第一定律');
@@ -278,6 +283,7 @@ export function TeachingResourcesPage() {
     generateTaskDesignPromiseRef.current = promise;
     promise.then(() => setTaskDesignReady(true)).catch(() => setTaskDesignReady(false));
     setStep(1);
+    setMaxStepReached(1);
     setKeyIdeasIntroDismissed(false);
     setPracticeIntroDismissed(false);
     setExitTicketIntroDismissed(false);
@@ -368,6 +374,7 @@ export function TeachingResourcesPage() {
     const keyPoints = (json?.key_points as string[] | undefined) || [];
     setKeyIdeas(keyPoints.map((t) => parseKeyPointToKeyIdea(t)));
     setStep(3);
+    setMaxStepReached((m) => Math.max(m, 3));
   };
 
   // 进入 Step 4 时从 json.practice 填充练习题目
@@ -408,6 +415,7 @@ export function TeachingResourcesPage() {
     setGenerateError(null);
     setPreviewUrl(null);
     setStep(6);
+    setMaxStepReached((m) => Math.max(m, 6));
 
     try {
       // 1. Build the SystemTask from local data
@@ -524,6 +532,7 @@ export function TeachingResourcesPage() {
       {step >= 1 && (
         <Stepper
           currentStep={step}
+          maxStepReached={maxStepReached}
           completedSteps={completedSteps}
           onStepClick={(s) => setStep(s)}
         />
@@ -730,12 +739,12 @@ export function TeachingResourcesPage() {
                   onChange={(e) => setLearningObjective(e.target.value)}
                 />
                 <div className="flex justify-end gap-2 mt-4">
-                  <Button variant="outline" onClick={() => setStep(0)}>
+                  <Button variant="outline" onClick={() => { setStep(0); setMaxStepReached(0); }}>
                     <ChevronLeft className="w-4 h-4 mr-1" />
                     上一步
                   </Button>
                   <Button
-                    onClick={() => setStep(2)}
+                    onClick={() => { setStep(2); setMaxStepReached(2); }}
                     disabled={!learningObjective.trim()}
                   >
                     选择教学视频 <ChevronRight className="w-4 h-4 ml-1" />
@@ -973,7 +982,7 @@ export function TeachingResourcesPage() {
                     <ChevronLeft className="w-4 h-4 mr-1" />
                     上一步
                   </Button>
-                  <Button onClick={() => setStep(4)}>
+                  <Button onClick={() => { setStep(4); setMaxStepReached((m) => Math.max(m, 4)); }}>
                     查看练习题目 <ChevronRight className="w-4 h-4 ml-1" />
                   </Button>
                 </div>
@@ -1119,7 +1128,7 @@ export function TeachingResourcesPage() {
                     <ChevronLeft className="w-4 h-4 mr-1" />
                     上一步
                   </Button>
-                  <Button onClick={() => setStep(5)}>
+                  <Button onClick={() => { setStep(5); setMaxStepReached((m) => Math.max(m, 5)); }}>
                     查看离场券 <ChevronRight className="w-4 h-4 ml-1" />
                   </Button>
                 </div>
@@ -1244,7 +1253,7 @@ export function TeachingResourcesPage() {
                   </div>
                 ) : (
                   <div className="flex justify-end">
-                    <Button onClick={() => setStep(7)}>
+                    <Button onClick={() => { setStep(7); setMaxStepReached((m) => Math.max(m, 7)); }}>
                       任务完成，点击展示 <ChevronRight className="w-4 h-4 ml-1" />
                     </Button>
                   </div>
