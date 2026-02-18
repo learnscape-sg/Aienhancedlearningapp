@@ -136,11 +136,13 @@ export async function generateTaskAsset(
 }
 
 export async function createCourse(
-  input: SystemTaskPlan | { taskIds: string[] }
+  input: SystemTaskPlan | { taskIds: string[] },
+  teacherId?: string
 ): Promise<{ courseId: string; url: string }> {
-  const body = Array.isArray((input as { taskIds?: string[] }).taskIds)
+  const base = Array.isArray((input as { taskIds?: string[] }).taskIds)
     ? { taskIds: (input as { taskIds: string[] }).taskIds }
     : { plan: input as SystemTaskPlan };
+  const body = teacherId != null ? { ...base, teacherId } : base;
   return apiCall<{ courseId: string; url: string }>('/api/courses', {
     method: 'POST',
     body: JSON.stringify(body),
@@ -167,6 +169,74 @@ export async function getTask(taskId: string): Promise<{ task: SystemTask }> {
   return apiCall<{ task: SystemTask }>(`/api/tasks?id=${encodeURIComponent(taskId)}`, {
     method: 'GET',
   });
+}
+
+export async function listTeacherTasks(teacherId: string): Promise<{
+  tasks: { taskId: string; subject?: string; grade?: string; topic?: string; createdAt?: string; updatedAt?: string }[];
+}> {
+  return apiCall(
+    `/api/tasks?teacherId=${encodeURIComponent(teacherId)}`,
+    { method: 'GET' }
+  );
+}
+
+export interface ClassItem {
+  id: string;
+  teacherId: string;
+  name: string;
+  grade?: string;
+  createdAt?: string;
+  studentCount?: number;
+}
+
+export async function listTeacherClasses(teacherId: string): Promise<{ classes: ClassItem[] }> {
+  return apiCall(`/api/classes?teacherId=${encodeURIComponent(teacherId)}`, { method: 'GET' });
+}
+
+export async function createClass(
+  teacherId: string,
+  name: string,
+  grade?: string
+): Promise<ClassItem> {
+  return apiCall<ClassItem>('/api/classes', {
+    method: 'POST',
+    body: JSON.stringify({ teacherId, name, grade }),
+  });
+}
+
+export async function getClass(classId: string): Promise<{
+  id: string;
+  teacherId: string;
+  name: string;
+  grade?: string;
+  createdAt?: string;
+  students: { id: string; name?: string; email?: string }[];
+}> {
+  return apiCall(`/api/classes/${encodeURIComponent(classId)}`, { method: 'GET' });
+}
+
+export async function addStudentToClassByEmail(
+  classId: string,
+  email: string
+): Promise<{ success: boolean; studentId: string }> {
+  return apiCall(`/api/classes/${encodeURIComponent(classId)}/students`, {
+    method: 'POST',
+    body: JSON.stringify({ email }),
+  });
+}
+
+export async function removeStudentFromClass(
+  classId: string,
+  studentId: string
+): Promise<void> {
+  await apiCall(
+    `/api/classes/${encodeURIComponent(classId)}/students?studentId=${encodeURIComponent(studentId)}`,
+    { method: 'DELETE' }
+  );
+}
+
+export async function deleteClass(classId: string): Promise<void> {
+  await apiCall(`/api/classes/${encodeURIComponent(classId)}`, { method: 'DELETE' });
 }
 
 // --- Assignments (Phase 2) ---

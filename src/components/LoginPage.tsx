@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
@@ -16,7 +17,7 @@ export function LoginPage({ onSuccess, onQuickExperience }: LoginPageProps) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
-  const [role, setRole] = useState<'student' | 'teacher'>('student');
+  const [role, setRole] = useState<'student' | 'teacher' | 'parent'>('student');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const { login, register } = useAuth();
@@ -195,7 +196,15 @@ export function LoginPage({ onSuccess, onQuickExperience }: LoginPageProps) {
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="password">密码</Label>
+                      <div className="flex items-center justify-between">
+                        <Label htmlFor="password">密码</Label>
+                        <Link
+                          to="/forgot-password"
+                          className="text-sm text-[#1a73e8] hover:underline"
+                        >
+                          忘记密码？
+                        </Link>
+                      </div>
                       <Input
                         id="password"
                         type="password"
@@ -256,11 +265,12 @@ export function LoginPage({ onSuccess, onQuickExperience }: LoginPageProps) {
                       <select
                         id="role"
                         value={role}
-                        onChange={(e) => setRole(e.target.value as 'student' | 'teacher')}
+                        onChange={(e) => setRole(e.target.value as 'student' | 'teacher' | 'parent')}
                         className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#1a73e8] focus:border-[#1a73e8]"
                       >
                         <option value="student">学生</option>
                         <option value="teacher">教师</option>
+                        <option value="parent">家长</option>
                       </select>
                     </div>
                     <Button 

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { supabase } from '../utils/supabase/simpleClient';
+import { supabase } from '../utils/supabase/client';
 import { projectId } from '../utils/supabase/info';
 
 interface ProgressData {

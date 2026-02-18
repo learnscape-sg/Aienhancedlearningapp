@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { AuthProvider, useAuth } from './components/AuthContext';
-import { PublishedCoursesProvider, usePublishedCourses } from './components/PublishedCoursesContext';
+import { useAuth } from './components/AuthContext';
+import { PublishedCoursesProvider } from './components/PublishedCoursesContext';
 import { LoginPage } from './components/LoginPage';
 import { OnboardingPage } from './components/OnboardingPage';
 import { Sidebar } from './components/Sidebar';
@@ -20,6 +20,7 @@ import { MindmapPage } from './components/MindmapPage';
 import { GamePage } from './components/GamePage';
 import { VideoPage } from './components/VideoPage';
 import { SettingsPage } from './components/SettingsPage';
+import { TeacherSettingsPage } from './components/TeacherSettingsPage';
 import { AITutor } from './components/AITutor';
 
 // Teacher platform components
@@ -289,7 +290,7 @@ function AppContent() {
       case 'materials':
         return <TeachingResourcesPage />;
       case 'settings':
-        return <SettingsPage />;
+        return <TeacherSettingsPage />;
       default:
         return <TeacherOverview />;
     }
@@ -492,12 +493,10 @@ function AppContent() {
 
 export default function App() {
   return (
-    <AuthProvider>
-      <PublishedCoursesProvider>
-        <div className="size-full">
-          <AppContent />
-        </div>
-      </PublishedCoursesProvider>
-    </AuthProvider>
+    <PublishedCoursesProvider>
+      <div className="size-full">
+        <AppContent />
+      </div>
+    </PublishedCoursesProvider>
   );
 }

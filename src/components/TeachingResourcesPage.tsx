@@ -28,6 +28,7 @@ import {
   createCourse,
   saveTask,
 } from '../lib/backendApi';
+import { useAuth } from './AuthContext';
 import { Tabs, TabsList, TabsTrigger } from './ui/tabs';
 import { TypingText } from './ui/typing-text';
 import type {
@@ -223,6 +224,7 @@ const TASK_TYPES = [
 ] as const;
 
 export function TeachingResourcesPage() {
+  const { user } = useAuth();
   const [step, setStep] = useState(0);
   const [maxStepReached, setMaxStepReached] = useState(0);
   const [taskType, setTaskType] = useState<'mastery' | 'guided' | 'autonomous'>('mastery');
@@ -436,12 +438,12 @@ export function TeachingResourcesPage() {
       setGeneratedTask(task);
 
       // 2. Save task to tasks table, then create course from taskIds
-      const { taskId } = await saveTask(task, undefined, {
+      const { taskId } = await saveTask(task, user?.id, {
         subject: entrySubject,
         grade: entryGrade,
         topic: entryTopic,
       });
-      const result = await createCourse({ taskIds: [taskId] });
+      const result = await createCourse({ taskIds: [taskId] }, user?.id);
       setPreviewUrl(result.url);
 
       // 3. Stay on step 6; user clicks button to proceed

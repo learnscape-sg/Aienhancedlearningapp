@@ -1,11 +1,19 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
-import { BookOpen, Users, TrendingUp, MoreVertical, Search, Edit, Trash2, Eye, UserPlus, X, Loader2 } from 'lucide-react';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from './ui/tabs';
+import { BookOpen, Users, TrendingUp, MoreVertical, Search, Edit, Trash2, Eye, UserPlus, X, Loader2, FileText, ExternalLink } from 'lucide-react';
 import { Badge } from './ui/badge';
+import { useAuth } from './AuthContext';
 import { usePublishedCourses } from './PublishedCoursesContext';
-import { assignCourseToClasses } from '@/lib/backendApi';
+import {
+  assignCourseToClasses,
+  listTeacherTasks,
+  listTeacherClasses,
+  createCourse,
+  type ClassItem,
+} from '@/lib/backendApi';
 
 interface Course {
   id: string;
@@ -18,14 +26,12 @@ interface Course {
   lastUpdated: string;
 }
 
-interface Class {
-  id: string;
-  name: string;
-  grade: string;
+interface Class extends ClassItem {
   studentCount: number;
 }
 
 export function CourseManagementPage() {
+  const { user } = useAuth();
   const { publishedCourses } = usePublishedCourses();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedFilter, setSelectedFilter] = useState('all');
@@ -34,14 +40,38 @@ export function CourseManagementPage() {
   const [selectedClasses, setSelectedClasses] = useState<string[]>([]);
   const [assigning, setAssigning] = useState(false);
 
-  // Mock class data - in real app, this would come from a context or API
-  const classes: Class[] = [
-    { id: '1', name: '高一3班', grade: '高一', studentCount: 42 },
-    { id: '2', name: '高二1班', grade: '高二', studentCount: 38 },
-    { id: '3', name: '高一5班', grade: '高一', studentCount: 40 },
-    { id: '4', name: '初三2班', grade: '初三', studentCount: 35 },
-    { id: '5', name: '高二3班', grade: '高二', studentCount: 36 },
-  ];
+  const [tab, setTab] = useState<'courses' | 'tasks'>('courses');
+  const [tasks, setTasks] = useState<{ taskId: string; subject?: string; grade?: string; topic?: string; createdAt?: string }[]>([]);
+  const [tasksLoading, setTasksLoading] = useState(false);
+  const [classes, setClasses] = useState<Class[]>([]);
+  const [classesLoading, setClassesLoading] = useState(false);
+
+  useEffect(() => {
+    if (user?.id && tab === 'tasks') {
+      setTasksLoading(true);
+      listTeacherTasks(user.id)
+        .then((res) => setTasks(res.tasks ?? []))
+        .catch((err) => console.error('Failed to load tasks:', err))
+        .finally(() => setTasksLoading(false));
+    }
+  }, [user?.id, tab]);
+
+  useEffect(() => {
+    if (user?.id && assignDialogOpen) {
+      setClassesLoading(true);
+      listTeacherClasses(user.id)
+        .then((res) =>
+          setClasses(
+            (res.classes ?? []).map((c) => ({
+              ...c,
+              studentCount: c.studentCount ?? 0,
+            }))
+          )
+        )
+        .catch((err) => console.error('Failed to load classes:', err))
+        .finally(() => setClassesLoading(false));
+    }
+  }, [user?.id, assignDialogOpen]);
 
   const handleAssignClick = (course: Course) => {
     setSelectedCourse(course);
@@ -86,6 +116,17 @@ export function CourseManagementPage() {
                          (selectedFilter === 'draft' && course.status === 'draft');
     return matchesSearch && matchesFilter;
   });
+
+  const handleTaskPreview = async (taskId: string) => {
+    if (!user?.id) return;
+    try {
+      const result = await createCourse({ taskIds: [taskId] }, user.id);
+      window.open(result.url, '_blank');
+    } catch (err) {
+      console.error('Failed to create preview course:', err);
+      alert(err instanceof Error ? err.message : '生成预览失败');
+    }
+  };
 
   return (
     <div className="p-8 space-y-6">
@@ -145,6 +186,55 @@ export function CourseManagementPage() {
         </Card>
       </div>
 
+      {/* Tabs: 课程 | 任务库 */}
+      <Tabs value={tab} onValueChange={(v) => setTab(v as 'courses' | 'tasks')}>
+        <TabsList className="mb-4">
+          <TabsTrigger value="courses">课程</TabsTrigger>
+          <TabsTrigger value="tasks">任务库</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="tasks" className="mt-0">
+          <Card>
+            <CardHeader>
+              <CardTitle>任务列表</CardTitle>
+              <CardDescription>从任务生成单任务课程并预览</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {tasksLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+                </div>
+              ) : tasks.length === 0 ? (
+                <p className="text-muted-foreground py-8 text-center">暂无任务，请在教学资源页创建</p>
+              ) : (
+                <div className="space-y-2">
+                  {tasks.map((t) => (
+                    <div
+                      key={t.taskId}
+                      className="flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50"
+                    >
+                      <div className="flex items-center gap-3">
+                        <FileText className="w-5 h-5 text-muted-foreground" />
+                        <div>
+                          <p className="font-medium">{t.topic || t.subject || '未命名任务'}</p>
+                          <p className="text-sm text-muted-foreground">
+                            {[t.subject, t.grade].filter(Boolean).join(' · ') || t.taskId.slice(0, 8)}
+                          </p>
+                        </div>
+                      </div>
+                      <Button variant="outline" size="sm" onClick={() => handleTaskPreview(t.taskId)}>
+                        <ExternalLink className="w-4 h-4 mr-1" />
+                        预览
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="courses" className="mt-0">
       {/* Filters and Search */}
       <Card>
         <CardContent className="p-4">
@@ -273,6 +363,13 @@ export function CourseManagementPage() {
               <p className="text-sm text-muted-foreground mb-4">
                 选择要分配此课程的班级（可多选）
               </p>
+              {classesLoading ? (
+                <div className="flex justify-center py-6">
+                  <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+                </div>
+              ) : classes.length === 0 ? (
+                <p className="text-muted-foreground py-4 text-center">暂无班级，请先在班级管理页创建</p>
+              ) : (
               <div className="space-y-2">
                 {classes.map(c => (
                   <div 
@@ -303,6 +400,7 @@ export function CourseManagementPage() {
                   </div>
                 ))}
               </div>
+              )}
               {selectedClasses.length > 0 && (
                 <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
                   <p className="text-sm text-blue-900">
@@ -337,6 +435,8 @@ export function CourseManagementPage() {
           </Card>
         </div>
       )}
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
