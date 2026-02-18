@@ -26,6 +26,7 @@ import {
   searchVideos,
   generateTaskDesign,
   createCourse,
+  saveTask,
 } from '../lib/backendApi';
 import { Tabs, TabsList, TabsTrigger } from './ui/tabs';
 import { TypingText } from './ui/typing-text';
@@ -434,18 +435,13 @@ export function TeachingResourcesPage() {
       });
       setGeneratedTask(task);
 
-      // 2. Wrap in SystemTaskPlan and save to Supabase
-      const plan: SystemTaskPlan = {
-        tasks: [task],
-        learningGoals: [{
-          id: 'goal-1',
-          text: learningObjective,
-          level: 'comprehension',
-        }],
-        bigConcept: entryTopic,
-      };
-
-      const result = await createCourse(plan);
+      // 2. Save task to tasks table, then create course from taskIds
+      const { taskId } = await saveTask(task, undefined, {
+        subject: entrySubject,
+        grade: entryGrade,
+        topic: entryTopic,
+      });
+      const result = await createCourse({ taskIds: [taskId] });
       setPreviewUrl(result.url);
 
       // 3. Stay on step 6; user clicks button to proceed

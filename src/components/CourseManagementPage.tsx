@@ -2,9 +2,10 @@ import React, { useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
-import { BookOpen, Users, TrendingUp, MoreVertical, Search, Edit, Trash2, Eye, UserPlus, X } from 'lucide-react';
+import { BookOpen, Users, TrendingUp, MoreVertical, Search, Edit, Trash2, Eye, UserPlus, X, Loader2 } from 'lucide-react';
 import { Badge } from './ui/badge';
 import { usePublishedCourses } from './PublishedCoursesContext';
+import { assignCourseToClasses } from '@/lib/backendApi';
 
 interface Course {
   id: string;
@@ -31,6 +32,7 @@ export function CourseManagementPage() {
   const [assignDialogOpen, setAssignDialogOpen] = useState(false);
   const [selectedCourse, setSelectedCourse] = useState<Course | null>(null);
   const [selectedClasses, setSelectedClasses] = useState<string[]>([]);
+  const [assigning, setAssigning] = useState(false);
 
   // Mock class data - in real app, this would come from a context or API
   const classes: Class[] = [
@@ -55,8 +57,11 @@ export function CourseManagementPage() {
     );
   };
 
-  const handleConfirmAssign = () => {
-    if (selectedCourse && selectedClasses.length > 0) {
+  const handleConfirmAssign = async () => {
+    if (!selectedCourse || selectedClasses.length === 0) return;
+    setAssigning(true);
+    try {
+      await assignCourseToClasses(selectedCourse.id, selectedClasses);
       const classNames = classes
         .filter(c => selectedClasses.includes(c.id))
         .map(c => c.name)
@@ -65,6 +70,11 @@ export function CourseManagementPage() {
       setAssignDialogOpen(false);
       setSelectedCourse(null);
       setSelectedClasses([]);
+    } catch (err) {
+      console.error('Assign failed:', err);
+      alert(err instanceof Error ? err.message : '分配失败，请重试');
+    } finally {
+      setAssigning(false);
     }
   };
 
@@ -313,10 +323,14 @@ export function CourseManagementPage() {
               </Button>
               <Button
                 onClick={handleConfirmAssign}
-                disabled={selectedClasses.length === 0}
+                disabled={selectedClasses.length === 0 || assigning}
                 className="bg-blue-600 hover:bg-blue-700"
               >
-                <UserPlus className="w-4 h-4 mr-2" />
+                {assigning ? (
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                ) : (
+                  <UserPlus className="w-4 h-4 mr-2" />
+                )}
                 确认分配
               </Button>
             </div>

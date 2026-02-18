@@ -9,6 +9,7 @@ interface TaskConfigurationPageProps {
   courseData?: any;
   designData?: any;
   documentData?: any;
+  courseId?: string;
   onBack?: () => void;
   onPublish?: () => void;
 }
@@ -23,8 +24,18 @@ interface Task {
   expanded?: boolean;
 }
 
-export function TaskConfigurationPage({ courseData, designData, documentData, onBack, onPublish }: TaskConfigurationPageProps) {
+const getLearnYourWayOrigin = (): string => {
+  const env = import.meta.env.VITE_LEARNYOURWAY_URL;
+  if (env) return env.replace(/\/$/, '');
+  if (typeof window !== 'undefined') return window.location.origin;
+  return '';
+};
+
+export function TaskConfigurationPage({ courseData, designData, documentData, courseId, onBack, onPublish }: TaskConfigurationPageProps) {
   const { addPublishedCourse } = usePublishedCourses();
+  const courseUrl = courseId
+    ? `${getLearnYourWayOrigin()}/course/${courseId}`
+    : '';
   const [tasks, setTasks] = useState<Task[]>([
     {
       id: 1,
@@ -69,7 +80,6 @@ export function TaskConfigurationPage({ courseData, designData, documentData, on
   ]);
 
   const [showSuccess, setShowSuccess] = useState(false);
-  const [courseUrl] = useState('https://self-learning-system-ob1z.vercel.app/course/69f2f4bd9ed2e925499dab5996b9d18');
 
   const toggleTask = (id: number) => {
     setTasks(tasks.map(task => 
@@ -102,6 +112,10 @@ export function TaskConfigurationPage({ courseData, designData, documentData, on
   };
 
   const copyUrl = () => {
+    if (!courseUrl) {
+      alert('请先保存课程以获取学生链接');
+      return;
+    }
     navigator.clipboard.writeText(courseUrl);
     alert('链接已复制到剪贴板！');
   };
@@ -227,7 +241,9 @@ export function TaskConfigurationPage({ courseData, designData, documentData, on
                 <div className="flex-1">
                   <h3 className="font-semibold text-foreground mb-2">课程已发布！</h3>
                   <div className="bg-background p-3 rounded border border-border mb-3">
-                    <code className="text-sm text-foreground">{courseUrl}</code>
+                    <code className="text-sm text-foreground">
+                      {courseUrl || '请先保存课程以获取学生链接'}
+                    </code>
                   </div>
                   <p className="text-sm text-muted-foreground">将链接分享给学生，学生可以遵循设计的课程线。</p>
                 </div>

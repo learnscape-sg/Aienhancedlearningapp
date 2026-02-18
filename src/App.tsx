@@ -235,9 +235,10 @@ function AppContent() {
     // Handle task configuration page
     if (appState === 'task-configuration') {
       return (
-        <TaskConfigurationPage 
+        <TaskConfigurationPage
           courseData={courseDesignData}
           designData={courseDesignData}
+          courseId={courseDesignData?.courseId}
           onBack={() => {
             setAppState('teaching-document');
           }}

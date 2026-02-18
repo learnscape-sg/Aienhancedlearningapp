@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Progress } from './ui/progress';
 import { Button } from './ui/button';
@@ -12,45 +13,18 @@ import {
   Play, 
   ChevronRight,
   Star,
-  Target
+  Target,
+  Loader2
 } from 'lucide-react';
 import { useAuth } from './AuthContext';
 import { useProgressTracker } from './ProgressTracker';
+import { getStudentCourses } from '@/lib/backendApi';
 
 interface HomePageProps {
   onStartChapter: (chapterId: string) => void;
 }
 
-// Mock data - in real app this would come from API
-const recentCourses = [
-  {
-    id: '1',
-    title: '数学 - 分数运算',
-    chapter: '第三章：分数的加法和减法',
-    progress: 75,
-    timeLeft: '15分钟',
-    subject: '数学',
-    color: '#34A853' // Google Green
-  },
-  {
-    id: '2',
-    title: '语文 - 古诗词鉴赏',
-    chapter: '第五章：唐诗三百首',
-    progress: 45,
-    timeLeft: '25分钟',
-    subject: '语文',
-    color: '#FBBC05' // Google Yellow
-  },
-  {
-    id: '3',
-    title: '英语 - 日常对话',
-    chapter: '第二章：购物场景对话',
-    progress: 90,
-    timeLeft: '5分钟',
-    subject: '英语',
-    color: '#1A73E8' // Primary Blue
-  }
-];
+const COURSE_COLORS = ['#34A853', '#FBBC05', '#1A73E8', '#EA4335'];
 
 const recommendedPaths = [
   {
@@ -91,7 +65,21 @@ const achievements = [
 
 export function HomePage({ onStartChapter }: HomePageProps) {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const { progressData } = useProgressTracker();
+  const [assignedCourses, setAssignedCourses] = useState<{ courseId: string; topic?: string }[]>([]);
+  const [coursesLoading, setCoursesLoading] = useState(true);
+
+  useEffect(() => {
+    if (!user?.id) {
+      setCoursesLoading(false);
+      return;
+    }
+    getStudentCourses(user.id)
+      .then((data) => setAssignedCourses(data.courses || []))
+      .catch(() => setAssignedCourses([]))
+      .finally(() => setCoursesLoading(false));
+  }, [user?.id]);
 
   const getGreeting = () => {
     const hour = new Date().getHours();
@@ -137,58 +125,54 @@ export function HomePage({ onStartChapter }: HomePageProps) {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              {recentCourses.map((course) => {
-                const courseProgress = progressData[course.id];
-                const actualProgress = courseProgress?.progress || course.progress;
-                const isCompleted = courseProgress?.completed || false;
-                
-                return (
-                  <Card key={course.id} className="border-l-4" style={{ borderLeftColor: course.color }}>
-                    <CardContent className="p-4">
-                      <div className="flex items-center justify-between mb-3">
-                        <div>
-                          <h3 className="font-medium">{course.title}</h3>
-                          <p className="text-sm text-muted-foreground">{course.chapter}</p>
-                          {isCompleted && (
-                            <Badge variant="secondary" className="mt-1 bg-google-green/10 text-google-green">
-                              已完成
-                            </Badge>
-                          )}
-                        </div>
-                        <Badge variant="secondary" style={{ backgroundColor: `${course.color}20`, color: course.color }}>
-                          {course.subject}
-                        </Badge>
-                      </div>
-                      <div className="space-y-2">
-                        <div className="flex items-center justify-between text-sm">
-                          <span>学习进度</span>
-                          <span>{Math.round(actualProgress)}%</span>
-                        </div>
-                        <Progress value={actualProgress} className="h-2" />
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center space-x-1 text-sm text-muted-foreground">
-                            <Clock className="w-4 h-4" />
-                            <span>
-                              {courseProgress?.timeSpent 
-                                ? `已学习 ${Math.round(courseProgress.timeSpent / 60)}分钟`
-                                : `剩余 ${course.timeLeft}`
-                              }
-                            </span>
+              {coursesLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+                </div>
+              ) : assignedCourses.length === 0 ? (
+                <p className="text-muted-foreground text-center py-6">暂无分配课程，等待老师分配后即可在此学习</p>
+              ) : (
+                assignedCourses.map((course, idx) => {
+                  const courseProgress = progressData[course.courseId];
+                  const actualProgress = courseProgress?.progress || 0;
+                  const isCompleted = courseProgress?.completed || false;
+                  const color = COURSE_COLORS[idx % COURSE_COLORS.length];
+                  return (
+                    <Card key={course.courseId} className="border-l-4" style={{ borderLeftColor: color }}>
+                      <CardContent className="p-4">
+                        <div className="flex items-center justify-between mb-3">
+                          <div>
+                            <h3 className="font-medium">{course.topic || course.courseId}</h3>
+                            <p className="text-sm text-muted-foreground">分配给我的自学任务</p>
+                            {isCompleted && (
+                              <Badge variant="secondary" className="mt-1 bg-google-green/10 text-google-green">
+                                已完成
+                              </Badge>
+                            )}
                           </div>
-                          <Button
-                            size="sm"
-                            onClick={() => onStartChapter(course.id)}
-                            className="bg-primary hover:bg-primary-hover text-primary-foreground"
-                          >
-                            <Play className="w-4 h-4 mr-1" />
-                            {isCompleted ? '复习' : '继续'}
-                          </Button>
                         </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                );
-              })}
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between text-sm">
+                            <span>学习进度</span>
+                            <span>{Math.round(actualProgress)}%</span>
+                          </div>
+                          <Progress value={actualProgress} className="h-2" />
+                          <div className="flex items-center justify-between">
+                            <Button
+                              size="sm"
+                              onClick={() => navigate(`/course/${course.courseId}`)}
+                              className="bg-primary hover:bg-primary-hover text-primary-foreground"
+                            >
+                              <Play className="w-4 h-4 mr-1" />
+                              {isCompleted ? '复习' : '开始学习'}
+                            </Button>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  );
+                })
+              )}
             </CardContent>
           </Card>
 

@@ -7,9 +7,13 @@ import type {
   CurriculumDesign,
   TaskDocuments,
   SystemTaskPlan,
+  SystemTask,
   Language,
   VideoSearchItem,
   VideoContentResult,
+  ChatMessage,
+  ExitTicketAnalysis,
+  ObjectiveMetrics,
 } from '../types/backend';
 
 const getBaseUrl = (): string => {
@@ -132,12 +136,58 @@ export async function generateTaskAsset(
 }
 
 export async function createCourse(
-  plan: SystemTaskPlan
+  input: SystemTaskPlan | { taskIds: string[] }
 ): Promise<{ courseId: string; url: string }> {
+  const body = Array.isArray((input as { taskIds?: string[] }).taskIds)
+    ? { taskIds: (input as { taskIds: string[] }).taskIds }
+    : { plan: input as SystemTaskPlan };
   return apiCall<{ courseId: string; url: string }>('/api/courses', {
     method: 'POST',
-    body: JSON.stringify({ plan }),
+    body: JSON.stringify(body),
   });
+}
+
+// --- Task storage (Phase 2) ---
+export async function saveTask(
+  task: SystemTask,
+  teacherId?: string,
+  meta?: { subject?: string; grade?: string; topic?: string }
+): Promise<{ taskId: string }> {
+  return apiCall<{ taskId: string }>('/api/tasks', {
+    method: 'POST',
+    body: JSON.stringify({
+      task,
+      teacherId,
+      ...meta,
+    }),
+  });
+}
+
+export async function getTask(taskId: string): Promise<{ task: SystemTask }> {
+  return apiCall<{ task: SystemTask }>(`/api/tasks?id=${encodeURIComponent(taskId)}`, {
+    method: 'GET',
+  });
+}
+
+// --- Assignments (Phase 2) ---
+export async function assignCourseToClasses(
+  courseId: string,
+  classIds: string[]
+): Promise<void> {
+  await apiCall<{ success: boolean }>('/api/assignments', {
+    method: 'POST',
+    body: JSON.stringify({ courseId, classIds }),
+  });
+}
+
+export async function getStudentCourses(studentId: string): Promise<{
+  courseIds: string[];
+  courses: { courseId: string; topic?: string }[];
+}> {
+  return apiCall<{ courseIds: string[]; courses: { courseId: string; topic?: string }[] }>(
+    `/api/assignments?studentId=${encodeURIComponent(studentId)}`,
+    { method: 'GET' }
+  );
 }
 
 export async function getCourse(
@@ -146,6 +196,127 @@ export async function getCourse(
   return apiCall<{ plan: SystemTaskPlan }>(`/api/courses?id=${encodeURIComponent(courseId)}`, {
     method: 'GET',
   });
+}
+
+// --- Chat & Exit Ticket (StudentConsole) ---
+export async function sendChatMessage(
+  history: ChatMessage[],
+  newMessage: string,
+  systemInstruction: string,
+  language: Language
+): Promise<string> {
+  try {
+    return await apiCall<string>('/api/chat', {
+      method: 'POST',
+      body: JSON.stringify({
+        history,
+        newMessage,
+        systemInstruction,
+        language,
+      }),
+    });
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    if (errorMessage.includes('网络连接失败') || errorMessage.includes('Failed to fetch')) {
+      return '抱歉，无法连接到服务器。请检查网络连接后重试。';
+    }
+    if (errorMessage.includes('API Key') || errorMessage.includes('not configured')) {
+      return '服务配置错误，请联系管理员。';
+    }
+    if (errorMessage.includes('timeout') || errorMessage.includes('超时')) {
+      return '请求超时，请稍后重试。';
+    }
+    return '连接错误，请稍后重试。';
+  }
+}
+
+export async function generateExitTicket(
+  learningLog: string,
+  language: Language,
+  studentName?: string,
+  objectiveMetrics?: ObjectiveMetrics
+): Promise<ExitTicketAnalysis | null> {
+  try {
+    return await apiCall<ExitTicketAnalysis>('/api/exit-ticket', {
+      method: 'POST',
+      body: JSON.stringify({
+        chatLog: learningLog,
+        language,
+        studentName: studentName || '您',
+        ...(objectiveMetrics && { objectiveMetrics }),
+      }),
+    });
+  } catch (error) {
+    console.error('Exit Ticket Error', error);
+    return null;
+  }
+}
+
+// --- Speech (TTS/STT) - responses not wrapped in { data } ---
+export interface SpeechVoice {
+  name: string;
+  ssmlGender?: string;
+  naturalSampleRateHertz?: number;
+}
+
+export async function getSpeechVoices(): Promise<{
+  voices: SpeechVoice[];
+  recommended?: string;
+  total: number;
+}> {
+  const base = getBaseUrl();
+  const response = await fetch(`${base}/api/speech/voices`, {
+    method: 'GET',
+  });
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.error || 'Failed to fetch speech voices');
+  }
+  return response.json();
+}
+
+export async function textToSpeech(
+  text: string,
+  languageCode: string,
+  voiceName?: string
+): Promise<string> {
+  const base = getBaseUrl();
+  const response = await fetch(`${base}/api/speech/tts`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      text,
+      languageCode,
+      voiceName,
+    }),
+  });
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.error || 'Text-to-speech synthesis failed');
+  }
+  const data = await response.json();
+  return data.audioData as string;
+}
+
+export async function speechToText(
+  audioDataBase64: string,
+  languageCode: string
+): Promise<string> {
+  const base = getBaseUrl();
+  const response = await fetch(`${base}/api/speech/stt`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      audioData: audioDataBase64,
+      languageCode,
+    }),
+  });
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.error || 'Speech recognition failed');
+  }
+  const data = await response.json();
+  return data.text as string;
 }
 
 // --- Materials (teaching resources) ---
