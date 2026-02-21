@@ -339,7 +339,7 @@ export function TaskManagementPage() {
             <CardHeader>
               <CardTitle>我创建的任务（含已公开/未公开）</CardTitle>
               <CardDescription>
-                {myTaskView === 'active' ? '可多选后“打包课程并分配”' : '回收站（90天内可恢复）'}
+                {myTaskView === 'active' ? '可选择一个或者多个任务后，“打包课程并分配”' : '回收站（90天内可恢复）'}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
