@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -22,6 +22,11 @@ import {
   Layers,
 } from 'lucide-react';
 import { useAuth } from './AuthContext';
+import {
+  getTeacherPreferencesFromProfile,
+  prefSubjectIdToDisplay,
+  GRADE_OPTIONS,
+} from '../hooks/useTeacherPreferences';
 import { usePublishedCourses } from './PublishedCoursesContext';
 import {
   generateCurriculumDesign,
@@ -44,8 +49,10 @@ interface AICourseDesignPageProps {
   onNextStep?: (data: { plan: SystemTaskPlan; courseId?: string; courseUrl?: string }) => void;
 }
 
+const AI_COURSE_SUBJECTS = ['数学', '物理', '化学', '生物', '语文', '英语', '历史', '地理'];
+
 export function AICourseDesignPage({ onNextStep }: AICourseDesignPageProps) {
-  const { user } = useAuth();
+  const { user, preferences } = useAuth();
   const { addPublishedCourse } = usePublishedCourses();
   const [step, setStep] = useState<Step>('form');
   const [subject, setSubject] = useState('');
@@ -67,8 +74,17 @@ export function AICourseDesignPage({ onNextStep }: AICourseDesignPageProps) {
   const [createLoading, setCreateLoading] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
 
-  const subjects = ['数学', '物理', '化学', '生物', '语文', '英语', '历史', '地理'];
-  const grades = ['初一', '初二', '初三', '高一', '高二', '高三'];
+  const hasPrefilledRef = useRef(false);
+  useEffect(() => {
+    if (hasPrefilledRef.current) return;
+    hasPrefilledRef.current = true;
+    const prefs = getTeacherPreferencesFromProfile(preferences);
+    if (prefs.defaultGrade && GRADE_OPTIONS.some((g) => g === prefs.defaultGrade)) setGrade(prefs.defaultGrade);
+    if (prefs.defaultSubject) {
+      const subjectDisplay = prefSubjectIdToDisplay(prefs.defaultSubject);
+      if (subjectDisplay && AI_COURSE_SUBJECTS.includes(subjectDisplay)) setSubject(subjectDisplay);
+    }
+  }, [preferences?.defaultGrade, preferences?.defaultSubject]);
 
   const runGeneration = async () => {
     if (!subject.trim() || !grade.trim() || !topic.trim()) {
@@ -194,6 +210,9 @@ export function AICourseDesignPage({ onNextStep }: AICourseDesignPageProps) {
           textbook,
           hours: '1',
           status: 'published',
+          assignmentStatus: 'unassigned',
+          visibilityStatus: 'private',
+          shareStatus: 'none',
           students: 0,
           completion: 0,
           lastUpdated: '刚刚',
@@ -252,7 +271,7 @@ export function AICourseDesignPage({ onNextStep }: AICourseDesignPageProps) {
                   className="w-full h-12 px-3 py-2 border border-input rounded-md bg-input-background"
                 >
                   <option value="">请选择</option>
-                  {grades.map((g) => (
+                  {GRADE_OPTIONS.map((g) => (
                     <option key={g} value={g}>
                       {g}
                     </option>

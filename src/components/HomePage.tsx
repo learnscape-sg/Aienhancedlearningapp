@@ -67,7 +67,7 @@ export function HomePage({ onStartChapter }: HomePageProps) {
   const { user } = useAuth();
   const navigate = useNavigate();
   const { progressData } = useProgressTracker();
-  const [assignedCourses, setAssignedCourses] = useState<{ courseId: string; topic?: string }[]>([]);
+  const [assignedCourses, setAssignedCourses] = useState<{ courseId: string; topic?: string; teacherName?: string }[]>([]);
   const [coursesLoading, setCoursesLoading] = useState(true);
 
   useEffect(() => {
@@ -143,7 +143,9 @@ export function HomePage({ onStartChapter }: HomePageProps) {
                         <div className="flex items-center justify-between mb-3">
                           <div>
                             <h3 className="font-medium">{course.topic || course.courseId}</h3>
-                            <p className="text-sm text-muted-foreground">分配给我的自学任务</p>
+                            <p className="text-sm text-muted-foreground">
+                              {course.teacherName ? `来自 ${course.teacherName} 的分配` : '分配给我的自学任务'}
+                            </p>
                             {isCompleted && (
                               <Badge variant="secondary" className="mt-1 bg-google-green/10 text-google-green">
                                 已完成

@@ -29,6 +29,11 @@ import {
   saveTask,
 } from '../lib/backendApi';
 import { useAuth } from './AuthContext';
+import {
+  getTeacherPreferencesFromProfile,
+  prefSubjectIdToDisplay,
+  GRADE_OPTIONS,
+} from '../hooks/useTeacherPreferences';
 import { Tabs, TabsList, TabsTrigger } from './ui/tabs';
 import { TypingText } from './ui/typing-text';
 import type {
@@ -206,11 +211,6 @@ function buildSystemTask(opts: {
   };
 }
 
-const GRADE_OPTIONS = [
-  '一年级', '二年级', '三年级', '四年级', '五年级', '六年级',
-  '初一', '初二', '初三', '高一', '高二', '高三',
-];
-
 const SUBJECT_OPTIONS = [
   '语文', '数学', '英语', '物理', '化学', '生物', '历史', '地理', '政治', '其他',
 ];
@@ -224,7 +224,7 @@ const TASK_TYPES = [
 ] as const;
 
 export function TeachingResourcesPage() {
-  const { user } = useAuth();
+  const { user, preferences } = useAuth();
   const [step, setStep] = useState(0);
   const [maxStepReached, setMaxStepReached] = useState(0);
   const [taskType, setTaskType] = useState<'mastery' | 'guided' | 'autonomous'>('mastery');
@@ -263,6 +263,16 @@ export function TeachingResourcesPage() {
   const [taskGenerating, setTaskGenerating] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [generateError, setGenerateError] = useState<string | null>(null);
+
+  const hasPrefilledRef = useRef(false);
+  useEffect(() => {
+    if (hasPrefilledRef.current) return;
+    hasPrefilledRef.current = true;
+    const prefs = getTeacherPreferencesFromProfile(preferences);
+    if (prefs.defaultGrade && GRADE_OPTIONS.some((g) => g === prefs.defaultGrade)) setEntryGrade(prefs.defaultGrade);
+    const subjectDisplay = prefSubjectIdToDisplay(prefs.defaultSubject);
+    if (subjectDisplay && SUBJECT_OPTIONS.includes(subjectDisplay)) setEntrySubject(subjectDisplay);
+  }, [preferences?.defaultGrade, preferences?.defaultSubject]);
 
   const completedSteps = new Set<number>();
   if (learningObjective.trim()) completedSteps.add(1);
@@ -442,6 +452,10 @@ export function TeachingResourcesPage() {
         subject: entrySubject,
         grade: entryGrade,
         topic: entryTopic,
+        taskType,
+        durationMin: parseInt(entryDuration, 10) || 15,
+        difficulty: entryDifficulty,
+        prerequisites: entryPrerequisites,
       });
       const result = await createCourse({ taskIds: [taskId] }, user?.id);
       setPreviewUrl(result.url);

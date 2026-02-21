@@ -20,22 +20,8 @@ import {
   type TeacherPreferences,
   defaultTeacherPreferences,
   getTeacherPreferencesFromProfile,
+  GRADE_OPTIONS,
 } from '../hooks/useTeacherPreferences';
-
-const grades = [
-  { id: 'grade1', name: '一年级' },
-  { id: 'grade2', name: '二年级' },
-  { id: 'grade3', name: '三年级' },
-  { id: 'grade4', name: '四年级' },
-  { id: 'grade5', name: '五年级' },
-  { id: 'grade6', name: '六年级' },
-  { id: 'grade7', name: '七年级' },
-  { id: 'grade8', name: '八年级' },
-  { id: 'grade9', name: '九年级' },
-  { id: 'grade10', name: '十年级' },
-  { id: 'grade11', name: '十一年级' },
-  { id: 'grade12', name: '十二年级' },
-];
 
 const subjects = [
   { id: 'math', name: '数学' },
@@ -166,9 +152,9 @@ export function TeacherSettingsPage() {
                     <SelectValue placeholder="请选择" />
                   </SelectTrigger>
                   <SelectContent>
-                    {grades.map((g) => (
-                      <SelectItem key={g.id} value={g.id}>
-                        {g.name}
+                    {GRADE_OPTIONS.map((g) => (
+                      <SelectItem key={g} value={g}>
+                        {g}
                       </SelectItem>
                     ))}
                   </SelectContent>

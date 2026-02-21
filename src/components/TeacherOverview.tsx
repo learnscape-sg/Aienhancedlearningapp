@@ -1,56 +1,57 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { BookOpen, Users, FileText, TrendingUp, Clock, Award } from 'lucide-react';
 import { Button } from './ui/button';
+import { useAuth } from './AuthContext';
+import { getTeacherStats, listTeacherCoursesWithStats } from '@/lib/backendApi';
 
 export function TeacherOverview() {
-  const stats = [
-    { 
-      title: '已发布课程', 
-      value: '12', 
-      icon: BookOpen, 
-      trend: '+2 本月',
-      color: 'text-blue-600',
-      bgColor: 'bg-blue-50'
-    },
-    { 
-      title: '活跃学生', 
-      value: '248', 
-      icon: Users, 
-      trend: '+15 本周',
-      color: 'text-green-600',
-      bgColor: 'bg-green-50'
-    },
-    { 
-      title: '任务设计', 
-      value: '86', 
-      icon: FileText, 
-      trend: '+8 本月',
-      color: 'text-purple-600',
-      bgColor: 'bg-purple-50'
-    },
-    { 
-      title: '平均完成率', 
-      value: '87%', 
-      icon: TrendingUp, 
-      trend: '+5% 本月',
-      color: 'text-orange-600',
-      bgColor: 'bg-orange-50'
-    },
-  ];
+  const { user } = useAuth();
+  const [stats, setStats] = useState<{ totalCourses: number; assignedCount?: number; publishedCount: number; totalStudents: number; avgCompletion: number } | null>(null);
+  const [topCourses, setTopCourses] = useState<{ name: string; students: number; completion: number }[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!user?.id || user.role !== 'teacher') {
+      setLoading(false);
+      return;
+    }
+    Promise.all([
+      getTeacherStats(user.id),
+      listTeacherCoursesWithStats(user.id),
+    ])
+      .then(([statsData, coursesData]) => {
+        setStats(statsData);
+        const courses = coursesData.courses
+          .filter((c) => c.assignmentStatus === 'assigned' || c.status === 'published')
+          .sort((a, b) => b.students - a.students)
+          .slice(0, 4)
+          .map((c) => ({ name: c.title, students: c.students, completion: c.completion }));
+        setTopCourses(courses);
+      })
+      .catch((err) => console.error('[TeacherOverview] Failed to load:', err))
+      .finally(() => setLoading(false));
+  }, [user?.id, user?.role]);
+
+  const statsDisplay = stats
+    ? [
+        { title: '已分配课程', value: String(stats.assignedCount ?? stats.publishedCount), icon: BookOpen, color: 'text-blue-600', bgColor: 'bg-blue-50' },
+        { title: '活跃学生', value: String(stats.totalStudents), icon: Users, color: 'text-green-600', bgColor: 'bg-green-50' },
+        { title: '任务设计', value: String(stats.totalCourses), icon: FileText, color: 'text-purple-600', bgColor: 'bg-purple-50' },
+        { title: '平均完成率', value: `${stats.avgCompletion}%`, icon: TrendingUp, color: 'text-orange-600', bgColor: 'bg-orange-50' },
+      ]
+    : [
+        { title: '已分配课程', value: '—', icon: BookOpen, color: 'text-blue-600', bgColor: 'bg-blue-50' },
+        { title: '活跃学生', value: '—', icon: Users, color: 'text-green-600', bgColor: 'bg-green-50' },
+        { title: '任务设计', value: '—', icon: FileText, color: 'text-purple-600', bgColor: 'bg-purple-50' },
+        { title: '平均完成率', value: '—', icon: TrendingUp, color: 'text-orange-600', bgColor: 'bg-orange-50' },
+      ];
 
   const recentActivities = [
     { action: '新课程发布', course: '高中物理 - 牛顿定律', time: '2小时前' },
     { action: '学生完成课程', course: '初中数学 - 代数基础', time: '4小时前' },
     { action: '资源上传', course: 'PDF: 光学实验指南', time: '昨天' },
     { action: '班级创建', course: '高一3班', time: '2天前' },
-  ];
-
-  const topCourses = [
-    { name: '高中物理 - 力学', students: 45, completion: 92 },
-    { name: '初中数学 - 几何', students: 38, completion: 88 },
-    { name: '高中化学 - 有机化学', students: 32, completion: 85 },
-    { name: '初中生物 - 细胞结构', students: 28, completion: 90 },
   ];
 
   return (
@@ -63,7 +64,7 @@ export function TeacherOverview() {
 
       {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {stats.map((stat) => {
+        {statsDisplay.map((stat) => {
           const Icon = stat.icon;
           return (
             <Card key={stat.title}>
@@ -71,8 +72,7 @@ export function TeacherOverview() {
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-sm text-muted-foreground">{stat.title}</p>
-                    <p className="text-3xl font-bold mt-2">{stat.value}</p>
-                    <p className="text-xs text-green-600 mt-1">{stat.trend}</p>
+                    <p className="text-3xl font-bold mt-2">{loading ? '…' : stat.value}</p>
                   </div>
                   <div className={`w-12 h-12 ${stat.bgColor} rounded-lg flex items-center justify-center`}>
                     <Icon className={`w-6 h-6 ${stat.color}`} />
@@ -122,7 +122,9 @@ export function TeacherOverview() {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {topCourses.map((course, index) => (
+              {(topCourses.length > 0 ? topCourses : [
+                { name: '暂无数据', students: 0, completion: 0 },
+              ]).map((course, index) => (
                 <div key={index} className="space-y-2">
                   <div className="flex items-center justify-between">
                     <p className="text-sm font-medium">{course.name}</p>

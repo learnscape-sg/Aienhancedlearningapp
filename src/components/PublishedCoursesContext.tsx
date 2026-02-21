@@ -1,6 +1,6 @@
-import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useState, ReactNode } from 'react';
 import { useAuth } from './AuthContext';
-import { listTeacherCourses } from '../lib/coursesRepository';
+import { listTeacherCoursesWithStats } from '../lib/backendApi';
 
 interface PublishedCourse {
   id: string;
@@ -12,6 +12,9 @@ interface PublishedCourse {
   hours: string;
   publishedAt: string;
   status: 'published' | 'draft';
+  assignmentStatus: 'assigned' | 'unassigned';
+  visibilityStatus: 'public' | 'private';
+  shareStatus: 'shared' | 'none';
   students: number;
   completion: number;
   lastUpdated: string;
@@ -20,6 +23,7 @@ interface PublishedCourse {
 interface PublishedCoursesContextType {
   publishedCourses: PublishedCourse[];
   addPublishedCourse: (course: Omit<PublishedCourse, 'id' | 'publishedAt'>) => void;
+  refreshCourses: () => Promise<void>;
 }
 
 const PublishedCoursesContext = createContext<PublishedCoursesContextType | undefined>(undefined);
@@ -36,6 +40,9 @@ export function PublishedCoursesProvider({ children }: { children: ReactNode }) 
       id: Date.now().toString(),
       publishedAt: new Date().toISOString(),
       status: 'published',
+      assignmentStatus: 'assigned',
+      visibilityStatus: 'private',
+      shareStatus: 'none',
       students: 0,
       completion: 0,
       lastUpdated: '刚刚'
@@ -43,51 +50,46 @@ export function PublishedCoursesProvider({ children }: { children: ReactNode }) 
     setPublishedCourses(prev => [newCourse, ...prev]);
   };
 
-  // 初始化时从 Supabase 拉取当前老师的课程列表
-  useEffect(() => {
-    const loadCourses = async () => {
-      if (!user || user.role !== 'teacher') {
-        setPublishedCourses([]);
-        return;
-      }
-
-      try {
-        const rows = await listTeacherCourses(user.id);
-        const mapped: PublishedCourse[] = rows.map(row => {
-          const subject = row.subject ?? '';
-          const topic = row.topic ?? '';
-          const title = subject && topic ? `${subject} - ${topic}` : subject || topic || '未命名课程';
-          const updatedAt = row.updated_at ? new Date(row.updated_at) : null;
-
-          return {
-            id: row.public_id,
-            title,
-            subject,
-            grade: row.grade ?? '',
-            topic,
-            textbook: row.textbook ?? '',
-            hours: '1',
-            publishedAt: updatedAt ? updatedAt.toISOString() : '',
-            status: (row.status as PublishedCourse['status']) || 'published',
-            students: row.students ?? 0,
-            completion: row.completion ?? 0,
-            lastUpdated: updatedAt
-              ? `${updatedAt.getMonth() + 1}-${updatedAt.getDate()} ${updatedAt.getHours()}:${updatedAt.getMinutes().toString().padStart(2, '0')}`
-              : '刚刚',
-          };
-        });
-
-        setPublishedCourses(mapped);
-      } catch (error) {
-        console.error('[PublishedCoursesProvider] Failed to load courses from Supabase:', error);
-      }
-    };
-
-    loadCourses();
+  const loadCourses = useCallback(async () => {
+    if (!user || user.role !== 'teacher') {
+      setPublishedCourses([]);
+      return;
+    }
+    try {
+      const { courses } = await listTeacherCoursesWithStats(user.id);
+      const mapped: PublishedCourse[] = courses.map((row) => ({
+        id: row.id,
+        title: row.title,
+        subject: row.subject,
+        grade: row.grade,
+        topic: row.topic,
+        textbook: row.textbook ?? '',
+        hours: '1',
+        publishedAt: '',
+        status: row.status,
+        assignmentStatus: row.assignmentStatus ?? (row.status === 'published' ? 'assigned' : 'unassigned'),
+        visibilityStatus: row.visibilityStatus ?? 'private',
+        shareStatus: row.shareStatus ?? 'none',
+        students: row.students,
+        completion: row.completion,
+        lastUpdated: row.lastUpdated,
+      }));
+      setPublishedCourses(mapped);
+    } catch (error) {
+      console.error('[PublishedCoursesProvider] Failed to load courses:', error);
+    }
   }, [user]);
 
+  useEffect(() => {
+    loadCourses();
+  }, [loadCourses]);
+
+  const refreshCourses = useCallback(async () => {
+    await loadCourses();
+  }, [loadCourses]);
+
   return (
-    <PublishedCoursesContext.Provider value={{ publishedCourses, addPublishedCourse }}>
+    <PublishedCoursesContext.Provider value={{ publishedCourses, addPublishedCourse, refreshCourses }}>
       {children}
     </PublishedCoursesContext.Provider>
   );

@@ -97,6 +97,9 @@ export function TaskConfigurationPage({ courseData, designData, documentData, co
         textbook: courseData.textbook || '未指定',
         hours: courseData.hours || '1',
         status: 'published',
+        assignmentStatus: 'unassigned',
+        visibilityStatus: 'private',
+        shareStatus: 'none',
         students: 0,
         completion: 0,
         lastUpdated: '刚刚'
@@ -239,7 +242,7 @@ export function TaskConfigurationPage({ courseData, designData, documentData, co
               <div className="flex items-start space-x-3">
                 <CheckCircle className="w-6 h-6 text-primary mt-1" />
                 <div className="flex-1">
-                  <h3 className="font-semibold text-foreground mb-2">课程已发布！</h3>
+                  <h3 className="font-semibold text-foreground mb-2">课程已分配！</h3>
                   <div className="bg-background p-3 rounded border border-border mb-3">
                     <code className="text-sm text-foreground">
                       {courseUrl || '请先保存课程以获取学生链接'}

@@ -9,6 +9,8 @@ import {
   ObjectiveMetrics,
 } from '@/types/backend';
 import { sendChatMessage, generateTaskAsset, generateExitTicket } from '@/lib/backendApi';
+import { upsertStudentCourseProgress } from '@/lib/studentProgressApi';
+import { useAuth } from '../AuthContext';
 import { 
   BookOpen, 
   MessageCircle, 
@@ -189,10 +191,26 @@ const TextEditorPreview = ({ content, onEditClick }: { content: string; onEditCl
 };
 
 const StudentConsole: React.FC<StudentConsoleProps> = ({ plan, onComplete, onApiKeyError }) => {
-  // Get courseId from URL
+  const { user } = useAuth();
   const params = useParams();
   const courseId = params.id as string | undefined;
-  
+  const sessionStartRef = useRef(Date.now());
+
+  const reportProgress = useCallback(
+    (progress: number, completed: boolean, lastTaskIndex: number) => {
+      if (!courseId || !user?.id) return;
+      const timeSpentSeconds = Math.round((Date.now() - sessionStartRef.current) / 1000);
+      upsertStudentCourseProgress({
+        courseId,
+        progress,
+        completed,
+        timeSpentSeconds,
+        lastTaskIndex,
+      }).catch((err) => console.warn('[StudentConsole] Progress report failed:', err));
+    },
+    [courseId, user?.id]
+  );
+
   // --- State ---
   // 从 localStorage 恢复当前任务索引，刷新后保持状态
   const [currentTaskIndex, setCurrentTaskIndex] = useState(() => {
@@ -1439,7 +1457,8 @@ CRITICAL TASK COMPLETION PROTOCOL:
       // 下一任务由过渡引导消息接管，避免与默认问候重复
       greetingSentRef.current.add(nextIndex);
       setCurrentTaskIndex(nextIndex);
-      // 保存到 localStorage，刷新后保持状态
+      const progressPct = Math.round(((currentTaskIndex + 1) / plan.tasks.length) * 100);
+      reportProgress(progressPct, false, nextIndex);
       if (typeof window !== 'undefined') {
         localStorage.setItem('currentTaskIndex', nextIndex.toString());
       }
@@ -1746,7 +1765,7 @@ CRITICAL TASK COMPLETION PROTOCOL:
       objectiveMetrics = undefined;
     }
     
-    // Set states for report
+    reportProgress(100, true, plan.tasks.length - 1);
     setLearningLog(log);
     if (finalMindMap) {
       setFinalMindMapCode(finalMindMap);

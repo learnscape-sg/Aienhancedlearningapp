@@ -5,7 +5,6 @@ import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Badge } from './ui/badge';
 import { PDFUploadFlow } from './PDFUploadFlow';
 import { useAuth } from './AuthContext';
-import { getStudentCourses } from '@/lib/backendApi';
 import { 
   Upload, 
   Play, 
@@ -143,15 +142,6 @@ export function LearnYourWayPage({ onStartPDFLearning, onPersonalizePDF }: Learn
   const navigate = useNavigate();
   const [selectedSubject, setSelectedSubject] = useState('all');
   const [showPDFUpload, setShowPDFUpload] = useState(false);
-  const [assignedCourses, setAssignedCourses] = useState<{ courseId: string; topic?: string }[]>([]);
-
-  useEffect(() => {
-    if (!user?.id) return;
-    getStudentCourses(user.id)
-      .then((data) => setAssignedCourses(data.courses || []))
-      .catch(() => setAssignedCourses([]));
-  }, [user?.id]);
-
   // 监听快速体验事件，自动打开PDF上传界面
   useEffect(() => {
     const handleTriggerPDFUpload = () => {
@@ -322,30 +312,6 @@ export function LearnYourWayPage({ onStartPDFLearning, onPersonalizePDF }: Learn
 
       {/* Main Content */}
       <div className="max-w-7xl mx-auto px-6 py-12">
-        {/* 分配给我的课程 */}
-        {assignedCourses.length > 0 && (
-          <div className="mb-10">
-            <h2 className="text-2xl font-bold text-gray-900 mb-4">分配给我的课程</h2>
-            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {assignedCourses.map((c) => (
-                <Card
-                  key={c.courseId}
-                  className="cursor-pointer hover:shadow-lg transition-shadow border-l-4 border-l-primary"
-                  onClick={() => navigate(`/course/${c.courseId}`)}
-                >
-                  <CardContent className="p-4 flex items-center justify-between">
-                    <div>
-                      <h3 className="font-medium">{c.topic || c.courseId}</h3>
-                      <p className="text-sm text-muted-foreground">点击开始学习</p>
-                    </div>
-                    <Play className="w-6 h-6 text-primary" />
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          </div>
-        )}
-
         {/* Subject Filter */}
         <div className="mb-8">
           <div className="flex flex-wrap gap-2">

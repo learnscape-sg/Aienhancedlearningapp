@@ -22,6 +22,7 @@ const navigationItems = [
   { id: 'overview', name: '概览', icon: LayoutDashboard },
   { id: 'materials', name: '任务设计', icon: FileText },
   { id: 'course-design', name: '课程设计', icon: PlusCircle },
+  { id: 'tasks', name: '任务管理', icon: FileText },
   { id: 'courses', name: '课程管理', icon: BookOpen },
   { id: 'classes', name: '班级管理', icon: Users },
   { id: 'settings', name: '设置', icon: Settings },
