@@ -8,7 +8,7 @@ import {
   Characteristic,
   ObjectiveMetrics,
 } from '@/types/backend';
-import { sendChatMessage, generateTaskAsset, generateExitTicket } from '@/lib/backendApi';
+import { sendChatMessage, generateTaskAsset, generateExitTicket, getSpeechVoices } from '@/lib/backendApi';
 import { upsertStudentCourseProgress } from '@/lib/studentProgressApi';
 import { useAuth } from '../AuthContext';
 import { 
@@ -366,16 +366,15 @@ const StudentConsole: React.FC<StudentConsoleProps> = ({ plan, onComplete, onApi
     };
   }, []);
 
-  // Fetch TTS voices when voice service is available
+  // Fetch TTS voices when voice service is available (via backend API)
   useEffect(() => {
     if (!voiceServiceAvailable) return;
     let cancelled = false;
-    fetch('/api/speech/voices')
-      .then((res) => (res.ok ? res.json() : Promise.reject(new Error('Failed to load voices'))))
-      .then((data: { voices?: Array<{ name?: string; ssmlGender?: string }>; recommended?: string }) => {
+    getSpeechVoices()
+      .then((data) => {
         if (cancelled) return;
         const list = data.voices ?? [];
-        setTtsVoices(list.filter((v) => v.name).map((v) => ({ name: v.name!, ssmlGender: v.ssmlGender })));
+        setTtsVoices(list.filter((v) => v.name).map((v) => ({ name: v.name, ssmlGender: v.ssmlGender })));
         if (data.recommended) setTtsRecommended(data.recommended);
         setTtsVoicesLoaded(true);
       })

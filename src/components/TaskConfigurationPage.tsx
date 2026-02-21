@@ -4,6 +4,7 @@ import { Button } from './ui/button';
 import { ArrowLeft, CheckCircle, Copy, ChevronUp, ChevronDown, ExternalLink, Eye, Rocket } from 'lucide-react';
 import { Badge } from './ui/badge';
 import { usePublishedCourses } from './PublishedCoursesContext';
+import { getLearnYourWayOrigin } from '@/config/appConfig';
 
 interface TaskConfigurationPageProps {
   courseData?: any;
@@ -23,13 +24,6 @@ interface Task {
   materialColor: string;
   expanded?: boolean;
 }
-
-const getLearnYourWayOrigin = (): string => {
-  const env = import.meta.env.VITE_LEARNYOURWAY_URL;
-  if (env) return env.replace(/\/$/, '');
-  if (typeof window !== 'undefined') return window.location.origin;
-  return '';
-};
 
 export function TaskConfigurationPage({ courseData, designData, documentData, courseId, onBack, onPublish }: TaskConfigurationPageProps) {
   const { addPublishedCourse } = usePublishedCourses();

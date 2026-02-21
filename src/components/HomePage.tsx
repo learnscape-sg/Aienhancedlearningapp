@@ -4,15 +4,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/
 import { Progress } from './ui/progress';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
-import { ImageWithFallback } from './figma/ImageWithFallback';
 import { 
   BookOpen, 
-  Clock, 
   Trophy, 
-  TrendingUp, 
   Play, 
-  ChevronRight,
-  Star,
   Target,
   Loader2
 } from 'lucide-react';
@@ -25,36 +20,6 @@ interface HomePageProps {
 }
 
 const COURSE_COLORS = ['#34A853', '#FBBC05', '#1A73E8', '#EA4335'];
-
-const recommendedPaths = [
-  {
-    id: '1',
-    title: '篮球运动中的数学',
-    description: '通过篮球比赛学习统计和概率',
-    difficulty: '中等',
-    duration: '3小时',
-    rating: 4.8,
-    thumbnail: 'https://images.unsplash.com/photo-1743105351315-540bce258f1d?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxiYXNrZXRiYWxsJTIwc3BvcnRzJTIwaWNvbnxlbnwxfHx8fDE3NTg2ODYzOTl8MA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral'
-  },
-  {
-    id: '2',
-    title: '音乐中的物理原理',
-    description: '探索声波、频率和音乐的科学',
-    difficulty: '简单',
-    duration: '2小时',
-    rating: 4.6,
-    thumbnail: 'https://images.unsplash.com/photo-1705045206911-3599644d4d09?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHxtdXNpYyUyMGluc3RydW1lbnRzJTIwYXJ0c3xlbnwxfHx8fDE3NTg2ODY0MDN8MA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral'
-  },
-  {
-    id: '3',
-    title: '艺术中的几何美学',
-    description: '在绘画和设计中发现几何之美',
-    difficulty: '中等',
-    duration: '4小时',
-    rating: 4.9,
-    thumbnail: 'https://images.unsplash.com/photo-1692859532235-c93fa73bd5d0?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHxhcnQlMjBwYWludGluZyUyMGNyZWF0aXZlfGVufDF8fHx8MTc1ODY4NjQwNnww&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral'
-  }
-];
 
 const achievements = [
   { name: '连续学习7天', icon: '🔥', earned: true },
@@ -175,51 +140,6 @@ export function HomePage({ onStartChapter }: HomePageProps) {
                   );
                 })
               )}
-            </CardContent>
-          </Card>
-
-          {/* Recommended Learning Paths */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center space-x-2">
-                <TrendingUp className="w-5 h-5 text-google-green" />
-                <span>个性化推荐</span>
-              </CardTitle>
-              <CardDescription>
-                基于您的兴趣爱好推荐的学习路径
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {recommendedPaths.map((path) => (
-                  <Card key={path.id} className="hover:shadow-md transition-shadow cursor-pointer">
-                    <CardContent className="p-4">
-                      <div className="flex space-x-4">
-                        <ImageWithFallback
-                          src={path.thumbnail}
-                          alt={path.title}
-                          className="w-20 h-20 rounded-lg object-cover"
-                        />
-                        <div className="flex-1">
-                          <h3 className="font-medium mb-1">{path.title}</h3>
-                          <p className="text-sm text-muted-foreground mb-2">{path.description}</p>
-                          <div className="flex items-center space-x-4 text-sm text-muted-foreground">
-                            <div className="flex items-center space-x-1">
-                              <Star className="w-4 h-4 text-google-yellow" />
-                              <span>{path.rating}</span>
-                            </div>
-                            <span>难度：{path.difficulty}</span>
-                            <span>时长：{path.duration}</span>
-                          </div>
-                        </div>
-                        <Button variant="ghost" size="sm">
-                          <ChevronRight className="w-4 h-4" />
-                        </Button>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
             </CardContent>
           </Card>
         </div>

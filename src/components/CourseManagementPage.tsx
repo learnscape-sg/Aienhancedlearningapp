@@ -50,12 +50,7 @@ interface CourseShareItem {
   expires_at?: string;
 }
 
-const getLearnYourWayOrigin = (): string => {
-  const env = import.meta.env.VITE_LEARNYOURWAY_URL;
-  if (env) return env.replace(/\/$/, '');
-  if (typeof window !== 'undefined') return window.location.origin;
-  return '';
-};
+import { getLearnYourWayOrigin } from '@/config/appConfig';
 
 export function CourseManagementPage() {
   const { user } = useAuth();

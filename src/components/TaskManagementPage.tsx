@@ -6,6 +6,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { Badge } from './ui/badge';
 import { ExternalLink, FileText, Globe, Loader2, Search, Trash2, UserPlus, X } from 'lucide-react';
 import { useAuth } from './AuthContext';
+import { getLearnYourWayOrigin } from '@/config/appConfig';
 import {
   assignCourseToClasses,
   createCourse,
@@ -143,7 +144,7 @@ export function TaskManagementPage() {
     if (!user?.id) return;
     try {
       const result = await createCourse({ taskIds: [taskId] }, user.id);
-      window.open(result.url, '_blank');
+      window.open(`${getLearnYourWayOrigin()}/course/${result.courseId}`, '_blank');
     } catch (err) {
       console.error('Failed to preview task:', err);
       alert(err instanceof Error ? err.message : '生成预览失败');
