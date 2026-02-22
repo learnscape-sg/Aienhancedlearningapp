@@ -45,8 +45,11 @@ import {
   TrendingUp,
   Mic,
   Volume2,
-  VolumeX
+  VolumeX,
+  Upload,
+  Pencil
 } from 'lucide-react';
+import SignatureCanvas from 'react-signature-canvas';
 import { Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
 import ReactMarkdown from 'react-markdown';
 import remarkMath from 'remark-math';
@@ -284,6 +287,10 @@ const StudentConsole: React.FC<StudentConsoleProps> = ({ plan, onComplete, onApi
   const [keywordAnswers, setKeywordAnswers] = useState<Record<string, string>>({});
   const [practiceTextAnswers, setPracticeTextAnswers] = useState<Record<number, string>>({});
   const [practiceChoiceAnswers, setPracticeChoiceAnswers] = useState<Record<number, number>>({});
+  const [practiceImageAnswers, setPracticeImageAnswers] = useState<Record<number, string>>({});
+  const [practiceInputMode, setPracticeInputMode] = useState<Record<number, 'text' | 'upload' | 'draw'>>({});
+  const [practiceCurrentIndex, setPracticeCurrentIndex] = useState(0);
+  const practiceCanvasRef = useRef<SignatureCanvas>(null);
   const [showPracticeSolutions, setShowPracticeSolutions] = useState<Record<number, boolean>>({});
   const [exitTicketAnswer, setExitTicketAnswer] = useState('');
   const [showExitTicketAnswer, setShowExitTicketAnswer] = useState(false);
@@ -517,6 +524,20 @@ const StudentConsole: React.FC<StudentConsoleProps> = ({ plan, onComplete, onApi
   const guidedPractice = guidedPayload?.practiceQuestions || [];
   const guidedExitTicket = guidedPayload?.exitTicket || null;
   const isGuidedVideoFlow = viewType === 'video_player' && !!guidedPayload?.learningObjective;
+
+  // 进入「我能练一练」时重置为第一题
+  useEffect(() => {
+    if (guidedStep === 4) {
+      setPracticeCurrentIndex(0);
+    }
+  }, [guidedStep]);
+
+  // 切换题目时清空手写画布（避免误存到上一题）
+  useEffect(() => {
+    if (guidedStep === 4) {
+      practiceCanvasRef.current?.clear();
+    }
+  }, [guidedStep, practiceCurrentIndex]);
 
   // Translations
   const t = {
@@ -915,13 +936,6 @@ const StudentConsole: React.FC<StudentConsoleProps> = ({ plan, onComplete, onApi
               setAssetData(currentTask.contentPayload);
 
           } else if (viewType === 'math_editor') {
-              {/* #region agent log */}
-              {(() => {
-                const rawContent = currentTask.contentPayload || currentTask.description || '';
-                fetch('http://127.0.0.1:7242/ingest/3a151953-f974-4097-816e-92c7e205fad2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'StudentConsole.tsx:453',message:'Initializing math_editor',data:{hasContentPayload:!!currentTask.contentPayload,hasDescription:!!currentTask.description,rawContentLength:rawContent?.length||0},timestamp:Date.now(),sessionId:'debug-session',runId:'pre-fix',hypothesisId:'B'})}).catch(()=>{});
-                return null;
-              })()}
-              {/* #endregion */}
               // Initialize math editor with content payload or description
               const rawContent = currentTask.contentPayload || currentTask.description || '';
               setMathEditorContent(rawContent);
@@ -1188,12 +1202,6 @@ const StudentConsole: React.FC<StudentConsoleProps> = ({ plan, onComplete, onApi
   }, []);
 
   const getTaskContext = () => {
-      {/* #region agent log */}
-      {(() => {
-        fetch('http://127.0.0.1:7242/ingest/3a151953-f974-4097-816e-92c7e205fad2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'StudentConsole.tsx:492',message:'getTaskContext called',data:{viewType,isMathEditor:viewType==='math_editor',hasMathEditorContent:!!mathEditorContent},timestamp:Date.now(),sessionId:'debug-session',runId:'pre-fix',hypothesisId:'C'})}).catch(()=>{});
-        return null;
-      })()}
-      {/* #endregion */}
       let context = "";
       if (viewType === 'mindmap_editor') {
         // Use visualizationData if available, otherwise fall back to mindMapInput
@@ -1561,13 +1569,14 @@ CRITICAL TASK COMPLETION PROTOCOL:
       const answered = guidedPractice.filter((q, idx) => {
         const parsed = extractQuestionStemAndOptions(q.question || '', q.options);
         if (parsed.options.length > 0) return typeof practiceChoiceAnswers[idx] === 'number';
-        return (practiceTextAnswers[idx] || '').trim().length > 0;
+        return (practiceTextAnswers[idx] || '').trim().length > 0 || !!practiceImageAnswers[idx];
       }).length;
       const answers = guidedPractice.map((q, idx) => {
         const parsed = extractQuestionStemAndOptions(q.question || '', q.options);
         if (parsed.options.length > 0 && typeof practiceChoiceAnswers[idx] === 'number') {
           return `Q${idx + 1}: ${String.fromCharCode(65 + practiceChoiceAnswers[idx])}. ${parsed.options[practiceChoiceAnswers[idx]] || ''}`;
         }
+        if (practiceImageAnswers[idx]) return `Q${idx + 1}: [手写/上传答案图片]`;
         return `Q${idx + 1}: ${practiceTextAnswers[idx] || '(未答)'}`;
       });
       return `当前步骤「${currentStepTitle}」：完成 ${answered}/${totalQ}。${answers.join('；')}`;
@@ -2206,12 +2215,6 @@ CRITICAL TASK COMPLETION PROTOCOL:
   }
 
   const renderLeftWorkspace = () => {
-    {/* #region agent log */}
-    {(() => {
-      fetch('http://127.0.0.1:7242/ingest/3a151953-f974-4097-816e-92c7e205fad2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'StudentConsole.tsx:896',message:'renderLeftWorkspace called',data:{viewType,hasMathEditorContent:!!mathEditorContent,mathEditorContentLength:mathEditorContent?.length||0},timestamp:Date.now(),sessionId:'debug-session',runId:'pre-fix',hypothesisId:'A'})}).catch(()=>{});
-      return null;
-    })()}
-    {/* #endregion */}
     // Guided flow for teacher-generated JSON (video + worksheet)
     if (isGuidedVideoFlow) {
       const source = currentTask.externalResourceUrl || (typeof assetData === 'string' ? assetData : '') || '';
@@ -2363,14 +2366,23 @@ CRITICAL TASK COMPLETION PROTOCOL:
                 </div>
               )}
 
-              {guidedStep === 4 && (
+              {guidedStep === 4 && guidedPractice.length > 0 && (
                 <div className="bg-white rounded-xl border border-slate-200 p-6">
-                  <h3 className="text-lg font-bold text-slate-800 mb-4">我能练一练</h3>
-                  <div className="space-y-5">
-                    {guidedPractice.map((q, idx) => {
-                      const parsed = extractQuestionStemAndOptions(q.question || '', q.options);
-                      return (
-                        <div key={idx} className="rounded-lg border border-slate-200 p-4 bg-slate-50/60">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-lg font-bold text-slate-800">我能练一练</h3>
+                    <span className="text-sm text-slate-500">
+                      第 {practiceCurrentIndex + 1} / {guidedPractice.length} 题
+                    </span>
+                  </div>
+                  {(() => {
+                    const idx = practiceCurrentIndex;
+                    const q = guidedPractice[idx];
+                    const parsed = extractQuestionStemAndOptions(q.question || '', q.options);
+                    const inputMode = practiceInputMode[idx] || 'text';
+                    const hasImageAnswer = !!practiceImageAnswers[idx];
+                    return (
+                      <div className="space-y-4">
+                        <div className="rounded-lg border border-slate-200 p-4 bg-slate-50/60">
                           <div className="text-sm font-semibold text-slate-800 mb-3 flex gap-1">
                             <span>{idx + 1}.</span>
                             <MathTextPreview text={parsed.stem} className="text-sm font-semibold text-slate-800 [&_p]:mb-0" />
@@ -2396,12 +2408,124 @@ CRITICAL TASK COMPLETION PROTOCOL:
                               ))}
                             </div>
                           ) : (
-                            <textarea
-                              value={practiceTextAnswers[idx] || ''}
-                              onChange={(e) => setPracticeTextAnswers((prev) => ({ ...prev, [idx]: e.target.value }))}
-                              placeholder="请输入你的答案"
-                              className="w-full min-h-[90px] rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-200 resize-y"
-                            />
+                            <>
+                              <div className="flex gap-2 mb-3">
+                                <button
+                                  type="button"
+                                  onClick={() => setPracticeInputMode((prev) => ({ ...prev, [idx]: 'text' }))}
+                                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                                    inputMode === 'text' ? 'bg-cyan-100 text-cyan-800 border border-cyan-300' : 'bg-white text-slate-600 border border-slate-300 hover:bg-slate-50'
+                                  }`}
+                                >
+                                  <Type size={14} /> 文字输入
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setPracticeInputMode((prev) => ({ ...prev, [idx]: 'upload' }))}
+                                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                                    inputMode === 'upload' ? 'bg-cyan-100 text-cyan-800 border border-cyan-300' : 'bg-white text-slate-600 border border-slate-300 hover:bg-slate-50'
+                                  }`}
+                                >
+                                  <Upload size={14} /> 上传手写
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setPracticeInputMode((prev) => ({ ...prev, [idx]: 'draw' }))}
+                                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                                    inputMode === 'draw' ? 'bg-cyan-100 text-cyan-800 border border-cyan-300' : 'bg-white text-slate-600 border border-slate-300 hover:bg-slate-50'
+                                  }`}
+                                >
+                                  <Pencil size={14} /> 屏幕手写
+                                </button>
+                              </div>
+                              {inputMode === 'text' && (
+                                <textarea
+                                  value={practiceTextAnswers[idx] || ''}
+                                  onChange={(e) => setPracticeTextAnswers((prev) => ({ ...prev, [idx]: e.target.value }))}
+                                  placeholder="请输入你的答案"
+                                  className="w-full min-h-[90px] rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-200 resize-y"
+                                />
+                              )}
+                              {inputMode === 'upload' && (
+                                <div className="space-y-2">
+                                  <label className="flex flex-col items-center justify-center w-full min-h-[120px] border-2 border-dashed border-slate-300 rounded-lg cursor-pointer hover:bg-slate-50 transition-colors">
+                                    <Upload className="w-8 h-8 text-slate-400 mb-2" />
+                                    <span className="text-sm text-slate-600">点击上传手写答案图片</span>
+                                    <input
+                                      type="file"
+                                      accept="image/*"
+                                      capture="environment"
+                                      className="sr-only"
+                                      onChange={(e) => {
+                                        const file = e.target?.files?.[0];
+                                        if (!file) return;
+                                        const reader = new FileReader();
+                                        reader.onload = () => {
+                                          const base64 = reader.result as string;
+                                          setPracticeImageAnswers((prev) => ({ ...prev, [idx]: base64 }));
+                                        };
+                                        reader.readAsDataURL(file);
+                                      }}
+                                    />
+                                  </label>
+                                  {hasImageAnswer && (
+                                    <div className="flex items-center gap-2">
+                                      <img src={practiceImageAnswers[idx]} alt="手写答案" className="max-h-24 rounded border border-slate-200" />
+                                      <button
+                                        type="button"
+                                        onClick={() => setPracticeImageAnswers((prev) => ({ ...prev, [idx]: '' }))}
+                                        className="text-xs text-red-600 hover:underline"
+                                      >
+                                        移除
+                                      </button>
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                              {inputMode === 'draw' && (
+                                <div className="space-y-2">
+                                  <div className="border border-slate-300 rounded-lg overflow-hidden bg-white">
+                                    <SignatureCanvas
+                                      ref={practiceCanvasRef}
+                                      canvasProps={{ className: 'w-full h-36 touch-none' }}
+                                      penColor="black"
+                                      backgroundColor="white"
+                                    />
+                                  </div>
+                                  <div className="flex gap-2">
+                                    <button
+                                      type="button"
+                                      onClick={() => practiceCanvasRef.current?.clear()}
+                                      className="px-3 py-1.5 text-xs rounded border border-slate-300 bg-white hover:bg-slate-50"
+                                    >
+                                      清空
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        const dataUrl = practiceCanvasRef.current?.toDataURL('image/png');
+                                        if (dataUrl) setPracticeImageAnswers((prev) => ({ ...prev, [idx]: dataUrl }));
+                                      }}
+                                      className="px-3 py-1.5 text-xs rounded bg-cyan-600 text-white hover:bg-cyan-700"
+                                    >
+                                      保存手写
+                                    </button>
+                                  </div>
+                                  {hasImageAnswer && (
+                                    <div className="flex items-center gap-2">
+                                      <img src={practiceImageAnswers[idx]} alt="手写答案" className="max-h-24 rounded border border-slate-200" />
+                                      <button
+                                        type="button"
+                                        onClick={() => setPracticeImageAnswers((prev) => ({ ...prev, [idx]: '' }))}
+                                        className="text-xs text-red-600 hover:underline"
+                                      >
+                                        重新绘制
+                                      </button>
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                            </>
                           )}
                           {q.correctAnswer && (
                             <div className="mt-3">
@@ -2421,9 +2545,27 @@ CRITICAL TASK COMPLETION PROTOCOL:
                             </div>
                           )}
                         </div>
-                      );
-                    })}
-                  </div>
+                        <div className="flex justify-between pt-2">
+                          <button
+                            type="button"
+                            onClick={() => setPracticeCurrentIndex((i) => Math.max(0, i - 1))}
+                            disabled={practiceCurrentIndex === 0}
+                            className="flex items-center gap-1 px-4 py-2 rounded-lg border border-slate-300 bg-white text-slate-700 text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50"
+                          >
+                            <ArrowLeft size={16} /> 上一题
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setPracticeCurrentIndex((i) => Math.min(guidedPractice.length - 1, i + 1))}
+                            disabled={practiceCurrentIndex === guidedPractice.length - 1}
+                            className="flex items-center gap-1 px-4 py-2 rounded-lg border border-slate-300 bg-white text-slate-700 text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50"
+                          >
+                            下一题 <ArrowRight size={16} />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
               )}
 
@@ -2621,12 +2763,6 @@ CRITICAL TASK COMPLETION PROTOCOL:
 
     // 4. MATH EDITOR (Simple Math Editor with LaTeX support)
     if (viewType === 'math_editor') {
-        {/* #region agent log */}
-        {(() => {
-          fetch('http://127.0.0.1:7242/ingest/3a151953-f974-4097-816e-92c7e205fad2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'StudentConsole.tsx:1062',message:'math_editor viewType detected',data:{mathEditorContent,mathEditorContentLength:mathEditorContent?.length||0},timestamp:Date.now(),sessionId:'debug-session',runId:'pre-fix',hypothesisId:'A'})}).catch(()=>{});
-          return null;
-        })()}
-        {/* #endregion */}
         return (
             <div className="w-full h-full flex flex-col bg-white shadow-inner">
                 <div className="p-4 bg-slate-50 border-b border-slate-200 shrink-0">
@@ -2712,12 +2848,6 @@ CRITICAL TASK COMPLETION PROTOCOL:
                 <>
                     {viewType === 'image_gallery' && (
                        <div className="flex flex-col rounded-xl overflow-hidden shadow-2xl border border-slate-200 max-h-full bg-white">
-                           {/* #region agent log */}
-                           {(() => {
-                               fetch('http://127.0.0.1:7242/ingest/3a151953-f974-4097-816e-92c7e205fad2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'StudentConsole.tsx:1000',message:'Rendering image gallery',data:{hasDescription:!!currentTask.description,descriptionLength:currentTask.description?.length||0,taskId:currentTask.id},timestamp:Date.now(),sessionId:'debug-session',runId:'pre-fix',hypothesisId:'C'})}).catch(()=>{});
-                               return null;
-                           })()}
-                           {/* #endregion */}
                            <div className="relative flex-1 flex items-center justify-center bg-black/5 min-h-[200px]">
                                <img src={assetData} alt="AI Generated" className="max-w-full max-h-[70vh] object-contain" />
                            </div>

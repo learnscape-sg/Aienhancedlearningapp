@@ -468,7 +468,7 @@ export function TeachingResourcesPage() {
         prerequisites: entryPrerequisites,
       });
       const result = await createCourse({ taskIds: [taskId] }, user?.id);
-      setPreviewUrl(result.url);
+      setPreviewUrl(`${window.location.origin}/course/${result.courseId}`);
 
       // 3. Stay on step 6; user clicks button to proceed
       setTaskGenerating(false);

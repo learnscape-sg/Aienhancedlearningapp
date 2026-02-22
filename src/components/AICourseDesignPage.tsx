@@ -219,12 +219,13 @@ export function AICourseDesignPage({ onNextStep }: AICourseDesignPageProps) {
         });
       }
 
-      setCreatedCourse(result);
+      const courseUrl = `${window.location.origin}/course/${result.courseId}`;
+      setCreatedCourse({ courseId: result.courseId, url: courseUrl });
       setStep('created');
       onNextStep?.({
         plan,
         courseId: result.courseId,
-        courseUrl: result.url,
+        courseUrl,
       });
     } catch (err) {
       setCreateError(err instanceof Error ? err.message : String(err));
