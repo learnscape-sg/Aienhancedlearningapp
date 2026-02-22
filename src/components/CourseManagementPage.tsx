@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
-import { BookOpen, Users, TrendingUp, Search, Edit, Trash2, UserPlus, X, Loader2, ExternalLink, Globe, Share2, Link2 } from 'lucide-react';
+import { BookOpen, Search, Edit, Trash2, UserPlus, X, Loader2, ExternalLink, Globe, Share2, Link2 } from 'lucide-react';
 import { Badge } from './ui/badge';
 import { useAuth } from './AuthContext';
 import { usePublishedCourses } from './PublishedCoursesContext';
@@ -10,7 +10,6 @@ import {
   assignCourseToClasses,
   listTeacherClasses,
   listTeacherCoursesWithStats,
-  getTeacherStats,
   deleteCourse,
   restoreCourse,
   updateCourseVisibility,
@@ -20,7 +19,6 @@ import {
   createCourseShare,
   deleteCourseShare,
   type ClassItem,
-  type TeacherStats,
 } from '@/lib/backendApi';
 
 interface Course {
@@ -67,8 +65,6 @@ export function CourseManagementPage() {
   const [publishingCourseId, setPublishingCourseId] = useState<string | null>(null);
   const [classes, setClasses] = useState<Class[]>([]);
   const [classesLoading, setClassesLoading] = useState(false);
-  const [teacherStats, setTeacherStats] = useState<TeacherStats | null>(null);
-  const [statsLoading, setStatsLoading] = useState(true);
   const [deletedCourses, setDeletedCourses] = useState<Course[]>([]);
   const [loadingDeletedCourses, setLoadingDeletedCourses] = useState(false);
   const [restoringCourseId, setRestoringCourseId] = useState<string | null>(null);
@@ -79,18 +75,6 @@ export function CourseManagementPage() {
   const [shareTargetTeacherId, setShareTargetTeacherId] = useState('');
   const [sharePermission, setSharePermission] = useState<'view' | 'edit'>('view');
   const [shareItems, setShareItems] = useState<CourseShareItem[]>([]);
-
-  useEffect(() => {
-    if (!user?.id) {
-      setStatsLoading(false);
-      return;
-    }
-    setStatsLoading(true);
-    getTeacherStats(user.id)
-      .then(setTeacherStats)
-      .catch((err) => console.error('Failed to load teacher stats:', err))
-      .finally(() => setStatsLoading(false));
-  }, [user?.id]);
 
   useEffect(() => {
     if (!user?.id || !assignDialogOpen) return;
@@ -185,7 +169,6 @@ export function CourseManagementPage() {
       await removeCourseAssignment(selectedCourse.id, classId, user.id);
       setAssignedClasses((prev) => prev.filter((c) => c.id !== classId));
       await refreshCourses();
-      getTeacherStats(user.id).then(setTeacherStats).catch(() => {});
     } catch (err) {
       console.error('Remove assignment failed:', err);
       alert(err instanceof Error ? err.message : '移除分配失败，请重试');
@@ -208,7 +191,6 @@ export function CourseManagementPage() {
       setSelectedCourse(null);
       setAssignedClasses([]);
       await refreshCourses();
-      getTeacherStats(user.id).then(setTeacherStats).catch(() => {});
     } catch (err) {
       console.error('Assign failed:', err);
       alert(err instanceof Error ? err.message : '分配失败，请重试');
@@ -224,7 +206,6 @@ export function CourseManagementPage() {
     try {
       await deleteCourse(course.id, user.id);
       await refreshCourses();
-      getTeacherStats(user.id).then(setTeacherStats).catch(() => {});
     } catch (err) {
       console.error('Delete course failed:', err);
       alert(err instanceof Error ? err.message : '删除失败，请重试');
@@ -259,7 +240,6 @@ export function CourseManagementPage() {
       await restoreCourse(course.id, user.id);
       setDeletedCourses((prev) => prev.filter((item) => item.id !== course.id));
       await refreshCourses();
-      getTeacherStats(user.id).then(setTeacherStats).catch(() => {});
       alert('课程已恢复');
     } catch (err) {
       console.error('Restore course failed:', err);
@@ -340,53 +320,6 @@ export function CourseManagementPage() {
       <div>
         <h1 className="text-3xl font-bold text-gray-900">课程管理</h1>
         <p className="text-muted-foreground mt-2">管理课程的分配、公开、分享与删除</p>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">总课程数</p>
-                <p className="text-2xl font-bold">{statsLoading ? '—' : (teacherStats?.totalCourses ?? courses.length)}</p>
-              </div>
-              <BookOpen className="w-8 h-8 text-blue-600" />
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">已分配</p>
-                <p className="text-2xl font-bold">{statsLoading ? '—' : (teacherStats?.assignedCount ?? teacherStats?.publishedCount ?? courses.filter((c) => c.assignmentStatus === 'assigned').length)}</p>
-              </div>
-              <TrendingUp className="w-8 h-8 text-green-600" />
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">总学生数</p>
-                <p className="text-2xl font-bold">{statsLoading ? '—' : (teacherStats?.totalStudents ?? courses.reduce((sum, c) => sum + c.students, 0))}</p>
-              </div>
-              <Users className="w-8 h-8 text-purple-600" />
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">平均完成率</p>
-                <p className="text-2xl font-bold">{statsLoading ? '—' : `${teacherStats?.avgCompletion ?? 0}%`}</p>
-              </div>
-              <TrendingUp className="w-8 h-8 text-orange-600" />
-            </div>
-          </CardContent>
-        </Card>
       </div>
 
       <Card>

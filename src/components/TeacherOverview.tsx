@@ -1,14 +1,37 @@
 import React, { useEffect, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { BookOpen, Users, FileText, TrendingUp, Clock, Award } from 'lucide-react';
-import { Button } from './ui/button';
 import { useAuth } from './AuthContext';
-import { getTeacherStats, listTeacherCoursesWithStats } from '@/lib/backendApi';
+import { getTeacherStats, listTeacherCoursesWithStats, getTeacherActivities, type TeacherActivity } from '@/lib/backendApi';
+
+const ACTION_LABELS: Record<string, string> = {
+  course_created: '课程创建',
+  course_published: '新课程发布',
+  course_assigned: '课程分配',
+  class_created: '班级创建',
+  student_completed: '学生完成课程',
+};
+
+function formatRelativeTime(isoString: string): string {
+  const d = new Date(isoString);
+  const now = new Date();
+  const diffMs = now.getTime() - d.getTime();
+  const diffMins = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMs / 3600000);
+  const diffDays = Math.floor(diffMs / 86400000);
+  if (diffMins < 1) return '刚刚';
+  if (diffMins < 60) return `${diffMins}分钟前`;
+  if (diffHours < 24) return `${diffHours}小时前`;
+  if (diffDays < 2) return '昨天';
+  if (diffDays < 7) return `${diffDays}天前`;
+  return d.toLocaleDateString();
+}
 
 export function TeacherOverview() {
   const { user } = useAuth();
   const [stats, setStats] = useState<{ totalCourses: number; assignedCount?: number; publishedCount: number; totalStudents: number; avgCompletion: number } | null>(null);
   const [topCourses, setTopCourses] = useState<{ name: string; students: number; completion: number }[]>([]);
+  const [recentActivities, setRecentActivities] = useState<TeacherActivity[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -19,8 +42,9 @@ export function TeacherOverview() {
     Promise.all([
       getTeacherStats(user.id),
       listTeacherCoursesWithStats(user.id),
+      getTeacherActivities(user.id, 8),
     ])
-      .then(([statsData, coursesData]) => {
+      .then(([statsData, coursesData, activitiesData]) => {
         setStats(statsData);
         const courses = coursesData.courses
           .filter((c) => c.assignmentStatus === 'assigned' || c.status === 'published')
@@ -28,6 +52,7 @@ export function TeacherOverview() {
           .slice(0, 4)
           .map((c) => ({ name: c.title, students: c.students, completion: c.completion }));
         setTopCourses(courses);
+        setRecentActivities(activitiesData.activities);
       })
       .catch((err) => console.error('[TeacherOverview] Failed to load:', err))
       .finally(() => setLoading(false));
@@ -46,13 +71,6 @@ export function TeacherOverview() {
         { title: '任务设计', value: '—', icon: FileText, color: 'text-purple-600', bgColor: 'bg-purple-50' },
         { title: '平均完成率', value: '—', icon: TrendingUp, color: 'text-orange-600', bgColor: 'bg-orange-50' },
       ];
-
-  const recentActivities = [
-    { action: '新课程发布', course: '高中物理 - 牛顿定律', time: '2小时前' },
-    { action: '学生完成课程', course: '初中数学 - 代数基础', time: '4小时前' },
-    { action: '资源上传', course: 'PDF: 光学实验指南', time: '昨天' },
-    { action: '班级创建', course: '高一3班', time: '2天前' },
-  ];
 
   return (
     <div className="p-8 space-y-8">
@@ -97,16 +115,22 @@ export function TeacherOverview() {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {recentActivities.map((activity, index) => (
-                <div key={index} className="flex items-start space-x-3 pb-4 border-b last:border-0">
-                  <div className="w-2 h-2 bg-blue-600 rounded-full mt-2"></div>
-                  <div className="flex-1">
-                    <p className="text-sm font-medium">{activity.action}</p>
-                    <p className="text-sm text-muted-foreground">{activity.course}</p>
-                    <p className="text-xs text-muted-foreground mt-1">{activity.time}</p>
+              {loading ? (
+                <p className="text-sm text-muted-foreground">加载中…</p>
+              ) : recentActivities.length === 0 ? (
+                <p className="text-sm text-muted-foreground">暂无活动记录</p>
+              ) : (
+                recentActivities.map((activity, index) => (
+                  <div key={`${activity.occurred_at}-${index}`} className="flex items-start space-x-3 pb-4 border-b last:border-0">
+                    <div className="w-2 h-2 bg-blue-600 rounded-full mt-2"></div>
+                    <div className="flex-1">
+                      <p className="text-sm font-medium">{ACTION_LABELS[activity.action_type] ?? activity.action_type}</p>
+                      <p className="text-sm text-muted-foreground">{activity.target_title}</p>
+                      <p className="text-xs text-muted-foreground mt-1">{formatRelativeTime(activity.occurred_at)}</p>
+                    </div>
                   </div>
-                </div>
-              ))}
+                ))
+              )}
             </div>
           </CardContent>
         </Card>
@@ -145,30 +169,6 @@ export function TeacherOverview() {
           </CardContent>
         </Card>
       </div>
-
-      {/* Quick Actions */}
-      <Card>
-        <CardHeader>
-          <CardTitle>快速操作</CardTitle>
-          <CardDescription>常用功能快速入口</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <Button className="h-auto py-4 flex-col space-y-2" variant="outline">
-              <BookOpen className="w-6 h-6" />
-              <span>创建新课程</span>
-            </Button>
-            <Button className="h-auto py-4 flex-col space-y-2" variant="outline">
-              <Users className="w-6 h-6" />
-              <span>添加班级</span>
-            </Button>
-            <Button className="h-auto py-4 flex-col space-y-2" variant="outline">
-              <FileText className="w-6 h-6" />
-              <span>上传资源</span>
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
     </div>
   );
 }

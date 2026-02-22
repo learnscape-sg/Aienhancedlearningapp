@@ -215,7 +215,7 @@ const SUBJECT_OPTIONS = [
   '语文', '数学', '英语', '物理', '化学', '生物', '历史', '地理', '政治', '其他',
 ];
 
-const DIFFICULTY_OPTIONS = ['基础', '提高', '拔尖'] as const;
+const DIFFICULTY_OPTIONS = ['基础', '提升', '挑战'] as const;
 
 const TASK_TYPES = [
   { id: 'mastery', label: '掌握型任务', available: true },

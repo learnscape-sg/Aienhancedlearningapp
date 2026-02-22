@@ -1226,7 +1226,7 @@ const StudentConsole: React.FC<StudentConsoleProps> = ({ plan, onComplete, onApi
       return context;
   };
 
-  const handleSendMessage = async (forcedInput?: string, hiddenContext?: string) => {
+  const handleSendMessage = async (forcedInput?: string, hiddenContext?: string, images?: string[]) => {
     const inputText = forcedInput || chatInput;
     if (!inputText.trim()) return;
     if (isTyping) return; // 防止并发重复请求
@@ -1325,7 +1325,13 @@ ${isMathOrScience ? `
 `;
 
     try {
-        const responseText = await sendChatMessage(messages.concat(userMsg), userMsg.text, dynamicSystemInstruction, 'zh');
+        const responseText = await sendChatMessage(
+          messages.concat(userMsg),
+          userMsg.text,
+          dynamicSystemInstruction,
+          'zh',
+          images && images.length > 0 ? { images } : undefined
+        );
         setMessages(prev => [...prev, { role: 'model', text: responseText, timestamp }]);
         // Avatar state will be automatically set to 'speaking' by useEffect when new message is added
         addLog(`AI Response: "${responseText.substring(0, 30)}..."`);
@@ -1396,6 +1402,15 @@ CRITICAL: Give hints STEP BY STEP, not all at once.
       // 步骤 1/2 轻量放行
       const isLightStep = guidedStep <= 2;
 
+      // Step 4「我能练一练」：收集手写答案图片，按题目顺序
+      const practiceImages: string[] =
+        guidedStep === 4 && Object.keys(practiceImageAnswers).length > 0
+          ? Object.entries(practiceImageAnswers)
+              .filter(([, v]) => !!v)
+              .sort((a, b) => Number(a[0]) - Number(b[0]))
+              .map(([, v]) => v)
+          : [];
+
       const hiddenCtx = `Student clicked 'I'm Done' for guided step ${guidedStep}: "${currentStepTitle}".
 Task: ${currentTask.title}
 Goal: ${currentTask.outputGoal}
@@ -1405,6 +1420,8 @@ STEP VERIFICATION PROTOCOL (guided flow):
 - You are verifying step ${guidedStep}/5: "${currentStepTitle}".
 - ${isLightStep
   ? 'This is a lightweight step (reading/watching). Acknowledge and approve directly.'
+  : guidedStep === 4 && practiceImages.length > 0
+  ? 'Review the student\'s practice answers. HANDWRITTEN IMAGES are attached - view each image and compare with the 参考答案 (correct answer) given for that question. Judge right/wrong and give specific feedback. Be encouraging.'
   : `Review the student's work for this step. Be encouraging but check completeness.`}
 - Language: vivid but concise, 2-4 sentences, max 100 chars.
 - Do NOT mention other steps, mindmaps, or unrelated concepts.
@@ -1416,7 +1433,8 @@ STEP VERIFICATION PROTOCOL (guided flow):
 
       handleSendMessage(
         `AI 老师，我完成了「${currentStepTitle}」这一步。`,
-        hiddenCtx
+        hiddenCtx,
+        practiceImages.length > 0 ? practiceImages : undefined
       );
       return;
     }
@@ -1571,15 +1589,24 @@ CRITICAL TASK COMPLETION PROTOCOL:
         if (parsed.options.length > 0) return typeof practiceChoiceAnswers[idx] === 'number';
         return (practiceTextAnswers[idx] || '').trim().length > 0 || !!practiceImageAnswers[idx];
       }).length;
+      let imageSeq = 0;
       const answers = guidedPractice.map((q, idx) => {
         const parsed = extractQuestionStemAndOptions(q.question || '', q.options);
+        const correctAns = q.correctAnswer ? `参考答案：${q.correctAnswer}` : '';
         if (parsed.options.length > 0 && typeof practiceChoiceAnswers[idx] === 'number') {
-          return `Q${idx + 1}: ${String.fromCharCode(65 + practiceChoiceAnswers[idx])}. ${parsed.options[practiceChoiceAnswers[idx]] || ''}`;
+          return `Q${idx + 1}: ${String.fromCharCode(65 + practiceChoiceAnswers[idx])}. ${parsed.options[practiceChoiceAnswers[idx]] || ''} ${correctAns}`;
         }
-        if (practiceImageAnswers[idx]) return `Q${idx + 1}: [手写/上传答案图片]`;
-        return `Q${idx + 1}: ${practiceTextAnswers[idx] || '(未答)'}`;
+        if (practiceImageAnswers[idx]) {
+          imageSeq += 1;
+          return `Q${idx + 1}: [手写答案，见附件图片${imageSeq}] ${correctAns}`;
+        }
+        return `Q${idx + 1}: ${practiceTextAnswers[idx] || '(未答)'} ${correctAns}`;
       });
-      return `当前步骤「${currentStepTitle}」：完成 ${answered}/${totalQ}。${answers.join('；')}`;
+      const imageInstruction =
+        imageSeq > 0
+          ? ' 附件中有手写答案图片，按顺序对应上述题目。请查看图片，对比参考答案判断对错并给出针对性反馈。'
+          : '';
+      return `当前步骤「${currentStepTitle}」：完成 ${answered}/${totalQ}。题目与答案：${answers.join('；')}${imageInstruction}`;
     }
     if (guidedStep === 5) {
       return `当前步骤「${currentStepTitle}」：学生出门条回答：${exitTicketAnswer || '(空)'}`;
@@ -1942,17 +1969,51 @@ CRITICAL TASK COMPLETION PROTOCOL:
   // 1. Loading Screen (Report Generation)
   if (showReport && !exitData) {
     return (
-      <div className="relative min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6 text-slate-800 font-sans overflow-hidden">
-        <div className="z-10 text-center max-w-md animate-fade-in-up">
-           <Loader2 className="w-16 h-16 text-cyan-600 animate-spin mx-auto mb-8" />
-           <h2 className="text-2xl font-bold mb-4">{t.processing}</h2>
-           <p className="text-slate-500 mb-8 leading-relaxed border-l-2 border-cyan-500 pl-4 text-left italic bg-white p-4 rounded-r-lg shadow-sm">
+      <div className="relative min-h-screen bg-slate-50 flex flex-col p-6 text-slate-800 font-sans overflow-hidden">
+        <div className="z-10 flex flex-col items-center justify-center flex-shrink-0">
+           <Loader2 className="w-16 h-16 text-cyan-600 animate-spin mx-auto mb-4" />
+           <h2 className="text-2xl font-bold mb-2">{t.processing}</h2>
+           <p className="text-slate-500 mb-4 leading-relaxed border-l-2 border-cyan-500 pl-4 text-left italic bg-white p-4 rounded-r-lg shadow-sm max-w-md">
              {t.processingTip}
            </p>
-           <div className="h-1 w-48 bg-slate-200 rounded-full mx-auto overflow-hidden">
+           <div className="h-1 w-48 bg-slate-200 rounded-full mx-auto overflow-hidden mb-6">
              <div className="h-full bg-cyan-500 animate-[pulse_2s_cubic-bezier(0.4,0,0.6,1)_infinite] w-full origin-left"></div>
            </div>
         </div>
+
+        {/* Learning Process Review */}
+        {(studentLog.length > 0 || messages.length > 0) && (
+          <div className="flex-1 min-h-0 flex flex-col max-w-2xl mx-auto w-full">
+            <h3 className="text-sm font-bold text-slate-600 mb-3 flex items-center gap-2">
+              <BookOpen size={16} /> 学习过程回顾
+            </h3>
+            <div className="flex-1 overflow-y-auto bg-white rounded-2xl border border-slate-200 shadow-sm p-4 space-y-4">
+              {studentLog.length > 0 && (
+                <div>
+                  <h4 className="text-xs font-bold text-amber-600 uppercase tracking-wider mb-2">思维日志</h4>
+                  <div className="space-y-1.5 text-sm text-slate-700">
+                    {studentLog.slice(-12).map((line, i) => (
+                      <div key={i} className="pl-3 border-l-2 border-amber-200 py-0.5">{line}</div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {messages.length > 0 && (
+                <div>
+                  <h4 className="text-xs font-bold text-cyan-600 uppercase tracking-wider mb-2">对话摘要</h4>
+                  <div className="space-y-2 max-h-48 overflow-y-auto text-sm">
+                    {messages.slice(-8).map((msg, i) => (
+                      <div key={i} className={`px-3 py-2 rounded-lg ${msg.role === 'user' ? 'bg-emerald-50 text-slate-800' : 'bg-slate-50 text-slate-700'}`}>
+                        <span className="text-[10px] font-bold uppercase opacity-70">{msg.role === 'user' ? '我' : (tutorName || t.aiSystem)}</span>
+                        <div className="mt-0.5 line-clamp-2">{msg.text.slice(0, 120)}{msg.text.length > 120 ? '…' : ''}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -2117,27 +2178,7 @@ CRITICAL TASK COMPLETION PROTOCOL:
              )}
           </div>
 
-          {/* Section 4: Knowledge Graph */}
-          <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-xl overflow-hidden">
-              <h4 className="text-sm font-bold text-slate-500 mb-6 uppercase w-full flex items-center gap-2 border-b border-slate-100 pb-4">
-                <Brain size={18} className="text-cyan-600"/> {t.neuralMap}
-              </h4>
-              <div className="w-full h-[500px] bg-slate-50/50 rounded-2xl border border-slate-100 relative overflow-hidden">
-                  {finalMindMapCode ? (
-                      <MermaidPreview 
-                        code={finalMindMapCode} 
-                        idPrefix="mermaid-exit"
-                        errorMessage="渲染思维导图时出错"
-                      />
-                  ) : (
-                      <div className="flex items-center justify-center h-full text-sm text-slate-400">
-                          本次学习未生成思维导图。
-                      </div>
-                  )}
-              </div>
-          </div>
-
-          {/* Section 4.5: Learning Goals & Big Concept Review */}
+          {/* Section 4: Learning Goals & Big Concept Review */}
           {((plan.learningGoals && plan.learningGoals.length > 0) || plan.bigConcept) ? (
             <div className="bg-gradient-to-br from-amber-50 to-white p-8 rounded-3xl border border-amber-100 shadow-lg">
               <h3 className="text-amber-700 font-bold mb-6 flex items-center gap-2 text-sm uppercase tracking-wider">
@@ -3128,9 +3169,9 @@ CRITICAL TASK COMPLETION PROTOCOL:
                   )}
                 </div>
                 
-                {/* 在完成消息下方显示"下一个任务"或"完成学习"按钮（非引导流） */}
+                {/* 在完成消息下方显示"下一个任务"或两个完成按钮（非引导流） */}
                 {isCompletionMsg && isLastMessage && !isGuidedVideoFlow && !isTyping && (
-                  <div className="flex justify-start animate-fade-in-up ml-0">
+                  <div className="flex justify-start animate-fade-in-up ml-0 gap-3 flex-wrap">
                     {currentTaskIndex < plan.tasks.length - 1 ? (
                       <button 
                         onClick={handleNextTask}
@@ -3139,25 +3180,50 @@ CRITICAL TASK COMPLETION PROTOCOL:
                         {t.next} <ArrowRight size={16} />
                       </button>
                     ) : (
-                      <button 
-                        onClick={handleFinishLearning}
-                        className="flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-bold transition-all shadow-lg hover:shadow-xl hover:translate-y-[-2px] active:translate-y-0 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white"
-                      >
-                        完成学习 <ArrowRight size={16} />
-                      </button>
+                      <>
+                        <button 
+                          onClick={handleEndLearning}
+                          className="flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-bold transition-all shadow-lg hover:shadow-xl hover:translate-y-[-2px] active:translate-y-0 bg-slate-600 hover:bg-slate-500 text-white"
+                        >
+                          直接结束学习
+                        </button>
+                        <button 
+                          onClick={handleFinishLearning}
+                          className="flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-bold transition-all shadow-lg hover:shadow-xl hover:translate-y-[-2px] active:translate-y-0 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white"
+                        >
+                          学霸能力分析 <ArrowRight size={16} />
+                        </button>
+                      </>
                     )}
                   </div>
                 )}
 
-                {/* 引导流：AI 批准步骤后显示"进入下一步"按钮 */}
+                {/* 引导流：AI 批准步骤后显示"进入下一步"或两个完成按钮 */}
                 {showGuidedAdvanceButton && (
-                  <div className="flex justify-start animate-fade-in-up ml-0">
-                    <button 
-                      onClick={handleGuidedAdvance}
-                      className="flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-bold transition-all shadow-lg hover:shadow-xl hover:translate-y-[-2px] active:translate-y-0 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white"
-                    >
-                      {guidedStep < 5 ? '进入下一步' : currentTaskIndex < plan.tasks.length - 1 ? '进入下一个任务' : '完成学习'} <ArrowRight size={16} />
-                    </button>
+                  <div className="flex justify-start animate-fade-in-up ml-0 gap-3 flex-wrap">
+                    {guidedStep < 5 || currentTaskIndex < plan.tasks.length - 1 ? (
+                      <button 
+                        onClick={handleGuidedAdvance}
+                        className="flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-bold transition-all shadow-lg hover:shadow-xl hover:translate-y-[-2px] active:translate-y-0 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white"
+                      >
+                        {guidedStep < 5 ? '进入下一步' : '进入下一个任务'} <ArrowRight size={16} />
+                      </button>
+                    ) : (
+                      <>
+                        <button 
+                          onClick={handleEndLearning}
+                          className="flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-bold transition-all shadow-lg hover:shadow-xl hover:translate-y-[-2px] active:translate-y-0 bg-slate-600 hover:bg-slate-500 text-white"
+                        >
+                          直接结束学习
+                        </button>
+                        <button 
+                          onClick={handleFinishLearning}
+                          className="flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-bold transition-all shadow-lg hover:shadow-xl hover:translate-y-[-2px] active:translate-y-0 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white"
+                        >
+                          学霸能力分析 <ArrowRight size={16} />
+                        </button>
+                      </>
+                    )}
                   </div>
                 )}
               </div>

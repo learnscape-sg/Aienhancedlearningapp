@@ -387,6 +387,26 @@ export async function getTeacherStats(teacherId: string): Promise<TeacherStats> 
   );
 }
 
+export interface TeacherActivity {
+  action_type: string;
+  target_title: string;
+  target_id?: string;
+  meta?: Record<string, unknown>;
+  occurred_at: string;
+}
+
+export async function getTeacherActivities(
+  teacherId: string,
+  limit?: number
+): Promise<{ activities: TeacherActivity[] }> {
+  const qs = new URLSearchParams({ teacherId });
+  if (limit != null) qs.set('limit', String(limit));
+  return apiCall<{ activities: TeacherActivity[] }>(
+    `/api/teacher-activities?${qs.toString()}`,
+    { method: 'GET' }
+  );
+}
+
 export interface TeacherCourseItem {
   id: string;
   title: string;
@@ -492,17 +512,22 @@ export async function sendChatMessage(
   history: ChatMessage[],
   newMessage: string,
   systemInstruction: string,
-  language: Language
+  language: Language,
+  options?: { images?: string[] }
 ): Promise<string> {
   try {
+    const body: Record<string, unknown> = {
+      history,
+      newMessage,
+      systemInstruction,
+      language,
+    };
+    if (options?.images && options.images.length > 0) {
+      body.images = options.images;
+    }
     return await apiCall<string>('/api/chat', {
       method: 'POST',
-      body: JSON.stringify({
-        history,
-        newMessage,
-        systemInstruction,
-        language,
-      }),
+      body: JSON.stringify(body),
     });
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
