@@ -30,7 +30,6 @@ import { CoreDesignPage } from './components/CoreDesignPage';
 import { TeachingDocumentPage } from './components/TeachingDocumentPage';
 import { TaskConfigurationPage } from './components/TaskConfigurationPage';
 import { CourseManagementPage } from './components/CourseManagementPage';
-import { TaskManagementPage } from './components/TaskManagementPage';
 import { ClassManagementPage } from './components/ClassManagementPage';
 import { TeachingResourcesPage } from './components/TeachingResourcesPage';
 
@@ -286,8 +285,6 @@ function AppContent() {
         );
       case 'courses':
         return <CourseManagementPage />;
-      case 'tasks':
-        return <TaskManagementPage />;
       case 'classes':
         return <ClassManagementPage />;
       case 'materials':

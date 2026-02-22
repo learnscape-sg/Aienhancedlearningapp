@@ -1,18 +1,33 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
-import { BookOpen, Search, Edit, Trash2, UserPlus, X, Loader2, ExternalLink, Globe, Share2, Link2 } from 'lucide-react';
 import { Badge } from './ui/badge';
+import {
+  BookOpen,
+  FileText,
+  Search,
+  Trash2,
+  UserPlus,
+  X,
+  Loader2,
+  ExternalLink,
+  Share2,
+  Link2,
+} from 'lucide-react';
 import { useAuth } from './AuthContext';
 import { usePublishedCourses } from './PublishedCoursesContext';
+import { getLearnYourWayOrigin } from '@/config/appConfig';
 import {
   assignCourseToClasses,
+  createCourse,
+  deleteTask,
   listTeacherClasses,
+  listTeacherTasks,
+  restoreTask,
   listTeacherCoursesWithStats,
   deleteCourse,
   restoreCourse,
-  updateCourseVisibility,
   getCourseAssignments,
   removeCourseAssignment,
   listCourseShares,
@@ -20,6 +35,23 @@ import {
   deleteCourseShare,
   type ClassItem,
 } from '@/lib/backendApi';
+
+const TASK_TYPE_LABELS: Record<string, string> = {
+  mastery: '掌握型任务',
+  guided: '引导型任务',
+  autonomous: '自主型任务',
+};
+
+interface TaskItem {
+  taskId: string;
+  subject?: string;
+  grade?: string;
+  topic?: string;
+  taskType?: string;
+  durationMin?: number;
+  isPublic?: boolean;
+  teacherId?: string;
+}
 
 interface Course {
   id: string;
@@ -48,27 +80,31 @@ interface CourseShareItem {
   expires_at?: string;
 }
 
-import { getLearnYourWayOrigin } from '@/config/appConfig';
-
 export function CourseManagementPage() {
   const { user } = useAuth();
   const { publishedCourses, refreshCourses } = usePublishedCourses();
-  const [searchQuery, setSearchQuery] = useState('');
+
+  // --- Task state ---
+  const [myTaskView, setMyTaskView] = useState<'active' | 'recycle'>('active');
+  const [taskSearchQuery, setTaskSearchQuery] = useState('');
+  const [myTasks, setMyTasks] = useState<TaskItem[]>([]);
+  const [loadingMyTasks, setLoadingMyTasks] = useState(false);
+  const [selectedTaskIds, setSelectedTaskIds] = useState<string[]>([]);
+  const [deletingTaskId, setDeletingTaskId] = useState<string | null>(null);
+  const [restoringTaskId, setRestoringTaskId] = useState<string | null>(null);
+  const [taskAssignDialogOpen, setTaskAssignDialogOpen] = useState(false);
+  const [selectedTaskIdsForAssign, setSelectedTaskIdsForAssign] = useState<string[]>([]);
+
+  // --- Course state ---
   const [courseView, setCourseView] = useState<'active' | 'recycle'>('active');
+  const [courseSearchQuery, setCourseSearchQuery] = useState('');
   const [selectedFilter, setSelectedFilter] = useState<'all' | 'assigned' | 'unassigned'>('all');
-  const [assignDialogOpen, setAssignDialogOpen] = useState(false);
+  const [courseAssignDialogOpen, setCourseAssignDialogOpen] = useState(false);
   const [selectedCourse, setSelectedCourse] = useState<Course | null>(null);
-  const [selectedClasses, setSelectedClasses] = useState<string[]>([]);
-  const [assignedClasses, setAssignedClasses] = useState<Array<{ id: string; name: string; grade?: string; studentCount: number }>>([]);
-  const [assigning, setAssigning] = useState(false);
-  const [deletingCourseId, setDeletingCourseId] = useState<string | null>(null);
-  const [publishingCourseId, setPublishingCourseId] = useState<string | null>(null);
-  const [classes, setClasses] = useState<Class[]>([]);
-  const [classesLoading, setClassesLoading] = useState(false);
   const [deletedCourses, setDeletedCourses] = useState<Course[]>([]);
   const [loadingDeletedCourses, setLoadingDeletedCourses] = useState(false);
+  const [deletingCourseId, setDeletingCourseId] = useState<string | null>(null);
   const [restoringCourseId, setRestoringCourseId] = useState<string | null>(null);
-
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
   const [sharingCourse, setSharingCourse] = useState<Course | null>(null);
   const [shareLoading, setShareLoading] = useState(false);
@@ -76,8 +112,29 @@ export function CourseManagementPage() {
   const [sharePermission, setSharePermission] = useState<'view' | 'edit'>('view');
   const [shareItems, setShareItems] = useState<CourseShareItem[]>([]);
 
+  // --- Shared dialog state ---
+  const [selectedClasses, setSelectedClasses] = useState<string[]>([]);
+  const [assignedClasses, setAssignedClasses] = useState<Array<{ id: string; name: string; grade?: string; studentCount: number }>>([]);
+  const [assigning, setAssigning] = useState(false);
+  const [classes, setClasses] = useState<Class[]>([]);
+  const [classesLoading, setClassesLoading] = useState(false);
+
   useEffect(() => {
-    if (!user?.id || !assignDialogOpen) return;
+    if (!user?.id) return;
+    setLoadingMyTasks(true);
+    listTeacherTasks(user.id, { deletedOnly: myTaskView === 'recycle' })
+      .then((res) => setMyTasks(res.tasks ?? []))
+      .catch((err) => console.error('Failed to load my tasks:', err))
+      .finally(() => setLoadingMyTasks(false));
+  }, [user?.id, myTaskView]);
+
+  useEffect(() => {
+    if (myTaskView === 'recycle') setSelectedTaskIds([]);
+  }, [myTaskView]);
+
+  useEffect(() => {
+    const dialogOpen = taskAssignDialogOpen || courseAssignDialogOpen;
+    if (!user?.id || !dialogOpen) return;
     setClassesLoading(true);
     listTeacherClasses(user.id)
       .then((res) =>
@@ -90,7 +147,7 @@ export function CourseManagementPage() {
       )
       .catch((err) => console.error('Failed to load classes:', err))
       .finally(() => setClassesLoading(false));
-  }, [user?.id, assignDialogOpen]);
+  }, [user?.id, taskAssignDialogOpen, courseAssignDialogOpen]);
 
   useEffect(() => {
     if (!user?.id || courseView !== 'recycle') return;
@@ -117,6 +174,14 @@ export function CourseManagementPage() {
       .finally(() => setLoadingDeletedCourses(false));
   }, [courseView, user?.id]);
 
+  const filteredMyTasks = useMemo(
+    () =>
+      myTasks.filter((task) =>
+        `${task.topic || ''} ${task.subject || ''}`.toLowerCase().includes(taskSearchQuery.toLowerCase())
+      ),
+    [myTasks, taskSearchQuery]
+  );
+
   const courses: Course[] = publishedCourses.map((c) => ({
     id: c.id,
     title: c.title,
@@ -135,8 +200,8 @@ export function CourseManagementPage() {
   const sourceCourses = courseView === 'active' ? courses : deletedCourses;
   const filteredCourses = sourceCourses.filter((course) => {
     const matchesSearch =
-      course.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      course.subject.toLowerCase().includes(searchQuery.toLowerCase());
+      course.title.toLowerCase().includes(courseSearchQuery.toLowerCase()) ||
+      course.subject.toLowerCase().includes(courseSearchQuery.toLowerCase());
     const matchesFilter =
       courseView === 'recycle' ||
       selectedFilter === 'all' ||
@@ -145,11 +210,96 @@ export function CourseManagementPage() {
     return matchesSearch && matchesFilter;
   });
 
+  const taskDisplayName = (task: TaskItem) =>
+    [
+      task.topic || task.subject || '未命名任务',
+      task.taskType ? (TASK_TYPE_LABELS[task.taskType] ?? task.taskType) : null,
+      task.durationMin ? `${task.durationMin}分钟` : null,
+    ]
+      .filter(Boolean)
+      .join(' - ');
+
+  const toggleTaskSelection = (taskId: string) => {
+    setSelectedTaskIds((prev) => (prev.includes(taskId) ? prev.filter((id) => id !== taskId) : [...prev, taskId]));
+  };
+
+  const openTaskAssignDialog = (taskIds: string[]) => {
+    if (!taskIds.length) return;
+    setSelectedTaskIdsForAssign(taskIds);
+    setSelectedClasses([]);
+    setTaskAssignDialogOpen(true);
+  };
+
+  const handleTaskPreview = async (taskId: string) => {
+    if (!user?.id) return;
+    try {
+      const result = await createCourse({ taskIds: [taskId] }, user.id);
+      window.open(`${getLearnYourWayOrigin()}/course/${result.courseId}`, '_blank');
+    } catch (err) {
+      console.error('Failed to preview task:', err);
+      alert(err instanceof Error ? err.message : '生成预览失败');
+    }
+  };
+
+  const handleTaskDelete = async (task: TaskItem) => {
+    if (!user?.id) return;
+    if (!window.confirm(`确定要删除"${task.topic || task.subject || '此任务'}"吗？`)) return;
+    setDeletingTaskId(task.taskId);
+    try {
+      await deleteTask(task.taskId, user.id);
+      setMyTasks((prev) => prev.filter((t) => t.taskId !== task.taskId));
+      setSelectedTaskIds((prev) => prev.filter((id) => id !== task.taskId));
+    } catch (err) {
+      console.error('Delete task failed:', err);
+      alert(err instanceof Error ? err.message : '删除失败，请重试');
+    } finally {
+      setDeletingTaskId(null);
+    }
+  };
+
+  const handleTaskRestore = async (task: TaskItem) => {
+    if (!user?.id) return;
+    setRestoringTaskId(task.taskId);
+    try {
+      await restoreTask(task.taskId, user.id);
+      setMyTasks((prev) => prev.filter((t) => t.taskId !== task.taskId));
+      alert('任务已恢复');
+    } catch (err) {
+      console.error('Restore task failed:', err);
+      alert(err instanceof Error ? err.message : '恢复失败，请重试');
+    } finally {
+      setRestoringTaskId(null);
+    }
+  };
+
+  const handleTaskConfirmAssign = async () => {
+    if (!user?.id || selectedTaskIdsForAssign.length === 0 || selectedClasses.length === 0) return;
+    setAssigning(true);
+    try {
+      const created = await createCourse({ taskIds: selectedTaskIdsForAssign }, user.id);
+      const result = await assignCourseToClasses(created.courseId, selectedClasses, user.id);
+      const message =
+        result.skippedCount && result.skippedCount > 0
+          ? `成功分配 ${result.assignedCount} 个班级，${result.skippedCount} 个班级已分配过`
+          : `成功分配 ${result.assignedCount} 个班级`;
+      alert(message);
+      setTaskAssignDialogOpen(false);
+      setSelectedClasses([]);
+      setSelectedTaskIdsForAssign([]);
+      setSelectedTaskIds([]);
+    } catch (err) {
+      console.error('Assign task failed:', err);
+      alert(err instanceof Error ? err.message : '分配失败，请重试');
+    } finally {
+      setAssigning(false);
+    }
+  };
+
   const openCourseAssignDialog = async (course: Course) => {
     if (!user?.id) return;
     setSelectedCourse(course);
     setSelectedClasses([]);
-    setAssignDialogOpen(true);
+    setCourseAssignDialogOpen(true);
     try {
       const { classes: assigned } = await getCourseAssignments(course.id, user.id);
       setAssignedClasses(assigned.map((c) => ({ id: c.id, name: c.name, grade: c.grade, studentCount: c.studentCount })));
@@ -175,7 +325,7 @@ export function CourseManagementPage() {
     }
   };
 
-  const handleConfirmAssign = async () => {
+  const handleCourseConfirmAssign = async () => {
     if (!user?.id || !selectedCourse || selectedClasses.length === 0) return;
     setAssigning(true);
     try {
@@ -186,7 +336,7 @@ export function CourseManagementPage() {
           ? `成功将"${selectedCourse.title}"分配给 ${result.assignedCount} 个班级，${result.skippedCount} 个班级已分配过`
           : `成功将"${selectedCourse.title}"分配给：${classNames}`;
       alert(message);
-      setAssignDialogOpen(false);
+      setCourseAssignDialogOpen(false);
       setSelectedClasses([]);
       setSelectedCourse(null);
       setAssignedClasses([]);
@@ -211,21 +361,6 @@ export function CourseManagementPage() {
       alert(err instanceof Error ? err.message : '删除失败，请重试');
     } finally {
       setDeletingCourseId(null);
-    }
-  };
-
-  const handleCoursePublicToggle = async (course: Course) => {
-    if (!user?.id) return;
-    setPublishingCourseId(course.id);
-    try {
-      const action = course.visibilityStatus === 'public' ? 'unpublish' : 'publish';
-      await updateCourseVisibility(course.id, user.id, action);
-      await refreshCourses();
-    } catch (err) {
-      console.error('Toggle course visibility failed:', err);
-      alert(err instanceof Error ? err.message : '更新公开状态失败');
-    } finally {
-      setPublishingCourseId(null);
     }
   };
 
@@ -315,129 +450,365 @@ export function CourseManagementPage() {
     }
   };
 
+  const renderTaskRow = (task: TaskItem, opts: { canManage: boolean; selectable: boolean; assignable: boolean }) => {
+    const selected = selectedTaskIds.includes(task.taskId);
+    return (
+      <div
+        key={task.taskId}
+        className={`flex items-center justify-between p-4 border rounded-lg ${
+          selected ? 'border-blue-300 bg-blue-50/40' : 'hover:bg-gray-50'
+        }`}
+      >
+        <div className="flex items-center gap-4 flex-1">
+          <div className="w-12 h-12 bg-gradient-to-br from-violet-500 to-violet-600 rounded-lg flex items-center justify-center flex-shrink-0">
+            <FileText className="w-6 h-6 text-white" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2">
+              {opts.selectable ? (
+                <input
+                  type="checkbox"
+                  checked={selected}
+                  onChange={() => toggleTaskSelection(task.taskId)}
+                  className="w-4 h-4"
+                />
+              ) : null}
+              <p className="font-medium">{taskDisplayName(task)}</p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2 mt-1 text-sm text-muted-foreground">
+              <span>{[task.subject, task.grade].filter(Boolean).join(' · ') || task.taskId.slice(0, 8)}</span>
+              <Badge variant={task.isPublic ? 'default' : 'secondary'}>{task.isPublic ? '已公开' : '未公开'}</Badge>
+            </div>
+          </div>
+        </div>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <Button variant="outline" size="sm" onClick={() => handleTaskPreview(task.taskId)}>
+            <ExternalLink className="w-4 h-4 mr-1" />
+            预览
+          </Button>
+          {opts.assignable ? (
+            <Button variant="ghost" size="sm" onClick={() => openTaskAssignDialog([task.taskId])}>
+              <UserPlus className="w-4 h-4 mr-1" />
+              分配
+            </Button>
+          ) : null}
+          {opts.canManage ? (
+            <>
+              {myTaskView === 'active' ? (
+                <>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => handleTaskDelete(task)}
+                    disabled={deletingTaskId === task.taskId}
+                    className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                  >
+                    {deletingTaskId === task.taskId ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Trash2 className="w-4 h-4 mr-1" />
+                    )}
+                    删除
+                  </Button>
+                </>
+              ) : (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleTaskRestore(task)}
+                  disabled={restoringTaskId === task.taskId}
+                >
+                  {restoringTaskId === task.taskId ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : null}
+                  恢复
+                </Button>
+              )}
+            </>
+          ) : null}
+        </div>
+      </div>
+    );
+  };
+
+  const renderCourseRow = (course: Course, canManage: boolean) => (
+    <div key={course.id} className="flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50">
+      <div className="flex items-center gap-4 flex-1">
+        <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg flex items-center justify-center flex-shrink-0">
+          <BookOpen className="w-6 h-6 text-white" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <h3 className="font-medium">{course.title}</h3>
+          <div className="flex flex-wrap items-center gap-2 mt-1 text-sm text-muted-foreground">
+            <span>{course.subject} · {course.grade}</span>
+            <Badge variant={course.assignmentStatus === 'assigned' ? 'default' : 'secondary'}>
+              {course.assignmentStatus === 'assigned' ? '已分配' : '未分配'}
+            </Badge>
+            <Badge variant={course.visibilityStatus === 'public' ? 'default' : 'secondary'}>
+              {course.visibilityStatus === 'public' ? '已公开' : '未公开'}
+            </Badge>
+            {canManage && (
+              <Badge variant={course.shareStatus === 'shared' ? 'default' : 'secondary'}>
+                {course.shareStatus === 'shared' ? '已分享' : '未分享'}
+              </Badge>
+            )}
+            <span>{course.students} 名学生</span>
+            <span>完成率 {course.completion}%</span>
+            {courseView === 'recycle' && course.deletedAt ? (
+              <span>删除于 {new Date(course.deletedAt).toLocaleDateString()}</span>
+            ) : null}
+            <span>更新于 {course.lastUpdated}</span>
+          </div>
+        </div>
+      </div>
+      <div className="flex items-center gap-2 flex-shrink-0">
+        <Button variant="outline" size="sm" onClick={() => handleCoursePreview(course.id)}>
+          <ExternalLink className="w-4 h-4 mr-1" />
+          预览
+        </Button>
+        {canManage ? (
+          courseView === 'active' ? (
+            <>
+              <Button variant="ghost" size="sm" onClick={() => openCourseAssignDialog(course)}>
+                <UserPlus className="w-4 h-4 mr-1" />
+                分配
+              </Button>
+              <Button variant="ghost" size="sm" onClick={() => openShareDialog(course)}>
+                <Share2 className="w-4 h-4 mr-1" />
+                分享
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => handleCourseDelete(course)}
+                disabled={deletingCourseId === course.id}
+                className="text-red-600 hover:text-red-700 hover:bg-red-50"
+              >
+                {deletingCourseId === course.id ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Trash2 className="w-4 h-4 mr-1" />
+                )}
+                删除
+              </Button>
+            </>
+          ) : (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => handleCourseRestore(course)}
+              disabled={!course.canRestore || restoringCourseId === course.id}
+            >
+              {restoringCourseId === course.id ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : null}
+              恢复
+            </Button>
+          )
+        ) : (
+          <Button variant="ghost" size="sm" onClick={() => openCourseAssignDialog(course)}>
+            <UserPlus className="w-4 h-4 mr-1" />
+            分配
+          </Button>
+        )}
+      </div>
+    </div>
+  );
+
   return (
-    <div className="p-8 space-y-6">
+    <div className="p-8 space-y-8">
       <div>
         <h1 className="text-3xl font-bold text-gray-900">课程管理</h1>
-        <p className="text-muted-foreground mt-2">管理课程的分配、公开、分享与删除</p>
+        <p className="text-muted-foreground mt-2">管理任务与课程，支持打包任务成课程、分配、分享课程</p>
       </div>
 
+      {/* ========== 任务管理 ========== */}
       <Card>
-        <CardContent className="p-4">
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-            <div className="flex space-x-2">
-              <Button variant={courseView === 'active' ? 'default' : 'outline'} size="sm" onClick={() => setCourseView('active')}>在用课程</Button>
-              <Button variant={courseView === 'recycle' ? 'default' : 'outline'} size="sm" onClick={() => setCourseView('recycle')}>回收站</Button>
-              {courseView === 'active' ? (
+        <CardHeader>
+          <CardTitle>任务管理</CardTitle>
+          <CardDescription>支持选择单个或者多个任务打包成课程</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-4">
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                <div className="flex flex-wrap gap-2">
+                  <Button variant={myTaskView === 'active' ? 'default' : 'outline'} size="sm" onClick={() => setMyTaskView('active')}>
+                    任务
+                  </Button>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="relative md:w-64">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                    <Input
+                      placeholder="按任务主题或学科搜索..."
+                      value={taskSearchQuery}
+                      onChange={(e) => setTaskSearchQuery(e.target.value)}
+                      className="pl-10 w-full"
+                    />
+                  </div>
+                  <Button variant={myTaskView === 'recycle' ? 'default' : 'outline'} size="sm" onClick={() => setMyTaskView('recycle')}>
+                    回收站
+                  </Button>
+                </div>
+              </div>
+              {loadingMyTasks ? (
+                <div className="flex justify-center py-8">
+                  <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+                </div>
+              ) : filteredMyTasks.length === 0 ? (
+                <p className="text-muted-foreground py-8 text-center">暂无任务</p>
+              ) : (
                 <>
-                  <Button variant={selectedFilter === 'all' ? 'default' : 'outline'} size="sm" onClick={() => setSelectedFilter('all')}>全部</Button>
-                  <Button variant={selectedFilter === 'assigned' ? 'default' : 'outline'} size="sm" onClick={() => setSelectedFilter('assigned')}>已分配</Button>
-                  <Button variant={selectedFilter === 'unassigned' ? 'default' : 'outline'} size="sm" onClick={() => setSelectedFilter('unassigned')}>未分配</Button>
+                  {myTaskView === 'active' && (
+                    <div className="flex items-center justify-between gap-4 py-3 px-4 bg-primary/10 border border-primary/20 rounded-lg">
+                      <span className="text-sm font-medium">已选 {selectedTaskIds.length} 个任务</span>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setSelectedTaskIds([])}
+                          disabled={selectedTaskIds.length === 0}
+                        >
+                          取消选择
+                        </Button>
+                        <Button
+                          onClick={() => openTaskAssignDialog(selectedTaskIds)}
+                          disabled={selectedTaskIds.length === 0}
+                        >
+                          <UserPlus className="w-4 h-4 mr-2" />
+                          打包课程并分配
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                  <div className="space-y-2 max-h-[280px] overflow-y-auto">
+                    {filteredMyTasks.map((task) =>
+                      renderTaskRow(task, { canManage: true, selectable: myTaskView === 'active', assignable: myTaskView === 'active' })
+                    )}
+                  </div>
                 </>
-              ) : null}
-            </div>
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <Input placeholder="搜索课程..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pl-10 w-full md:w-64" />
-            </div>
+              )}
           </div>
         </CardContent>
       </Card>
 
+      {/* ========== 课程管理 ========== */}
       <Card>
         <CardHeader>
-          <CardTitle>课程列表</CardTitle>
-          <CardDescription>
-            {courseView === 'active' ? '支持预览、编辑占位、分配、公开、分享与删除' : '回收站（90天内可恢复）'}
-          </CardDescription>
+          <CardTitle>课程管理</CardTitle>
+          <CardDescription>管理课程的分配、分享与删除</CardDescription>
         </CardHeader>
-        <CardContent>
-          {courseView === 'recycle' && loadingDeletedCourses ? (
-            <div className="flex items-center justify-center py-8">
-              <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
-            </div>
-          ) : (
-            <div className="space-y-3">
-            {filteredCourses.map((course) => (
-              <div key={course.id} className="flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50">
-                <div className="flex items-center gap-4 flex-1">
-                  <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg flex items-center justify-center">
-                    <BookOpen className="w-6 h-6 text-white" />
-                  </div>
-                  <div className="flex-1">
-                    <h3 className="font-medium">{course.title}</h3>
-                    <div className="flex flex-wrap items-center gap-2 mt-1 text-sm text-muted-foreground">
-                      <span>{course.subject} · {course.grade}</span>
-                      <Badge variant={course.assignmentStatus === 'assigned' ? 'default' : 'secondary'}>
-                        {course.assignmentStatus === 'assigned' ? '已分配' : '未分配'}
-                      </Badge>
-                      <Badge variant={course.visibilityStatus === 'public' ? 'default' : 'secondary'}>
-                        {course.visibilityStatus === 'public' ? '已公开' : '未公开'}
-                      </Badge>
-                      <Badge variant={course.shareStatus === 'shared' ? 'default' : 'secondary'}>
-                        {course.shareStatus === 'shared' ? '已分享' : '未分享'}
-                      </Badge>
-                      <span>{course.students} 名学生</span>
-                      <span>完成率 {course.completion}%</span>
-                      {courseView === 'recycle' && course.deletedAt ? <span>删除于 {new Date(course.deletedAt).toLocaleDateString()}</span> : null}
-                      <span>更新于 {course.lastUpdated}</span>
-                    </div>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
+        <CardContent className="space-y-4">
+          <div className="space-y-4">
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                <div className="flex flex-wrap gap-2">
+                  <Button variant={courseView === 'active' ? 'default' : 'outline'} size="sm" onClick={() => setCourseView('active')}>
+                    课程
+                  </Button>
                   {courseView === 'active' ? (
                     <>
-                      <Button variant="outline" size="sm" onClick={() => handleCoursePreview(course.id)}>
-                        <ExternalLink className="w-4 h-4 mr-1" />
-                        预览
+                      <Button variant={selectedFilter === 'all' ? 'default' : 'outline'} size="sm" onClick={() => setSelectedFilter('all')}>
+                        全部
                       </Button>
-                      <Button variant="ghost" size="sm" onClick={() => alert('课程编辑模块开发中，后续开放。')}>
-                        <Edit className="w-4 h-4 mr-1" />
-                        编辑
+                      <Button variant={selectedFilter === 'assigned' ? 'default' : 'outline'} size="sm" onClick={() => setSelectedFilter('assigned')}>
+                        已分配
                       </Button>
-                      <Button variant="ghost" size="sm" onClick={() => openCourseAssignDialog(course)}>
-                        <UserPlus className="w-4 h-4 mr-1" />
-                        分配
-                      </Button>
-                      <Button variant="ghost" size="sm" onClick={() => handleCoursePublicToggle(course)} disabled={publishingCourseId === course.id}>
-                        <Globe className="w-4 h-4 mr-1" />
-                        {course.visibilityStatus === 'public' ? '取消公开' : '公开'}
-                      </Button>
-                      <Button variant="ghost" size="sm" onClick={() => openShareDialog(course)}>
-                        <Share2 className="w-4 h-4 mr-1" />
-                        分享
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleCourseDelete(course)}
-                        disabled={deletingCourseId === course.id}
-                        className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                      >
-                        {deletingCourseId === course.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4 mr-1" />}
-                        删除
+                      <Button variant={selectedFilter === 'unassigned' ? 'default' : 'outline'} size="sm" onClick={() => setSelectedFilter('unassigned')}>
+                        未分配
                       </Button>
                     </>
-                  ) : (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleCourseRestore(course)}
-                      disabled={!course.canRestore || restoringCourseId === course.id}
-                    >
-                      {restoringCourseId === course.id ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : null}
-                      恢复
-                    </Button>
-                  )}
+                  ) : null}
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="relative md:w-64">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <Input
+                    placeholder="搜索课程..."
+                    value={courseSearchQuery}
+                      onChange={(e) => setCourseSearchQuery(e.target.value)}
+                      className="pl-10 w-full"
+                    />
+                  </div>
+                  <Button variant={courseView === 'recycle' ? 'default' : 'outline'} size="sm" onClick={() => setCourseView('recycle')}>
+                    回收站
+                  </Button>
                 </div>
               </div>
-            ))}
-            </div>
-          )}
+              {courseView === 'recycle' && loadingDeletedCourses ? (
+                <div className="flex justify-center py-8">
+                  <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+                </div>
+              ) : filteredCourses.length === 0 ? (
+                <p className="text-muted-foreground py-8 text-center">
+                  {courseView === 'active' ? '暂无课程' : '回收站暂无课程'}
+                </p>
+              ) : (
+                <div className="space-y-3 max-h-[280px] overflow-y-auto">
+                  {filteredCourses.map((course) => renderCourseRow(course, true))}
+                </div>
+              )}
+          </div>
         </CardContent>
       </Card>
 
-      {assignDialogOpen && (
+      {/* 任务分配弹窗 */}
+      {taskAssignDialogOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <Card className="w-[640px] max-h-[85vh] flex flex-col overflow-hidden">
+            <CardHeader className="border-b">
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle>打包课程并分配</CardTitle>
+                  <CardDescription className="mt-1">已选任务：{selectedTaskIdsForAssign.length} 个</CardDescription>
+                </div>
+                <Button variant="ghost" size="sm" onClick={() => setTaskAssignDialogOpen(false)} className="h-8 w-8 p-0">
+                  <X className="w-4 h-4" />
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent className="p-6 space-y-4 overflow-y-auto">
+              <p className="text-sm font-medium mb-2">选择要分配的班级（可多选）</p>
+              {classesLoading ? (
+                <div className="flex justify-center py-6">
+                  <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+                </div>
+              ) : classes.length === 0 ? (
+                <p className="text-muted-foreground py-4 text-center">暂无班级，请先在班级管理页创建</p>
+              ) : (
+                <div className="space-y-2">
+                  {classes.map((c) => (
+                    <div
+                      key={c.id}
+                      className={`flex items-center p-3 border rounded-lg cursor-pointer hover:bg-gray-50 ${selectedClasses.includes(c.id) ? 'bg-blue-50 border-blue-300' : ''}`}
+                      onClick={() => handleClassToggle(c.id)}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedClasses.includes(c.id)}
+                        onChange={() => handleClassToggle(c.id)}
+                        className="mr-3 w-4 h-4"
+                      />
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium">{c.name}</span>
+                          <Badge variant="secondary" className="text-xs">{c.grade || '未设年级'}</Badge>
+                        </div>
+                        <p className="text-sm text-muted-foreground mt-1">{c.studentCount} 名学生</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+            <div className="border-t p-4 flex justify-end gap-3 bg-gray-50">
+              <Button variant="outline" onClick={() => setTaskAssignDialogOpen(false)}>取消</Button>
+              <Button onClick={handleTaskConfirmAssign} disabled={selectedClasses.length === 0 || assigning}>
+                {assigning ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <UserPlus className="w-4 h-4 mr-2" />}
+                确认分配
+              </Button>
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {/* 课程分配弹窗 */}
+      {courseAssignDialogOpen && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <Card className="w-[640px] max-h-[85vh] flex flex-col overflow-hidden">
             <CardHeader className="border-b">
@@ -446,7 +817,7 @@ export function CourseManagementPage() {
                   <CardTitle>分配课程自学任务</CardTitle>
                   <CardDescription className="mt-1">课程：{selectedCourse?.title}</CardDescription>
                 </div>
-                <Button variant="ghost" size="sm" onClick={() => setAssignDialogOpen(false)} className="h-8 w-8 p-0">
+                <Button variant="ghost" size="sm" onClick={() => setCourseAssignDialogOpen(false)} className="h-8 w-8 p-0">
                   <X className="w-4 h-4" />
                 </Button>
               </div>
@@ -475,7 +846,9 @@ export function CourseManagementPage() {
               <div>
                 <p className="text-sm font-medium mb-2">选择要新增分配的班级（可多选）</p>
                 {classesLoading ? (
-                  <div className="flex justify-center py-6"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
+                  <div className="flex justify-center py-6">
+                    <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+                  </div>
                 ) : classes.length === 0 ? (
                   <p className="text-muted-foreground py-4 text-center">暂无班级，请先在班级管理页创建</p>
                 ) : (
@@ -511,8 +884,8 @@ export function CourseManagementPage() {
               </div>
             </CardContent>
             <div className="border-t p-4 flex justify-end gap-3 bg-gray-50">
-              <Button variant="outline" onClick={() => setAssignDialogOpen(false)}>取消</Button>
-              <Button onClick={handleConfirmAssign} disabled={selectedClasses.length === 0 || assigning}>
+              <Button variant="outline" onClick={() => setCourseAssignDialogOpen(false)}>取消</Button>
+              <Button onClick={handleCourseConfirmAssign} disabled={selectedClasses.length === 0 || assigning}>
                 {assigning ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <UserPlus className="w-4 h-4 mr-2" />}
                 确认分配
               </Button>
@@ -521,6 +894,7 @@ export function CourseManagementPage() {
         </div>
       )}
 
+      {/* 课程分享弹窗 */}
       {shareDialogOpen && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <Card className="w-[720px] max-h-[85vh] flex flex-col overflow-hidden">
@@ -561,7 +935,9 @@ export function CourseManagementPage() {
               <div>
                 <p className="text-sm font-medium mb-2">已分享记录</p>
                 {shareLoading ? (
-                  <div className="flex justify-center py-6"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
+                  <div className="flex justify-center py-6">
+                    <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+                  </div>
                 ) : shareItems.length === 0 ? (
                   <p className="text-sm text-muted-foreground">暂无分享记录</p>
                 ) : (
