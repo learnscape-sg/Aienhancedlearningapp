@@ -625,8 +625,8 @@ export async function getVideoContent(url: string): Promise<VideoContentResult> 
 }
 
 export type GenerateTaskDesignResult = {
-  markdown: string;
-  json: Record<string, unknown>;
+  markdown: string | null;
+  json: Record<string, unknown> | null;
   objective: string;
 };
 
@@ -637,19 +637,24 @@ export async function generateTaskDesign(params: {
   duration: string | number;
   difficulty?: string;
   prerequisites?: string;
+  objective?: string;
 }): Promise<GenerateTaskDesignResult> {
+  const body: Record<string, unknown> = {
+    subject: params.subject.trim(),
+    topic: params.topic.trim(),
+    grade: params.grade.trim(),
+    duration: params.duration,
+    difficulty: params.difficulty?.trim() || '',
+    prerequisites: params.prerequisites?.trim() || '',
+  };
+  if (params.objective?.trim()) {
+    body.objective = params.objective.trim();
+  }
   return apiCall<GenerateTaskDesignResult>(
     '/api/materials/generate-task-design',
     {
       method: 'POST',
-      body: JSON.stringify({
-        subject: params.subject.trim(),
-        topic: params.topic.trim(),
-        grade: params.grade.trim(),
-        duration: params.duration,
-        difficulty: params.difficulty?.trim() || '',
-        prerequisites: params.prerequisites?.trim() || '',
-      }),
+      body: JSON.stringify(body),
     }
   );
 }

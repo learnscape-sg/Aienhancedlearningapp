@@ -263,6 +263,7 @@ export function TeachingResourcesPage() {
   const [taskGenerating, setTaskGenerating] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [generateError, setGenerateError] = useState<string | null>(null);
+  const [restReady, setRestReady] = useState(false);
 
   const hasPrefilledRef = useRef(false);
   useEffect(() => {
@@ -285,6 +286,7 @@ export function TeachingResourcesPage() {
     const topic = entryTopic.trim();
     if (!topic) return;
     setTaskDesignReady(false);
+    setRestReady(false);
     const promise = generateTaskDesign({
       subject: entrySubject,
       topic,
@@ -422,6 +424,14 @@ export function TeachingResourcesPage() {
     const first = items[0];
     if (first?.q) setExitTicketQuestion({ question: first.q, correctAnswer: first.a });
   }, [step, exitTicketQuestion]);
+
+  // 阶段二完成且当前在 Step 3 时，从 ref 填充 keyIdeas
+  useEffect(() => {
+    if (!restReady || step !== 3 || keyIdeas.length > 0) return;
+    const json = taskDesignJsonRef.current;
+    const keyPoints = (json?.key_points as string[] | undefined) || [];
+    if (keyPoints.length > 0) setKeyIdeas(keyPoints.map((t) => parseKeyPointToKeyIdea(t)));
+  }, [restReady, step, keyIdeas.length]);
 
   const handleGenerateTask = async () => {
     setTaskGenerating(true);
@@ -756,7 +766,26 @@ export function TeachingResourcesPage() {
                     上一步
                   </Button>
                   <Button
-                    onClick={() => { setStep(2); setMaxStepReached(2); }}
+                    onClick={() => {
+                      if (!learningObjective.trim()) return;
+                      setStep(2);
+                      setMaxStepReached(2);
+                      generateTaskDesign({
+                        subject: entrySubject,
+                        topic: entryTopic.trim(),
+                        grade: entryGrade,
+                        duration: entryDuration.trim() || '15',
+                        difficulty: entryDifficulty || undefined,
+                        prerequisites: entryPrerequisites || undefined,
+                        objective: learningObjective.trim(),
+                      })
+                        .then((res) => {
+                          taskDesignJsonRef.current = res.json ?? null;
+                          taskDesignMarkdownRef.current = res.markdown ?? null;
+                          setRestReady(true);
+                        })
+                        .catch((e) => setError(e instanceof Error ? e.message : '生成任务内容失败'));
+                    }}
                     disabled={!learningObjective.trim()}
                   >
                     选择教学视频 <ChevronRight className="w-4 h-4 ml-1" />
@@ -980,7 +1009,12 @@ export function TeachingResourcesPage() {
                 <p className="text-sm text-muted-foreground mb-4">
                   学生观看视频时可填写高亮术语。您可直接编辑下方内容。
                 </p>
-                {keyIdeas.length > 0 && (
+                {!restReady ? (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground py-8">
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                    正在准备关键要点…
+                  </div>
+                ) : keyIdeas.length > 0 ? (
                   <ol className="list-decimal list-inside space-y-3 text-sm mb-4">
                     {keyIdeas.map((idea, idx) => (
                       <li key={idx}>
@@ -988,13 +1022,16 @@ export function TeachingResourcesPage() {
                       </li>
                     ))}
                   </ol>
-                )}
+                ) : null}
                 <div className="flex justify-end gap-2 mt-4">
                   <Button variant="outline" onClick={() => setStep(2)}>
                     <ChevronLeft className="w-4 h-4 mr-1" />
                     上一步
                   </Button>
-                  <Button onClick={() => { setStep(4); setMaxStepReached((m) => Math.max(m, 4)); }}>
+                  <Button
+                    onClick={() => { setStep(4); setMaxStepReached((m) => Math.max(m, 4)); }}
+                    disabled={!restReady}
+                  >
                     查看练习题目 <ChevronRight className="w-4 h-4 ml-1" />
                   </Button>
                 </div>
