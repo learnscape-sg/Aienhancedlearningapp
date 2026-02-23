@@ -2,21 +2,18 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { Badge } from './ui/badge';
-import { ExternalLink, FileText, Globe, Loader2, Search, Trash2, UserPlus, X } from 'lucide-react';
+import { ExternalLink, FileText, Loader2, Search, Trash2, UserPlus, X } from 'lucide-react';
 import { useAuth } from './AuthContext';
 import { getLearnYourWayOrigin } from '@/config/appConfig';
 import {
   assignCourseToClasses,
   createCourse,
   deleteTask,
-  listPublicTasks,
   listTeacherClasses,
   listTeacherTasks,
   restoreTask,
   type ClassItem,
-  updateTaskVisibility,
 } from '@/lib/backendApi';
 
 interface TaskItem {
@@ -42,16 +39,12 @@ const TASK_TYPE_LABELS: Record<string, string> = {
 
 export function TaskManagementPage() {
   const { user } = useAuth();
-  const [tab, setTab] = useState<'my' | 'public'>('my');
   const [myTaskView, setMyTaskView] = useState<'active' | 'recycle'>('active');
   const [searchQuery, setSearchQuery] = useState('');
   const [myTasks, setMyTasks] = useState<TaskItem[]>([]);
-  const [publicTasks, setPublicTasks] = useState<TaskItem[]>([]);
   const [loadingMyTasks, setLoadingMyTasks] = useState(false);
-  const [loadingPublicTasks, setLoadingPublicTasks] = useState(false);
   const [selectedTaskIds, setSelectedTaskIds] = useState<string[]>([]);
   const [deletingTaskId, setDeletingTaskId] = useState<string | null>(null);
-  const [publishingTaskId, setPublishingTaskId] = useState<string | null>(null);
   const [restoringTaskId, setRestoringTaskId] = useState<string | null>(null);
 
   const [assignDialogOpen, setAssignDialogOpen] = useState(false);
@@ -77,18 +70,6 @@ export function TaskManagementPage() {
   }, [myTaskView]);
 
   useEffect(() => {
-    if (!user?.id || tab !== 'public') return;
-    setLoadingPublicTasks(true);
-    listPublicTasks()
-      .then((res) => {
-        const others = (res.tasks ?? []).filter((task) => task.teacherId !== user.id);
-        setPublicTasks(others);
-      })
-      .catch((err) => console.error('Failed to load public tasks:', err))
-      .finally(() => setLoadingPublicTasks(false));
-  }, [tab, user?.id]);
-
-  useEffect(() => {
     if (!user?.id || !assignDialogOpen) return;
     setClassesLoading(true);
     listTeacherClasses(user.id)
@@ -110,14 +91,6 @@ export function TaskManagementPage() {
         `${task.topic || ''} ${task.subject || ''}`.toLowerCase().includes(searchQuery.toLowerCase())
       ),
     [myTasks, searchQuery]
-  );
-
-  const filteredPublicTasks = useMemo(
-    () =>
-      publicTasks.filter((task) =>
-        `${task.topic || ''} ${task.subject || ''}`.toLowerCase().includes(searchQuery.toLowerCase())
-      ),
-    [publicTasks, searchQuery]
   );
 
   const toggleTaskSelection = (taskId: string) => {
@@ -164,23 +137,6 @@ export function TaskManagementPage() {
       alert(err instanceof Error ? err.message : '删除失败，请重试');
     } finally {
       setDeletingTaskId(null);
-    }
-  };
-
-  const handleTaskPublicToggle = async (task: TaskItem) => {
-    if (!user?.id) return;
-    setPublishingTaskId(task.taskId);
-    try {
-      const action = task.isPublic ? 'unpublish' : 'publish';
-      await updateTaskVisibility(task.taskId, user.id, action);
-      setMyTasks((prev) =>
-        prev.map((item) => (item.taskId === task.taskId ? { ...item, isPublic: !task.isPublic } : item))
-      );
-    } catch (err) {
-      console.error('Toggle task visibility failed:', err);
-      alert(err instanceof Error ? err.message : '更新公开状态失败');
-    } finally {
-      setPublishingTaskId(null);
     }
   };
 
@@ -251,7 +207,6 @@ export function TaskManagementPage() {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <Badge variant={task.isPublic ? 'default' : 'secondary'}>{task.isPublic ? '已公开' : '未公开'}</Badge>
           <Button variant="outline" size="sm" onClick={() => handleTaskPreview(task.taskId)}>
             <ExternalLink className="w-4 h-4 mr-1" />
             预览
@@ -266,15 +221,6 @@ export function TaskManagementPage() {
             <>
               {myTaskView === 'active' ? (
                 <>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => handleTaskPublicToggle(task)}
-                    disabled={publishingTaskId === task.taskId}
-                  >
-                    <Globe className="w-4 h-4 mr-1" />
-                    {task.isPublic ? '取消公开' : '公开'}
-                  </Button>
                   <Button
                     variant="ghost"
                     size="sm"
@@ -312,7 +258,7 @@ export function TaskManagementPage() {
     <div className="p-8 space-y-6">
       <div>
         <h1 className="text-3xl font-bold text-gray-900">任务管理</h1>
-        <p className="text-muted-foreground mt-2">管理自建任务与公开任务，并支持打包课程后分配</p>
+        <p className="text-muted-foreground mt-2">管理自建任务，支持打包课程后分配</p>
       </div>
 
       <Card>
@@ -329,16 +275,9 @@ export function TaskManagementPage() {
         </CardContent>
       </Card>
 
-      <Tabs value={tab} onValueChange={(v) => setTab(v as 'my' | 'public')}>
-        <TabsList>
-          <TabsTrigger value="my">自建任务</TabsTrigger>
-          <TabsTrigger value="public">公开任务</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="my" className="mt-4">
-          <Card>
+      <Card className="mt-4">
             <CardHeader>
-              <CardTitle>我创建的任务（含已公开/未公开）</CardTitle>
+              <CardTitle>我创建的任务</CardTitle>
               <CardDescription>
                 {myTaskView === 'active' ? '可选择一个或者多个任务后，“打包课程并分配”' : '回收站（90天内可恢复）'}
               </CardDescription>
@@ -388,35 +327,6 @@ export function TaskManagementPage() {
               )}
             </CardContent>
           </Card>
-        </TabsContent>
-
-        <TabsContent value="public" className="mt-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>他人公开任务</CardTitle>
-              <CardDescription>仅支持预览或分配，不可编辑/删除</CardDescription>
-            </CardHeader>
-            <CardContent>
-              {loadingPublicTasks ? (
-                <div className="flex items-center justify-center py-8">
-                  <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
-                </div>
-              ) : filteredPublicTasks.length === 0 ? (
-                <p className="text-muted-foreground py-8 text-center">暂无他人公开任务</p>
-              ) : (
-                <div className="space-y-2">
-                  {filteredPublicTasks.map((task) =>
-                    renderTaskRow(
-                      { ...task, isPublic: true },
-                      { canManage: false, selectable: false, assignable: true }
-                    )
-                  )}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
 
       {assignDialogOpen && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">

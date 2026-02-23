@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useAuth } from './components/AuthContext';
 import { PublishedCoursesProvider } from './components/PublishedCoursesContext';
+import { TasksProvider } from './components/TasksContext';
 import { LoginPage } from './components/LoginPage';
 import { OnboardingPage } from './components/OnboardingPage';
 import { Sidebar } from './components/Sidebar';
@@ -37,8 +39,10 @@ type AppState = 'login' | 'onboarding' | 'dashboard' | 'chapter' | 'quiz' | 'lea
 
 function AppContent() {
   const { user, loading, login } = useAuth();
+  const [searchParams] = useSearchParams();
   const [appState, setAppState] = useState<AppState>('login');
   const [activeSection, setActiveSection] = useState('learn-your-way');
+  const [initialCourseTab, setInitialCourseTab] = useState<'active' | 'shared' | 'recycle' | undefined>(undefined);
   const [currentChapter, setCurrentChapter] = useState<string | null>(null);
   const [pdfData, setPdfData] = useState<{ fileName: string; grade: string; interests: string[] } | null>(null);
   const [tutorQuestionTrigger, setTutorQuestionTrigger] = useState<{ selectedText: string; context: string; timestamp: number } | null>(null);
@@ -63,24 +67,37 @@ function AppContent() {
     }
   };
 
+  // Read URL params for deep linking (e.g. ?section=courses&courseTab=shared)
+  useEffect(() => {
+    const section = searchParams.get('section');
+    const courseTab = searchParams.get('courseTab');
+    if (section === 'courses' && (courseTab === 'active' || courseTab === 'shared' || courseTab === 'recycle')) {
+      setActiveSection('courses');
+      setInitialCourseTab(courseTab as 'active' | 'shared' | 'recycle');
+    }
+  }, [searchParams]);
+
   // Update app state based on user status
   useEffect(() => {
     if (user) {
-      // Check if user needs onboarding (only for students)
+      const sectionFromUrl = searchParams.get('section');
+      if (sectionFromUrl) {
+        setActiveSection(sectionFromUrl);
+      }
       if (user.role === 'teacher') {
-        setActiveSection('overview');
+        if (!sectionFromUrl) setActiveSection('overview');
         setAppState('dashboard');
       } else {
         const needsOnboarding = !user.grade && (!user.interests || user.interests.length === 0);
         setAppState(needsOnboarding ? 'onboarding' : 'dashboard');
-        if (!needsOnboarding) {
+        if (!needsOnboarding && !sectionFromUrl) {
           setActiveSection('learn-your-way');
         }
       }
     } else {
       setAppState('login');
     }
-  }, [user]);
+  }, [user, searchParams]);
 
   // Loading state
   if (loading) {
@@ -284,7 +301,7 @@ function AppContent() {
           />
         );
       case 'courses':
-        return <CourseManagementPage />;
+        return <CourseManagementPage initialCourseTab={initialCourseTab} />;
       case 'classes':
         return <ClassManagementPage />;
       case 'materials':
@@ -494,9 +511,11 @@ function AppContent() {
 export default function App() {
   return (
     <PublishedCoursesProvider>
-      <div className="size-full">
-        <AppContent />
-      </div>
+      <TasksProvider>
+        <div className="size-full">
+          <AppContent />
+        </div>
+      </TasksProvider>
     </PublishedCoursesProvider>
   );
 }

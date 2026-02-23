@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState, useRef } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from './AuthContext';
 import { usePublishedCourses } from './PublishedCoursesContext';
+import { useTasks, type TaskItem } from './TasksContext';
 import { getLearnYourWayOrigin } from '@/config/appConfig';
 import {
   assignCourseToClasses,
@@ -26,6 +27,7 @@ import {
   listTeacherTasks,
   restoreTask,
   listTeacherCoursesWithStats,
+  listSharedCourses,
   deleteCourse,
   restoreCourse,
   getCourseAssignments,
@@ -33,7 +35,9 @@ import {
   listCourseShares,
   createCourseShare,
   deleteCourseShare,
+  searchTeachers,
   type ClassItem,
+  type TeacherSearchItem,
 } from '@/lib/backendApi';
 
 const TASK_TYPE_LABELS: Record<string, string> = {
@@ -41,17 +45,6 @@ const TASK_TYPE_LABELS: Record<string, string> = {
   guided: '引导型任务',
   autonomous: '自主型任务',
 };
-
-interface TaskItem {
-  taskId: string;
-  subject?: string;
-  grade?: string;
-  topic?: string;
-  taskType?: string;
-  durationMin?: number;
-  isPublic?: boolean;
-  teacherId?: string;
-}
 
 interface Course {
   id: string;
@@ -66,6 +59,8 @@ interface Course {
   deletedAt?: string | null;
   canRestore?: boolean;
   lastUpdated: string;
+  ownerTeacherId?: string;
+  ownerTeacherName?: string;
 }
 
 interface Class extends ClassItem {
@@ -75,20 +70,22 @@ interface Class extends ClassItem {
 interface CourseShareItem {
   id: string;
   target_teacher_id?: string;
+  target_teacher_name?: string;
   share_token?: string;
   permission: 'view' | 'edit';
   expires_at?: string;
 }
 
-export function CourseManagementPage() {
+export function CourseManagementPage({ initialCourseTab }: { initialCourseTab?: 'active' | 'shared' | 'recycle' } = {}) {
   const { user } = useAuth();
   const { publishedCourses, refreshCourses } = usePublishedCourses();
+  const { tasks: myTasks, refreshTasks } = useTasks();
 
   // --- Task state ---
   const [myTaskView, setMyTaskView] = useState<'active' | 'recycle'>('active');
   const [taskSearchQuery, setTaskSearchQuery] = useState('');
-  const [myTasks, setMyTasks] = useState<TaskItem[]>([]);
-  const [loadingMyTasks, setLoadingMyTasks] = useState(false);
+  const [deletedTasks, setDeletedTasks] = useState<TaskItem[]>([]);
+  const [loadingDeletedTasks, setLoadingDeletedTasks] = useState(false);
   const [selectedTaskIds, setSelectedTaskIds] = useState<string[]>([]);
   const [deletingTaskId, setDeletingTaskId] = useState<string | null>(null);
   const [restoringTaskId, setRestoringTaskId] = useState<string | null>(null);
@@ -96,19 +93,27 @@ export function CourseManagementPage() {
   const [selectedTaskIdsForAssign, setSelectedTaskIdsForAssign] = useState<string[]>([]);
 
   // --- Course state ---
-  const [courseView, setCourseView] = useState<'active' | 'recycle'>('active');
+  const [courseView, setCourseView] = useState<'active' | 'shared' | 'recycle'>(
+    initialCourseTab ?? 'active'
+  );
   const [courseSearchQuery, setCourseSearchQuery] = useState('');
   const [selectedFilter, setSelectedFilter] = useState<'all' | 'assigned' | 'unassigned'>('all');
   const [courseAssignDialogOpen, setCourseAssignDialogOpen] = useState(false);
   const [selectedCourse, setSelectedCourse] = useState<Course | null>(null);
   const [deletedCourses, setDeletedCourses] = useState<Course[]>([]);
+  const [sharedCourses, setSharedCourses] = useState<Course[]>([]);
   const [loadingDeletedCourses, setLoadingDeletedCourses] = useState(false);
+  const [loadingSharedCourses, setLoadingSharedCourses] = useState(false);
   const [deletingCourseId, setDeletingCourseId] = useState<string | null>(null);
   const [restoringCourseId, setRestoringCourseId] = useState<string | null>(null);
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
   const [sharingCourse, setSharingCourse] = useState<Course | null>(null);
   const [shareLoading, setShareLoading] = useState(false);
-  const [shareTargetTeacherId, setShareTargetTeacherId] = useState('');
+  const [selectedTeacherForShare, setSelectedTeacherForShare] = useState<TeacherSearchItem | null>(null);
+  const [shareTeacherSearchQuery, setShareTeacherSearchQuery] = useState('');
+  const [shareTeacherSearchResults, setShareTeacherSearchResults] = useState<TeacherSearchItem[]>([]);
+  const [shareTeacherSearchLoading, setShareTeacherSearchLoading] = useState(false);
+  const shareTeacherSearchRef = useRef<HTMLDivElement>(null);
   const [sharePermission, setSharePermission] = useState<'view' | 'edit'>('view');
   const [shareItems, setShareItems] = useState<CourseShareItem[]>([]);
 
@@ -120,17 +125,17 @@ export function CourseManagementPage() {
   const [classesLoading, setClassesLoading] = useState(false);
 
   useEffect(() => {
-    if (!user?.id) return;
-    setLoadingMyTasks(true);
-    listTeacherTasks(user.id, { deletedOnly: myTaskView === 'recycle' })
-      .then((res) => setMyTasks(res.tasks ?? []))
-      .catch((err) => console.error('Failed to load my tasks:', err))
-      .finally(() => setLoadingMyTasks(false));
-  }, [user?.id, myTaskView]);
-
-  useEffect(() => {
     if (myTaskView === 'recycle') setSelectedTaskIds([]);
   }, [myTaskView]);
+
+  useEffect(() => {
+    if (!user?.id || myTaskView !== 'recycle') return;
+    setLoadingDeletedTasks(true);
+    listTeacherTasks(user.id, { deletedOnly: true })
+      .then((res) => setDeletedTasks(res.tasks ?? []))
+      .catch((err) => console.error('Failed to load deleted tasks:', err))
+      .finally(() => setLoadingDeletedTasks(false));
+  }, [user?.id, myTaskView]);
 
   useEffect(() => {
     const dialogOpen = taskAssignDialogOpen || courseAssignDialogOpen;
@@ -174,12 +179,41 @@ export function CourseManagementPage() {
       .finally(() => setLoadingDeletedCourses(false));
   }, [courseView, user?.id]);
 
+  useEffect(() => {
+    if (!user?.id || courseView !== 'shared') return;
+    setLoadingSharedCourses(true);
+    listSharedCourses(user.id)
+      .then((res) => {
+        const mapped: Course[] = (res.courses ?? []).map((row) => ({
+          id: row.id,
+          title: row.title,
+          subject: row.subject,
+          grade: row.grade,
+          students: row.students,
+          completion: row.completion,
+          assignmentStatus: (row.assignmentStatus ?? 'unassigned') as 'assigned' | 'unassigned',
+          visibilityStatus: (row.visibilityStatus ?? 'private') as 'public' | 'private',
+          shareStatus: (row.shareStatus ?? 'none') as 'shared' | 'none',
+          deletedAt: null,
+          canRestore: false,
+          lastUpdated: row.lastUpdated,
+          ownerTeacherId: row.ownerTeacherId,
+          ownerTeacherName: row.ownerTeacherName,
+        }));
+        setSharedCourses(mapped);
+      })
+      .catch((err) => console.error('Failed to load shared courses:', err))
+      .finally(() => setLoadingSharedCourses(false));
+  }, [courseView, user?.id]);
+
+  const activeTasks = myTaskView === 'active' ? myTasks : [];
+  const recycleTaskList = myTaskView === 'recycle' ? deletedTasks : [];
   const filteredMyTasks = useMemo(
     () =>
-      myTasks.filter((task) =>
+      (myTaskView === 'active' ? activeTasks : recycleTaskList).filter((task) =>
         `${task.topic || ''} ${task.subject || ''}`.toLowerCase().includes(taskSearchQuery.toLowerCase())
       ),
-    [myTasks, taskSearchQuery]
+    [myTaskView, activeTasks, recycleTaskList, taskSearchQuery]
   );
 
   const courses: Course[] = publishedCourses.map((c) => ({
@@ -197,13 +231,15 @@ export function CourseManagementPage() {
     lastUpdated: c.lastUpdated,
   }));
 
-  const sourceCourses = courseView === 'active' ? courses : deletedCourses;
+  const sourceCourses =
+    courseView === 'active' ? courses : courseView === 'shared' ? sharedCourses : deletedCourses;
   const filteredCourses = sourceCourses.filter((course) => {
     const matchesSearch =
       course.title.toLowerCase().includes(courseSearchQuery.toLowerCase()) ||
       course.subject.toLowerCase().includes(courseSearchQuery.toLowerCase());
     const matchesFilter =
       courseView === 'recycle' ||
+      courseView === 'shared' ||
       selectedFilter === 'all' ||
       (selectedFilter === 'assigned' && course.assignmentStatus === 'assigned') ||
       (selectedFilter === 'unassigned' && course.assignmentStatus === 'unassigned');
@@ -247,7 +283,7 @@ export function CourseManagementPage() {
     setDeletingTaskId(task.taskId);
     try {
       await deleteTask(task.taskId, user.id);
-      setMyTasks((prev) => prev.filter((t) => t.taskId !== task.taskId));
+      await refreshTasks();
       setSelectedTaskIds((prev) => prev.filter((id) => id !== task.taskId));
     } catch (err) {
       console.error('Delete task failed:', err);
@@ -262,7 +298,8 @@ export function CourseManagementPage() {
     setRestoringTaskId(task.taskId);
     try {
       await restoreTask(task.taskId, user.id);
-      setMyTasks((prev) => prev.filter((t) => t.taskId !== task.taskId));
+      setDeletedTasks((prev) => prev.filter((t) => t.taskId !== task.taskId));
+      await refreshTasks();
       alert('任务已恢复');
     } catch (err) {
       console.error('Restore task failed:', err);
@@ -388,6 +425,9 @@ export function CourseManagementPage() {
     if (!user?.id) return;
     setSharingCourse(course);
     setShareDialogOpen(true);
+    setSelectedTeacherForShare(null);
+    setShareTeacherSearchQuery('');
+    setShareTeacherSearchResults([]);
     setShareLoading(true);
     try {
       const { shares } = await listCourseShares(course.id, user.id);
@@ -400,18 +440,52 @@ export function CourseManagementPage() {
     }
   };
 
+  useEffect(() => {
+    if (!shareDialogOpen || !shareTeacherSearchQuery.trim()) {
+      setShareTeacherSearchResults([]);
+      return;
+    }
+    const timer = setTimeout(async () => {
+      setShareTeacherSearchLoading(true);
+      try {
+        const { teachers } = await searchTeachers(shareTeacherSearchQuery.trim());
+        setShareTeacherSearchResults(
+          teachers.filter((t) => t.id !== user?.id)
+        );
+      } catch {
+        setShareTeacherSearchResults([]);
+      } finally {
+        setShareTeacherSearchLoading(false);
+      }
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [shareDialogOpen, shareTeacherSearchQuery, user?.id]);
+
+  useEffect(() => {
+    if (!shareDialogOpen || shareTeacherSearchResults.length === 0) return;
+    const handler = (e: MouseEvent) => {
+      if (shareTeacherSearchRef.current && !shareTeacherSearchRef.current.contains(e.target as Node)) {
+        setShareTeacherSearchResults([]);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [shareDialogOpen, shareTeacherSearchResults.length]);
+
   const handleCreateAccountShare = async () => {
-    if (!user?.id || !sharingCourse || !shareTargetTeacherId.trim()) return;
+    if (!user?.id || !sharingCourse || !selectedTeacherForShare?.id) return;
     try {
       await createCourseShare({
         courseId: sharingCourse.id,
         ownerTeacherId: user.id,
-        targetTeacherId: shareTargetTeacherId.trim(),
+        targetTeacherId: selectedTeacherForShare.id,
         permission: sharePermission,
       });
       const { shares } = await listCourseShares(sharingCourse.id, user.id);
       setShareItems(shares as CourseShareItem[]);
-      setShareTargetTeacherId('');
+      setSelectedTeacherForShare(null);
+      setShareTeacherSearchQuery('');
+      setShareTeacherSearchResults([]);
     } catch (err) {
       console.error('Create share failed:', err);
       alert(err instanceof Error ? err.message : '创建分享失败');
@@ -477,7 +551,6 @@ export function CourseManagementPage() {
             </div>
             <div className="flex flex-wrap items-center gap-2 mt-1 text-sm text-muted-foreground">
               <span>{[task.subject, task.grade].filter(Boolean).join(' · ') || task.taskId.slice(0, 8)}</span>
-              <Badge variant={task.isPublic ? 'default' : 'secondary'}>{task.isPublic ? '已公开' : '未公开'}</Badge>
             </div>
           </div>
         </div>
@@ -542,10 +615,10 @@ export function CourseManagementPage() {
             <Badge variant={course.assignmentStatus === 'assigned' ? 'default' : 'secondary'}>
               {course.assignmentStatus === 'assigned' ? '已分配' : '未分配'}
             </Badge>
-            <Badge variant={course.visibilityStatus === 'public' ? 'default' : 'secondary'}>
-              {course.visibilityStatus === 'public' ? '已公开' : '未公开'}
-            </Badge>
-            {canManage && (
+            {courseView === 'shared' && course.ownerTeacherId ? (
+              <Badge variant="outline">分享自 {course.ownerTeacherName ?? course.ownerTeacherId}</Badge>
+            ) : null}
+            {canManage && courseView === 'active' && (
               <Badge variant={course.shareStatus === 'shared' ? 'default' : 'secondary'}>
                 {course.shareStatus === 'shared' ? '已分享' : '未分享'}
               </Badge>
@@ -564,7 +637,12 @@ export function CourseManagementPage() {
           <ExternalLink className="w-4 h-4 mr-1" />
           预览
         </Button>
-        {canManage ? (
+        {courseView === 'shared' ? (
+          <Button variant="ghost" size="sm" onClick={() => openCourseAssignDialog(course)}>
+            <UserPlus className="w-4 h-4 mr-1" />
+            分配
+          </Button>
+        ) : canManage ? (
           courseView === 'active' ? (
             <>
               <Button variant="ghost" size="sm" onClick={() => openCourseAssignDialog(course)}>
@@ -629,7 +707,7 @@ export function CourseManagementPage() {
             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
                 <div className="flex flex-wrap gap-2">
                   <Button variant={myTaskView === 'active' ? 'default' : 'outline'} size="sm" onClick={() => setMyTaskView('active')}>
-                    任务
+                    我的任务
                   </Button>
                 </div>
                 <div className="flex items-center gap-2">
@@ -647,12 +725,14 @@ export function CourseManagementPage() {
                   </Button>
                 </div>
               </div>
-              {loadingMyTasks ? (
+              {myTaskView === 'recycle' && loadingDeletedTasks ? (
                 <div className="flex justify-center py-8">
                   <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
                 </div>
               ) : filteredMyTasks.length === 0 ? (
-                <p className="text-muted-foreground py-8 text-center">暂无任务</p>
+                <p className="text-muted-foreground py-8 text-center">
+                  {myTaskView === 'active' ? '暂无任务' : '回收站暂无任务'}
+                </p>
               ) : (
                 <>
                   {myTaskView === 'active' && (
@@ -699,7 +779,10 @@ export function CourseManagementPage() {
             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
                 <div className="flex flex-wrap gap-2">
                   <Button variant={courseView === 'active' ? 'default' : 'outline'} size="sm" onClick={() => setCourseView('active')}>
-                    课程
+                    我的课程
+                  </Button>
+                  <Button variant={courseView === 'shared' ? 'default' : 'outline'} size="sm" onClick={() => setCourseView('shared')}>
+                    分享给我的
                   </Button>
                   {courseView === 'active' ? (
                     <>
@@ -730,13 +813,13 @@ export function CourseManagementPage() {
                   </Button>
                 </div>
               </div>
-              {courseView === 'recycle' && loadingDeletedCourses ? (
+              {(courseView === 'recycle' && loadingDeletedCourses) || (courseView === 'shared' && loadingSharedCourses) ? (
                 <div className="flex justify-center py-8">
                   <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
                 </div>
               ) : filteredCourses.length === 0 ? (
                 <p className="text-muted-foreground py-8 text-center">
-                  {courseView === 'active' ? '暂无课程' : '回收站暂无课程'}
+                  {courseView === 'active' ? '暂无课程' : courseView === 'shared' ? '暂无分享给我的课程' : '回收站暂无课程'}
                 </p>
               ) : (
                 <div className="space-y-3 max-h-[280px] overflow-y-auto">
@@ -910,21 +993,58 @@ export function CourseManagementPage() {
               </div>
             </CardHeader>
             <CardContent className="p-6 space-y-4 overflow-y-auto">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-                <Input
-                  placeholder="目标教师ID"
-                  value={shareTargetTeacherId}
-                  onChange={(e) => setShareTargetTeacherId(e.target.value)}
-                />
+              <div className="flex flex-wrap items-end gap-2">
+                <div className="relative flex-1 min-w-[200px]" ref={shareTeacherSearchRef}>
+                  {selectedTeacherForShare ? (
+                    <div className="flex items-center gap-2 px-3 py-2 border rounded-md bg-muted/50">
+                      <span className="text-sm">已选择：{selectedTeacherForShare.name}</span>
+                      <Button variant="ghost" size="sm" onClick={() => setSelectedTeacherForShare(null)} className="h-6 px-2 text-muted-foreground">
+                        清除
+                      </Button>
+                    </div>
+                  ) : (
+                    <>
+                      <Input
+                        placeholder="搜索教师姓名或邮箱..."
+                        value={shareTeacherSearchQuery}
+                        onChange={(e) => setShareTeacherSearchQuery(e.target.value)}
+                        className="pr-8"
+                      />
+                      {shareTeacherSearchLoading && (
+                        <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 animate-spin text-muted-foreground" />
+                      )}
+                      {shareTeacherSearchResults.length > 0 && !shareTeacherSearchLoading && (
+                        <div className="absolute top-full left-0 right-0 mt-1 border rounded-md bg-background shadow-lg z-10 max-h-48 overflow-y-auto">
+                          {shareTeacherSearchResults.map((t) => (
+                            <button
+                              key={t.id}
+                              type="button"
+                              className="w-full px-3 py-2 text-left text-sm hover:bg-muted transition-colors"
+                              onClick={() => {
+                                setSelectedTeacherForShare(t);
+                                setShareTeacherSearchQuery('');
+                                setShareTeacherSearchResults([]);
+                              }}
+                            >
+                              {t.name}{t.email ? ` (${t.email})` : ''}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
                 <select
-                  className="border rounded-md px-3 py-2 text-sm"
+                  className="border rounded-md px-3 py-2 text-sm h-10"
                   value={sharePermission}
                   onChange={(e) => setSharePermission(e.target.value as 'view' | 'edit')}
                 >
                   <option value="view">view（可预览/分配）</option>
                   <option value="edit">edit（可编辑）</option>
                 </select>
-                <Button onClick={handleCreateAccountShare}>按账号分享</Button>
+                <Button onClick={handleCreateAccountShare} disabled={!selectedTeacherForShare}>
+                  按账号分享
+                </Button>
               </div>
               <div className="flex gap-2">
                 <Button variant="outline" onClick={handleCreateLinkShare}>
@@ -946,7 +1066,7 @@ export function CourseManagementPage() {
                       <div key={item.id} className="flex items-center justify-between border rounded-md p-3">
                         <div className="text-sm">
                           <div>
-                            {item.target_teacher_id ? `教师：${item.target_teacher_id}` : `链接：${item.share_token}`}
+                            {item.target_teacher_id ? `教师：${item.target_teacher_name ?? item.target_teacher_id}` : `链接：${item.share_token}`}
                           </div>
                           <div className="text-muted-foreground">权限：{item.permission}{item.expires_at ? ` · 过期：${item.expires_at}` : ''}</div>
                         </div>

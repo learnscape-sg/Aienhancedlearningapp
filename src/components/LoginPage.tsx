@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
@@ -14,6 +14,8 @@ interface LoginPageProps {
 }
 
 export function LoginPage({ onSuccess, onQuickExperience }: LoginPageProps) {
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
@@ -22,13 +24,22 @@ export function LoginPage({ onSuccess, onQuickExperience }: LoginPageProps) {
   const [error, setError] = useState('');
   const { login, register } = useAuth();
 
+  const redirectTo = searchParams.get('redirect');
+  const handlePostAuth = () => {
+    if (redirectTo && redirectTo.startsWith('/')) {
+      navigate(redirectTo);
+    } else {
+      onSuccess();
+    }
+  };
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
     setError('');
     try {
       await login(email, password);
-      onSuccess();
+      handlePostAuth();
     } catch (error: any) {
       console.error('Login failed:', error);
       setError(error.message || 'Login failed');
@@ -43,7 +54,7 @@ export function LoginPage({ onSuccess, onQuickExperience }: LoginPageProps) {
     setError('');
     try {
       await register(email, password, name, role);
-      onSuccess();
+      handlePostAuth();
     } catch (error: any) {
       console.error('Registration failed:', error);
       setError(error.message || 'Registration failed');

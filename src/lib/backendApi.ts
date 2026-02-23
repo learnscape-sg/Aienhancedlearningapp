@@ -424,6 +424,23 @@ export interface TeacherCourseItem {
   deletedAt?: string | null;
   canRestore?: boolean;
   lastUpdated: string;
+  ownerTeacherId?: string;
+  ownerTeacherName?: string;
+}
+
+export interface TeacherSearchItem {
+  id: string;
+  name: string;
+  email?: string;
+}
+
+export async function searchTeachers(query: string): Promise<{ teachers: TeacherSearchItem[] }> {
+  const qs = new URLSearchParams({ q: query });
+  qs.set('limit', '20');
+  return apiCall<{ teachers: TeacherSearchItem[] }>(
+    `/api/teachers/search?${qs.toString()}`,
+    { method: 'GET' }
+  );
 }
 
 export async function listTeacherCoursesWithStats(
@@ -473,6 +490,7 @@ export async function listCourseShares(
     course_id: string;
     owner_teacher_id: string;
     target_teacher_id?: string;
+    target_teacher_name?: string;
     share_token?: string;
     permission: 'view' | 'edit';
     can_preview: boolean;
@@ -505,6 +523,33 @@ export async function deleteCourseShare(shareId: string, ownerTeacherId: string)
     `/api/course-shares?id=${encodeURIComponent(shareId)}&ownerTeacherId=${encodeURIComponent(ownerTeacherId)}`,
     { method: 'DELETE' }
   );
+}
+
+// --- Shared courses (分享给我的) ---
+export async function listSharedCourses(teacherId: string): Promise<{ courses: TeacherCourseItem[] }> {
+  return apiCall<{ courses: TeacherCourseItem[] }>(
+    `/api/shared-courses?teacherId=${encodeURIComponent(teacherId)}`,
+    { method: 'GET' }
+  );
+}
+
+export async function resolveShareToken(
+  shareToken: string
+): Promise<{ courseId: string; title: string; subject: string; grade: string; ownerTeacherId: string }> {
+  return apiCall(
+    `/api/shared-courses/resolve?shareToken=${encodeURIComponent(shareToken)}`,
+    { method: 'GET' }
+  );
+}
+
+export async function acceptShareLink(
+  shareToken: string,
+  teacherId: string
+): Promise<{ courseId: string; success: boolean; alreadyAccepted?: boolean }> {
+  return apiCall('/api/shared-courses/accept', {
+    method: 'POST',
+    body: JSON.stringify({ shareToken, teacherId }),
+  });
 }
 
 // --- Chat & Exit Ticket (StudentConsole) ---

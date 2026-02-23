@@ -29,6 +29,7 @@ import {
   saveTask,
 } from '../lib/backendApi';
 import { useAuth } from './AuthContext';
+import { useTasks } from './TasksContext';
 import {
   getTeacherPreferencesFromProfile,
   prefSubjectIdToDisplay,
@@ -225,6 +226,7 @@ const TASK_TYPES = [
 
 export function TeachingResourcesPage() {
   const { user, preferences } = useAuth();
+  const { refreshTasks } = useTasks();
   const [step, setStep] = useState(0);
   const [maxStepReached, setMaxStepReached] = useState(0);
   const [taskType, setTaskType] = useState<'mastery' | 'guided' | 'autonomous'>('mastery');
@@ -469,6 +471,7 @@ export function TeachingResourcesPage() {
       });
       const result = await createCourse({ taskIds: [taskId] }, user?.id);
       setPreviewUrl(`${window.location.origin}/course/${result.courseId}`);
+      await refreshTasks();
 
       // 3. Stay on step 6; user clicks button to proceed
       setTaskGenerating(false);

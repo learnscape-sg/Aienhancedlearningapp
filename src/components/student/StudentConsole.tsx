@@ -318,28 +318,26 @@ const StudentConsole: React.FC<StudentConsoleProps> = ({ plan, onComplete, onApi
   const [finalMindMapCode, setFinalMindMapCode] = useState<string | null>(null);
   const [learningLog, setLearningLog] = useState<string>('');
   
-  // Student Name State (from localStorage or default to "您")
+  // Student Name State: use logged-in user name, then localStorage, else "您"
   const [studentName, setStudentName] = useState<string>(() => {
     if (typeof window !== 'undefined') {
       return localStorage.getItem('studentName') || '您';
     }
     return '您';
   });
-  
-  // AI Tutor Personalization State
-  const [tutorName, setTutorName] = useState<string>(() => {
-    if (typeof window !== 'undefined') {
-      return localStorage.getItem('tutorName') || '';
+
+  useEffect(() => {
+    if (user?.name?.trim()) {
+      setStudentName(user.name.trim());
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('studentName', user.name.trim());
+      }
     }
-    return '';
-  });
-  
-  const [tutorAvatar, setTutorAvatar] = useState<string>(() => {
-    if (typeof window !== 'undefined') {
-      return localStorage.getItem('tutorAvatar') || '🤖';
-    }
-    return '🤖';
-  });
+  }, [user?.name]);
+
+  // AI Tutor: 使用默认名字，后续再定义个性化
+  const tutorName = 'AI导师';
+  const tutorAvatar = '🤖';
   
   // Avatar animation state
   const [avatarState, setAvatarState] = useState<AvatarState>('idle');
@@ -476,33 +474,6 @@ const StudentConsole: React.FC<StudentConsoleProps> = ({ plan, onComplete, onApi
       });
     }, 200);
   }, [hasUserInteracted, autoPlayVoice, voiceEnabled, voiceServiceAvailable, playVoice]);
-  
-  // Name Input Dialog State
-  const [showNameDialog, setShowNameDialog] = useState<boolean>(() => {
-    if (typeof window !== 'undefined') {
-      return !localStorage.getItem('studentName');
-    }
-    return false;
-  });
-  const [nameInput, setNameInput] = useState<string>('');
-  
-  const handleSaveName = () => {
-    const trimmedName = nameInput.trim();
-    if (trimmedName) {
-      setStudentName(trimmedName);
-      if (typeof window !== 'undefined') {
-        localStorage.setItem('studentName', trimmedName);
-        // 保存AI导师设置
-        if (tutorName) {
-          localStorage.setItem('tutorName', tutorName);
-        }
-        if (tutorAvatar) {
-          localStorage.setItem('tutorAvatar', tutorAvatar);
-        }
-      }
-      setShowNameDialog(false);
-    }
-  };
 
   const mindMapRef = useRef<HTMLDivElement>(null);
 
@@ -1873,98 +1844,6 @@ CRITICAL TASK COMPLETION PROTOCOL:
   };
 
   // --- Renderers ---
-
-  // 0. Name Input Dialog (shown before learning starts)
-  if (showNameDialog) {
-    return (
-      <div className="relative min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6 text-slate-800 font-sans">
-        <div className="bg-white p-8 rounded-3xl border border-slate-200 shadow-xl max-w-md w-full animate-fade-in-up">
-          <div className="text-center mb-6">
-            <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-cyan-100 mb-4 border border-cyan-200">
-              <BookOpen size={32} className="text-cyan-600" />
-            </div>
-            <h2 className="text-2xl font-bold text-slate-900 mb-2">欢迎开始学习！</h2>
-            <p className="text-slate-500 text-sm">请告诉我们您的名字或昵称，让我们更好地为您服务</p>
-          </div>
-          
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">您的名字或昵称</label>
-              <input
-                type="text"
-                value={nameInput}
-                onChange={(e) => setNameInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && nameInput.trim()) {
-                    handleSaveName();
-                  }
-                }}
-                placeholder="请输入您的名字或昵称..."
-                className="w-full px-4 py-3 bg-slate-50 border border-slate-300 rounded-xl text-slate-800 focus:outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20 transition-all"
-                autoFocus
-              />
-            </div>
-            
-            {/* AI导师个性化设置 */}
-            <div className="border-t border-slate-200 pt-4 mt-4">
-              <div className="flex items-center gap-2 mb-3">
-                <Sparkles size={16} className="text-purple-600" />
-                <label className="block text-sm font-medium text-slate-700">个性化AI导师（可选）</label>
-              </div>
-              
-              <div className="space-y-3">
-                <div>
-                  <label className="block text-xs text-slate-500 mb-1.5">AI导师的名字</label>
-                  <input
-                    type="text"
-                    value={tutorName}
-                    onChange={(e) => setTutorName(e.target.value)}
-                    placeholder="例如：小助手、学习伙伴..."
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-slate-800 text-sm focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 transition-all"
-                  />
-                </div>
-                
-                <div>
-                  <label className="block text-xs text-slate-500 mb-1.5">AI导师头像（emoji）</label>
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="text"
-                      value={tutorAvatar}
-                      onChange={(e) => setTutorAvatar(e.target.value || '🤖')}
-                      placeholder="🤖"
-                      maxLength={2}
-                      className="w-16 px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-slate-800 text-lg text-center focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 transition-all"
-                    />
-                    <div className="flex-1 text-xs text-slate-400">
-                      输入一个emoji表情作为头像
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-            
-            <button
-              onClick={handleSaveName}
-              disabled={!nameInput.trim()}
-              className="w-full px-6 py-3 bg-cyan-600 hover:bg-cyan-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-bold rounded-xl transition-all shadow-lg hover:shadow-cyan-600/30 flex items-center justify-center gap-2"
-            >
-              <CheckCircle size={20} /> 开始学习
-            </button>
-            
-            <button
-              onClick={() => {
-                setStudentName('您');
-                setShowNameDialog(false);
-              }}
-              className="w-full px-6 py-2 text-slate-500 hover:text-slate-700 text-sm transition-colors"
-            >
-              跳过，直接开始
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
 
   // 1. Loading Screen (Report Generation)
   if (showReport && !exitData) {
