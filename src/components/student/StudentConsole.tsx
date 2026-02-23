@@ -1301,7 +1301,10 @@ ${isMathOrScience ? `
           userMsg.text,
           dynamicSystemInstruction,
           'zh',
-          images && images.length > 0 ? { images } : undefined
+          {
+            ...(images && images.length > 0 ? { images } : {}),
+            ...(currentTask.tutorConfig.twinId ? { twinId: currentTask.tutorConfig.twinId } : {}),
+          }
         );
         setMessages(prev => [...prev, { role: 'model', text: responseText, timestamp }]);
         // Avatar state will be automatically set to 'speaking' by useEffect when new message is added
@@ -1500,7 +1503,8 @@ CRITICAL TASK COMPLETION PROTOCOL:
           messages,
           '系统事件：学生点击了“下一步”',
           transitionInstruction,
-          'zh'
+          'zh',
+          currentTask.tutorConfig.twinId ? { twinId: currentTask.tutorConfig.twinId } : undefined
         );
         const ts = Date.now();
         setMessages(prev => [...prev, { role: 'model', text: transitionText, timestamp: ts }]);

@@ -66,6 +66,7 @@ export interface SystemTask {
   tutorConfig: {
     systemInstruction: string;
     tone: string;
+    twinId?: string;
   };
   evaluationCriteria: string;
 }

@@ -552,13 +552,233 @@ export async function acceptShareLink(
   });
 }
 
+// --- Teacher digital twins ---
+export interface TeacherDigitalTwin {
+  id: string;
+  teacherId: string;
+  name: string;
+  avatar?: string;
+  persona: string;
+  teachingStyle: string;
+  sampleQa: Array<{ q: string; a: string }>;
+  externalLinks: Array<{ title: string; url: string }>;
+  shareToken?: string;
+  secondMeRoleId?: string;
+  secondMeEndpoint?: string;
+  secondMeEnabled?: boolean;
+  isOwner?: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface TwinMemoryItem {
+  id: string;
+  fileName: string;
+  contentType: string;
+  fileSize: number;
+  indexed: boolean;
+  chunksCount: number;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface TwinShareItem {
+  id: string;
+  twin_id: string;
+  owner_teacher_id: string;
+  target_teacher_id?: string;
+  target_teacher_name?: string;
+  share_token?: string;
+  permission: 'view' | 'use';
+  created_at: string;
+}
+
+export async function listTeacherDigitalTwins(
+  teacherId: string,
+  options?: { includeShared?: boolean }
+): Promise<{ twins: TeacherDigitalTwin[] }> {
+  const qs = new URLSearchParams({ teacherId });
+  if (options?.includeShared === false) qs.set('includeShared', 'false');
+  return apiCall<{ twins: TeacherDigitalTwin[] }>(`/api/digital-twins?${qs.toString()}`, {
+    method: 'GET',
+  });
+}
+
+export async function getDigitalTwin(
+  twinId: string,
+  teacherId?: string
+): Promise<TeacherDigitalTwin> {
+  const qs = new URLSearchParams();
+  if (teacherId) qs.set('teacherId', teacherId);
+  const endpoint = qs.toString()
+    ? `/api/digital-twins/${encodeURIComponent(twinId)}?${qs.toString()}`
+    : `/api/digital-twins/${encodeURIComponent(twinId)}`;
+  return apiCall<TeacherDigitalTwin>(endpoint, { method: 'GET' });
+}
+
+export async function createDigitalTwin(params: {
+  teacherId: string;
+  name: string;
+  avatar?: string;
+  persona: string;
+  teachingStyle?: string;
+  sampleQa?: Array<{ q: string; a: string }>;
+  externalLinks?: Array<{ title: string; url: string }>;
+  secondMeRoleId?: string;
+  secondMeEndpoint?: string;
+  secondMeEnabled?: boolean;
+}): Promise<{ id: string; shareToken?: string }> {
+  return apiCall('/api/digital-twins', {
+    method: 'POST',
+    body: JSON.stringify(params),
+  });
+}
+
+export async function updateDigitalTwin(
+  twinId: string,
+  params: {
+    teacherId: string;
+    name?: string;
+    avatar?: string;
+    persona?: string;
+    teachingStyle?: string;
+    sampleQa?: Array<{ q: string; a: string }>;
+    externalLinks?: Array<{ title: string; url: string }>;
+    secondMeRoleId?: string | null;
+    secondMeEndpoint?: string | null;
+    secondMeEnabled?: boolean;
+  }
+): Promise<{ success: boolean }> {
+  return apiCall(`/api/digital-twins/${encodeURIComponent(twinId)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(params),
+  });
+}
+
+export async function deleteDigitalTwin(
+  twinId: string,
+  teacherId: string
+): Promise<{ success: boolean }> {
+  return apiCall(
+    `/api/digital-twins/${encodeURIComponent(twinId)}?teacherId=${encodeURIComponent(teacherId)}`,
+    { method: 'DELETE' }
+  );
+}
+
+export async function listDigitalTwinShares(
+  twinId: string,
+  ownerTeacherId: string
+): Promise<{ shares: TwinShareItem[] }> {
+  return apiCall<{ shares: TwinShareItem[] }>(
+    `/api/digital-twins/share?twinId=${encodeURIComponent(twinId)}&ownerTeacherId=${encodeURIComponent(ownerTeacherId)}`,
+    { method: 'GET' }
+  );
+}
+
+export async function createDigitalTwinShare(params: {
+  twinId: string;
+  ownerTeacherId: string;
+  targetTeacherId?: string;
+  permission?: 'view' | 'use';
+  createLinkShare?: boolean;
+}): Promise<{ id: string; shareToken?: string; permission: 'view' | 'use'; targetTeacherId?: string | null }> {
+  return apiCall('/api/digital-twins/share', {
+    method: 'POST',
+    body: JSON.stringify(params),
+  });
+}
+
+export async function deleteDigitalTwinShare(
+  shareId: string,
+  ownerTeacherId: string
+): Promise<{ success: boolean }> {
+  return apiCall(
+    `/api/digital-twins/share?id=${encodeURIComponent(shareId)}&ownerTeacherId=${encodeURIComponent(ownerTeacherId)}`,
+    { method: 'DELETE' }
+  );
+}
+
+export async function resolveDigitalTwinShareToken(
+  shareToken: string
+): Promise<{
+  twinId: string;
+  name: string;
+  avatar?: string;
+  persona: string;
+  teachingStyle: string;
+  ownerTeacherId: string;
+}> {
+  return apiCall(
+    `/api/digital-twins/resolve?shareToken=${encodeURIComponent(shareToken)}`,
+    { method: 'GET' }
+  );
+}
+
+export async function listTwinMemories(
+  twinId: string,
+  teacherId: string
+): Promise<{ memories: TwinMemoryItem[] }> {
+  return apiCall<{ memories: TwinMemoryItem[] }>(
+    `/api/digital-twins/${encodeURIComponent(twinId)}/memories?teacherId=${encodeURIComponent(teacherId)}`,
+    { method: 'GET' }
+  );
+}
+
+export async function retrieveTwinMemoryChunks(
+  twinId: string,
+  teacherId: string,
+  query: string,
+  topK = 5
+): Promise<{ chunks: Array<{ text: string; score: number; source: string }> }> {
+  const qs = new URLSearchParams({
+    teacherId,
+    q: query,
+    topK: String(topK),
+  });
+  return apiCall(`/api/digital-twins/${encodeURIComponent(twinId)}/memories?${qs.toString()}`, {
+    method: 'GET',
+  });
+}
+
+export async function uploadTwinMemory(
+  twinId: string,
+  teacherId: string,
+  file: File
+): Promise<{ id: string; chunksCount: number; indexed: boolean }> {
+  const base = getBaseUrl();
+  const form = new FormData();
+  form.append('teacherId', teacherId);
+  form.append('file', file);
+  const response = await fetch(`${base}/api/digital-twins/${encodeURIComponent(twinId)}/memories`, {
+    method: 'POST',
+    body: form,
+  });
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.error || `Upload failed with status ${response.status}`);
+  }
+  const json = await response.json();
+  return json.data as { id: string; chunksCount: number; indexed: boolean };
+}
+
+export async function deleteTwinMemory(
+  twinId: string,
+  teacherId: string,
+  memoryId: string
+): Promise<{ success: boolean }> {
+  return apiCall(
+    `/api/digital-twins/${encodeURIComponent(twinId)}/memories?teacherId=${encodeURIComponent(teacherId)}&memoryId=${encodeURIComponent(memoryId)}`,
+    { method: 'DELETE' }
+  );
+}
+
 // --- Chat & Exit Ticket (StudentConsole) ---
 export async function sendChatMessage(
   history: ChatMessage[],
   newMessage: string,
   systemInstruction: string,
   language: Language,
-  options?: { images?: string[] }
+  options?: { images?: string[]; twinId?: string; useSecondMe?: boolean }
 ): Promise<string> {
   try {
     const body: Record<string, unknown> = {
@@ -569,6 +789,12 @@ export async function sendChatMessage(
     };
     if (options?.images && options.images.length > 0) {
       body.images = options.images;
+    }
+    if (options?.twinId) {
+      body.twinId = options.twinId;
+    }
+    if (options?.useSecondMe != null) {
+      body.useSecondMe = options.useSecondMe;
     }
     return await apiCall<string>('/api/chat', {
       method: 'POST',

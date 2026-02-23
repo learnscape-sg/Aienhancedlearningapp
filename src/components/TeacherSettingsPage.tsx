@@ -22,6 +22,7 @@ import {
   getTeacherPreferencesFromProfile,
   GRADE_OPTIONS,
 } from '../hooks/useTeacherPreferences';
+import { TeacherDigitalTwinList } from './TeacherDigitalTwinList';
 
 const subjects = [
   { id: 'math', name: '数学' },
@@ -241,6 +242,9 @@ export function TeacherSettingsPage() {
 
           {/* 账户信息 */}
           <AccountInfoCard userId={user.id} roleLabel="教师" />
+
+          {/* 数字分身 */}
+          <TeacherDigitalTwinList />
 
           {/* 修改密码 */}
           <ChangePasswordCard onChangePassword={changePassword} />

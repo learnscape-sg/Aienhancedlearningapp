@@ -97,7 +97,6 @@ export function CourseManagementPage({ initialCourseTab }: { initialCourseTab?: 
     initialCourseTab ?? 'active'
   );
   const [courseSearchQuery, setCourseSearchQuery] = useState('');
-  const [selectedFilter, setSelectedFilter] = useState<'all' | 'assigned' | 'unassigned'>('all');
   const [courseAssignDialogOpen, setCourseAssignDialogOpen] = useState(false);
   const [selectedCourse, setSelectedCourse] = useState<Course | null>(null);
   const [deletedCourses, setDeletedCourses] = useState<Course[]>([]);
@@ -234,16 +233,10 @@ export function CourseManagementPage({ initialCourseTab }: { initialCourseTab?: 
   const sourceCourses =
     courseView === 'active' ? courses : courseView === 'shared' ? sharedCourses : deletedCourses;
   const filteredCourses = sourceCourses.filter((course) => {
-    const matchesSearch =
+    return (
       course.title.toLowerCase().includes(courseSearchQuery.toLowerCase()) ||
-      course.subject.toLowerCase().includes(courseSearchQuery.toLowerCase());
-    const matchesFilter =
-      courseView === 'recycle' ||
-      courseView === 'shared' ||
-      selectedFilter === 'all' ||
-      (selectedFilter === 'assigned' && course.assignmentStatus === 'assigned') ||
-      (selectedFilter === 'unassigned' && course.assignmentStatus === 'unassigned');
-    return matchesSearch && matchesFilter;
+      course.subject.toLowerCase().includes(courseSearchQuery.toLowerCase())
+    );
   });
 
   const taskDisplayName = (task: TaskItem) =>
@@ -784,19 +777,6 @@ export function CourseManagementPage({ initialCourseTab }: { initialCourseTab?: 
                   <Button variant={courseView === 'shared' ? 'default' : 'outline'} size="sm" onClick={() => setCourseView('shared')}>
                     分享给我的
                   </Button>
-                  {courseView === 'active' ? (
-                    <>
-                      <Button variant={selectedFilter === 'all' ? 'default' : 'outline'} size="sm" onClick={() => setSelectedFilter('all')}>
-                        全部
-                      </Button>
-                      <Button variant={selectedFilter === 'assigned' ? 'default' : 'outline'} size="sm" onClick={() => setSelectedFilter('assigned')}>
-                        已分配
-                      </Button>
-                      <Button variant={selectedFilter === 'unassigned' ? 'default' : 'outline'} size="sm" onClick={() => setSelectedFilter('unassigned')}>
-                        未分配
-                      </Button>
-                    </>
-                  ) : null}
                 </div>
                 <div className="flex items-center gap-2">
                   <div className="relative md:w-64">

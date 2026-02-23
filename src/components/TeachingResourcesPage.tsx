@@ -27,6 +27,8 @@ import {
   generateTaskDesign,
   createCourse,
   saveTask,
+  listTeacherDigitalTwins,
+  type TeacherDigitalTwin,
 } from '../lib/backendApi';
 import { useAuth } from './AuthContext';
 import { useTasks } from './TasksContext';
@@ -160,6 +162,7 @@ function buildSystemTask(opts: {
   exitTicketQuestion: GeneratedQuestion | null;
   taskDesignJson: Record<string, unknown> | null;
   taskDesignMarkdown: string | null;
+  twinId?: string;
 }): SystemTask {
   const videoUrl = opts.selectedVideoItem?.url
     ?? (opts.selectedVideoItem?.id
@@ -203,6 +206,7 @@ function buildSystemTask(opts: {
         `请引导学生逐步完成任务，鼓励他们思考并给出提示，但不要直接给出答案。`,
       ].join('\n'),
       tone: '鼓励、耐心、引导式',
+      twinId: opts.twinId,
     },
     evaluationCriteria: [
       `关键要点：能正确填写 ${opts.keyIdeas.length} 条要点中的核心术语`,
@@ -227,6 +231,8 @@ const TASK_TYPES = [
 export function TeachingResourcesPage() {
   const { user, preferences } = useAuth();
   const { refreshTasks } = useTasks();
+  const [availableTwins, setAvailableTwins] = useState<TeacherDigitalTwin[]>([]);
+  const [selectedTwinId, setSelectedTwinId] = useState<string>('');
   const [step, setStep] = useState(0);
   const [maxStepReached, setMaxStepReached] = useState(0);
   const [taskType, setTaskType] = useState<'mastery' | 'guided' | 'autonomous'>('mastery');
@@ -266,6 +272,13 @@ export function TeachingResourcesPage() {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [generateError, setGenerateError] = useState<string | null>(null);
   const [restReady, setRestReady] = useState(false);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    listTeacherDigitalTwins(user.id, { includeShared: true })
+      .then((res) => setAvailableTwins(res.twins ?? []))
+      .catch((err) => console.error('Failed to load digital twins:', err));
+  }, [user?.id]);
 
   const hasPrefilledRef = useRef(false);
   useEffect(() => {
@@ -456,6 +469,7 @@ export function TeachingResourcesPage() {
         exitTicketQuestion,
         taskDesignJson: taskDesignJsonRef.current,
         taskDesignMarkdown: taskDesignMarkdownRef.current,
+        twinId: selectedTwinId || undefined,
       });
       setGeneratedTask(task);
 
@@ -674,6 +688,23 @@ export function TeachingResourcesPage() {
                   <option value="">请选择</option>
                   {DIFFICULTY_OPTIONS.map((d) => (
                     <option key={d} value={d}>{d}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="text-sm font-medium text-muted-foreground block mb-1">
+                  数字分身 <span className="text-xs text-muted-foreground">（可选）</span>
+                </label>
+                <select
+                  value={selectedTwinId}
+                  onChange={(e) => setSelectedTwinId(e.target.value)}
+                  className="w-full h-11 rounded-md border border-input bg-background px-3 py-2 text-sm"
+                >
+                  <option value="">默认 AI 导师</option>
+                  {availableTwins.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name}{t.isOwner ? '' : '（分享）'}
+                    </option>
                   ))}
                 </select>
               </div>
