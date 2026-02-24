@@ -6,14 +6,12 @@ import { Label } from './ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { useAuth } from './AuthContext';
-import { Upload } from 'lucide-react';
 
 interface LoginPageProps {
   onSuccess: () => void;
-  onQuickExperience?: () => void;
 }
 
-export function LoginPage({ onSuccess, onQuickExperience }: LoginPageProps) {
+export function LoginPage({ onSuccess }: LoginPageProps) {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [email, setEmail] = useState('');
@@ -87,15 +85,6 @@ export function LoginPage({ onSuccess, onQuickExperience }: LoginPageProps) {
                 <p className="text-lg text-gray-700 leading-relaxed">
                   AI随心学将教材和学习资料转化为引人入胜的多媒体学习体验，为你量身定制。
                 </p>
-                
-                <Button 
-                  size="lg" 
-                  className="bg-orange-500 hover:bg-orange-600 text-white shadow-lg"
-                  onClick={onQuickExperience}
-                >
-                  <Upload className="w-5 h-5 mr-2" />
-                  立即体验AI随心学：上传你的PDF
-                </Button>
               </div>
             </div>
           </div>
@@ -115,77 +104,6 @@ export function LoginPage({ onSuccess, onQuickExperience }: LoginPageProps) {
                   {error}
                 </div>
               )}
-
-              {/* Demo Credentials */}
-              <div className="mb-4 space-y-2">
-                {/* Student Demo */}
-                <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg text-sm">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="font-medium text-[#1a73e8] mb-1">学生演示账号:</p>
-                      <p className="text-gray-600 text-xs">邮箱: student@demo.com</p>
-                      <p className="text-gray-600 text-xs">密码: 任意密码</p>
-                    </div>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="ml-2"
-                      onClick={async () => {
-                        setEmail('student@demo.com');
-                        setPassword('demo123');
-                        try {
-                          setIsLoading(true);
-                          setError('');
-                          await login('student@demo.com', 'demo123', 'student');
-                          onSuccess();
-                        } catch (error: any) {
-                          setError(error.message || '登录失败');
-                        } finally {
-                          setIsLoading(false);
-                        }
-                      }}
-                      disabled={isLoading}
-                    >
-                      快速登录
-                    </Button>
-                  </div>
-                </div>
-                
-                {/* Teacher Demo */}
-                <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="font-medium text-blue-600 mb-1">教师演示账号:</p>
-                      <p className="text-blue-700 text-xs">邮箱: teacher@demo.com</p>
-                      <p className="text-blue-700 text-xs">密码: 任意密码</p>
-                    </div>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="ml-2 border-blue-300 text-blue-600 hover:bg-blue-100"
-                      onClick={async () => {
-                        setEmail('teacher@demo.com');
-                        setPassword('demo123');
-                        try {
-                          setIsLoading(true);
-                          setError('');
-                          await login('teacher@demo.com', 'demo123', 'teacher');
-                          onSuccess();
-                        } catch (error: any) {
-                          setError(error.message || '登录失败');
-                        } finally {
-                          setIsLoading(false);
-                        }
-                      }}
-                      disabled={isLoading}
-                    >
-                      快速登录
-                    </Button>
-                  </div>
-                </div>
-              </div>
 
               <Tabs defaultValue="login" className="w-full">
                 <TabsList className="grid w-full grid-cols-2 bg-gray-100 p-1 rounded-lg">

@@ -48,25 +48,6 @@ function AppContent() {
   const [tutorQuestionTrigger, setTutorQuestionTrigger] = useState<{ selectedText: string; context: string; timestamp: number } | null>(null);
   const [courseDesignData, setCourseDesignData] = useState<any>(null);
 
-  // Handle quick experience function - defined early to avoid hoisting issues
-  const handleQuickExperience = async () => {
-    // 使用demo用户快速登录并直接进入PDF上传界面
-    try {
-      const demoEmail = 'student@demo.com';
-      const demoPassword = 'demo123';
-      await login(demoEmail, demoPassword);
-      setActiveSection('learn-your-way');
-      // 直接进入PDF上传界面，而不是停留在AI随心学页面
-      setTimeout(() => {
-        // 等待状态更新后，模拟点击上传PDF按钮
-        const event = new CustomEvent('triggerPDFUpload');
-        window.dispatchEvent(event);
-      }, 100);
-    } catch (error) {
-      console.error('Quick experience failed:', error);
-    }
-  };
-
   // Read URL params for deep linking (e.g. ?section=courses&courseTab=shared)
   useEffect(() => {
     const section = searchParams.get('section');
@@ -118,7 +99,6 @@ function AppContent() {
         onSuccess={() => {
           // State will be automatically updated by useEffect
         }}
-        onQuickExperience={handleQuickExperience}
       />
     );
   }
