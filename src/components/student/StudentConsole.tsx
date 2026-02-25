@@ -1525,6 +1525,49 @@ CRITICAL TASK COMPLETION PROTOCOL:
     }
   };
 
+  const handlePrevTask = () => {
+    if (isTyping) return;
+    if (currentTaskIndex > 0) {
+      const prevIndex = currentTaskIndex - 1;
+      setIsAssetLoading(false);
+      greetingSentRef.current.add(prevIndex);
+      setCurrentTaskIndex(prevIndex);
+      const progressPct = Math.round(((prevIndex + 1) / plan.tasks.length) * 100);
+      reportProgress(progressPct, false, prevIndex);
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('currentTaskIndex', prevIndex.toString());
+      }
+      setEditCounts({ mindMap: 0, table: 0, text: 0, math: 0 });
+      setLastDoneClickTime(null);
+      setHasEditAfterDone(false);
+      setTimeout(() => {
+        if (chatContainerRef.current) {
+          chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
+        }
+      }, 100);
+    }
+  };
+
+  const switchToTaskIndex = (targetIndex: number) => {
+    if (isTyping || targetIndex < 0 || targetIndex >= plan.tasks.length || targetIndex === currentTaskIndex) return;
+    setIsAssetLoading(false);
+    greetingSentRef.current.add(targetIndex);
+    setCurrentTaskIndex(targetIndex);
+    const progressPct = Math.round(((targetIndex + 1) / plan.tasks.length) * 100);
+    reportProgress(progressPct, false, targetIndex);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('currentTaskIndex', targetIndex.toString());
+    }
+    setEditCounts({ mindMap: 0, table: 0, text: 0, math: 0 });
+    setLastDoneClickTime(null);
+    setHasEditAfterDone(false);
+    setTimeout(() => {
+      if (chatContainerRef.current) {
+        chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
+      }
+    }, 100);
+  };
+
   // 引导流步骤进度描述（供 handleDone 使用）
   const getGuidedStepProgress = (): string => {
     const stepTitles = ['我能明确目标', '我能看懂视频', '我能总结要点', '我能练一练', '我能完成复盘'];
@@ -2911,10 +2954,21 @@ CRITICAL TASK COMPLETION PROTOCOL:
                         </div>
                     </div>
                 </div>
-                {/* Progress Dots */}
+                {/* Progress Dots - 可点击跳转 */}
                 <div className="flex gap-1.5 shrink-0 ml-4">
                     {plan.tasks.map((_, idx) => (
-                        <div key={idx} className={`h-1.5 rounded-full transition-all duration-500 ${idx === currentTaskIndex ? 'bg-cyan-500 w-6' : idx < currentTaskIndex ? 'bg-cyan-200 w-2' : 'bg-slate-200 w-2'}`} />
+                        <button
+                            key={idx}
+                            type="button"
+                            onClick={() => switchToTaskIndex(idx)}
+                            disabled={isTyping}
+                            title={`任务 ${idx + 1}`}
+                            className={`h-1.5 rounded-full transition-all duration-500 disabled:cursor-not-allowed ${
+                                idx === currentTaskIndex ? 'bg-cyan-500 w-6' :
+                                idx < currentTaskIndex ? 'bg-cyan-200 w-2 hover:bg-cyan-300' :
+                                'bg-slate-200 w-2 hover:bg-slate-300'
+                            }`}
+                        />
                     ))}
                 </div>
             </div>
@@ -2925,11 +2979,31 @@ CRITICAL TASK COMPLETION PROTOCOL:
             {renderLeftWorkspace()}
         </div>
 
-        {/* Fixed Bottom: hint text + 我卡住了 / 我做完了 */}
+        {/* Fixed Bottom: 导航 + hint text + 我卡住了 / 我做完了 */}
         <div className="bg-white border-t border-slate-200 p-4 shrink-0 flex items-center justify-between gap-4">
-            <p className="text-xs text-slate-500">
-                完成后请点击 <span className="font-bold text-green-700">&quot;我做完了&quot;</span> ，遇到困难请点击 <span className="font-bold text-amber-700">&quot;我卡住了&quot;</span>
-            </p>
+            <div className="flex items-center gap-4 min-w-0">
+                {plan.tasks.length > 1 && (
+                    <div className="flex items-center gap-2 shrink-0">
+                        <button
+                            onClick={handlePrevTask}
+                            disabled={currentTaskIndex === 0 || isTyping}
+                            className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium bg-slate-100 text-slate-700 hover:bg-slate-200 disabled:opacity-40 disabled:cursor-not-allowed border border-slate-200"
+                        >
+                            <ArrowLeft size={14} /> 上一个
+                        </button>
+                        <button
+                            onClick={handleNextTask}
+                            disabled={currentTaskIndex >= plan.tasks.length - 1 || isTyping}
+                            className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium bg-slate-100 text-slate-700 hover:bg-slate-200 disabled:opacity-40 disabled:cursor-not-allowed border border-slate-200"
+                        >
+                            下一个 <ArrowRight size={14} />
+                        </button>
+                    </div>
+                )}
+                <p className="text-xs text-slate-500">
+                    完成后请点击 <span className="font-bold text-green-700">&quot;我做完了&quot;</span> ，遇到困难请点击 <span className="font-bold text-amber-700">&quot;我卡住了&quot;</span>
+                </p>
+            </div>
             <div className="flex items-center gap-2 shrink-0">
                 <button
                     onClick={handleStuck}
