@@ -23,6 +23,7 @@ import {
   ChevronDown,
   ChevronUp,
   Pencil,
+  Download,
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -86,6 +87,7 @@ export function AICourseDesignPage({ onNextStep }: AICourseDesignPageProps) {
   const [createError, setCreateError] = useState<string | null>(null);
   const [regeneratingTaskId, setRegeneratingTaskId] = useState<string | null>(null);
   const [editingTaskIndex, setEditingTaskIndex] = useState<number | null>(null);
+  const [editingPromptTaskIndex, setEditingPromptTaskIndex] = useState<number | null>(null);
   const [expandedDescIds, setExpandedDescIds] = useState<Set<string>>(new Set());
 
   const hasPrefilledRef = useRef(false);
@@ -245,7 +247,10 @@ export function AICourseDesignPage({ onNextStep }: AICourseDesignPageProps) {
     }
   };
 
-  const handleUpdateTask = (taskIndex: number, updates: { title?: string; description?: string }) => {
+  const handleUpdateTask = (
+    taskIndex: number,
+    updates: { title?: string; description?: string; assetPrompt?: string }
+  ) => {
     if (!plan) return;
     const newTasks = [...plan.tasks];
     newTasks[taskIndex] = { ...newTasks[taskIndex], ...updates };
@@ -492,10 +497,51 @@ export function AICourseDesignPage({ onNextStep }: AICourseDesignPageProps) {
             {documents && (
               <Accordion type="single" collapsible defaultValue="documents">
                 <AccordionItem value="documents">
-                  <AccordionTrigger>
-                    <span className="flex items-center gap-2">
+                  <AccordionTrigger className="flex items-center">
+                    <span className="flex items-center gap-2 flex-1">
                       <CheckCircle2 className="w-4 h-4 text-green-600" />
                       任务单与教师指南已生成
+                    </span>
+                    <span
+                      className="flex items-center gap-2 shrink-0 mr-2"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const blob = new Blob([documents.studentTaskSheet], {
+                            type: 'text/markdown;charset=utf-8',
+                          });
+                          const url = URL.createObjectURL(blob);
+                          const a = document.createElement('a');
+                          a.href = url;
+                          a.download = `任务单-${topic || '课程'}-${Date.now()}.md`;
+                          a.click();
+                          URL.revokeObjectURL(url);
+                        }}
+                        className="flex items-center gap-1 text-xs text-cyan-600 hover:text-cyan-700 hover:underline bg-transparent border-0 cursor-pointer p-0"
+                      >
+                        <Download className="w-3 h-3" />
+                        任务单
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const blob = new Blob([documents.teacherGuide], {
+                            type: 'text/markdown;charset=utf-8',
+                          });
+                          const url = URL.createObjectURL(blob);
+                          const a = document.createElement('a');
+                          a.href = url;
+                          a.download = `教师指南-${topic || '课程'}-${Date.now()}.md`;
+                          a.click();
+                          URL.revokeObjectURL(url);
+                        }}
+                        className="flex items-center gap-1 text-xs text-cyan-600 hover:text-cyan-700 hover:underline bg-transparent border-0 cursor-pointer p-0"
+                      >
+                        <Download className="w-3 h-3" />
+                        教师指南
+                      </button>
                     </span>
                   </AccordionTrigger>
                   <AccordionContent>
@@ -519,7 +565,92 @@ export function AICourseDesignPage({ onNextStep }: AICourseDesignPageProps) {
       )}
 
       {step === 'preview' && plan && (
-        <Card>
+        <div className="space-y-6">
+          {curriculum && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg">1. 课程设计 / 大概念</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm text-muted-foreground mb-2">
+                  <strong>大概念：</strong>{curriculum.bigConcept}
+                </p>
+                <p className="text-sm whitespace-pre-wrap leading-relaxed">
+                  {curriculum.logicChain}
+                </p>
+              </CardContent>
+            </Card>
+          )}
+
+          {documents && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg">2. 任务单与教师指南</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const blob = new Blob([documents.studentTaskSheet], {
+                        type: 'text/markdown;charset=utf-8',
+                      });
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement('a');
+                      a.href = url;
+                      a.download = `任务单-${topic || '课程'}-${Date.now()}.md`;
+                      a.click();
+                      URL.revokeObjectURL(url);
+                    }}
+                    className="inline-flex items-center gap-1 px-3 py-1.5 text-sm text-cyan-600 hover:text-cyan-700 hover:underline border border-cyan-200 rounded-md"
+                  >
+                    <Download className="w-4 h-4" />
+                    下载任务单
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const blob = new Blob([documents.teacherGuide], {
+                        type: 'text/markdown;charset=utf-8',
+                      });
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement('a');
+                      a.href = url;
+                      a.download = `教师指南-${topic || '课程'}-${Date.now()}.md`;
+                      a.click();
+                      URL.revokeObjectURL(url);
+                    }}
+                    className="inline-flex items-center gap-1 px-3 py-1.5 text-sm text-cyan-600 hover:text-cyan-700 hover:underline border border-cyan-200 rounded-md"
+                  >
+                    <Download className="w-4 h-4" />
+                    下载教师指南
+                  </button>
+                </div>
+                <Accordion type="single" collapsible>
+                  <AccordionItem value="task">
+                    <AccordionTrigger>任务单摘要（前 500 字）</AccordionTrigger>
+                    <AccordionContent>
+                      <p className="text-sm whitespace-pre-wrap max-h-48 overflow-y-auto">
+                        {documents.studentTaskSheet.slice(0, 500)}
+                        {documents.studentTaskSheet.length > 500 && '…'}
+                      </p>
+                    </AccordionContent>
+                  </AccordionItem>
+                  <AccordionItem value="guide">
+                    <AccordionTrigger>教师指南摘要（前 500 字）</AccordionTrigger>
+                    <AccordionContent>
+                      <p className="text-sm whitespace-pre-wrap max-h-48 overflow-y-auto">
+                        {documents.teacherGuide.slice(0, 500)}
+                        {documents.teacherGuide.length > 500 && '…'}
+                      </p>
+                    </AccordionContent>
+                  </AccordionItem>
+                </Accordion>
+              </CardContent>
+            </Card>
+          )}
+
+          <Card>
           <CardHeader>
             <CardTitle className="text-lg">3. 任务列表与创建课程</CardTitle>
             <p className="text-sm text-muted-foreground">
@@ -657,23 +788,71 @@ export function AICourseDesignPage({ onNextStep }: AICourseDesignPageProps) {
                         </div>
                       </div>
                       {needsAsset && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => handleRegenerateAsset(i)}
-                          disabled={regeneratingTaskId === t.id}
-                        >
-                          {regeneratingTaskId === t.id ? (
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                          ) : (
-                            <RefreshCw className="w-4 h-4" />
-                          )}
-                          <span className="ml-1">重新生成</span>
-                        </Button>
+                        <div className="flex flex-wrap gap-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleRegenerateAsset(i)}
+                            disabled={regeneratingTaskId === t.id}
+                          >
+                            {regeneratingTaskId === t.id ? (
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                              <RefreshCw className="w-4 h-4" />
+                            )}
+                            <span className="ml-1">重新生成</span>
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="text-slate-600 hover:text-slate-800"
+                            onClick={() =>
+                              setEditingPromptTaskIndex((prev) => (prev === i ? null : i))
+                            }
+                          >
+                            <Pencil className="w-3 h-3 mr-1" />
+                            编辑提示词
+                          </Button>
+                        </div>
                       )}
                     </div>
                     {needsAsset && (
-                      <div className="mt-2">
+                      <div className="mt-2 space-y-3">
+                        {editingPromptTaskIndex === i && (
+                          <div className="rounded border border-slate-200 bg-white p-3 space-y-2">
+                            <Label className="text-xs font-medium text-slate-600">
+                              当前提示词（可用于图片/视频/实验等生成）
+                            </Label>
+                            <Textarea
+                              value={t.assetPrompt || ''}
+                              onChange={(e) => {
+                                if (!plan) return;
+                                const newTasks = [...plan.tasks];
+                                newTasks[i] = { ...newTasks[i], assetPrompt: e.target.value };
+                                setPlan({ ...plan, tasks: newTasks });
+                              }}
+                              className="min-h-20 text-sm font-mono"
+                              placeholder="输入生成素材的提示词…"
+                              autoFocus
+                            />
+                            <div className="flex gap-2">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => setEditingPromptTaskIndex(null)}
+                              >
+                                保存并关闭
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => setEditingPromptTaskIndex(null)}
+                              >
+                                取消
+                              </Button>
+                            </div>
+                          </div>
+                        )}
                         {hasAsset ? (
                           <>
                             {t.assetType === 'image_gen' && (() => {
@@ -763,6 +942,7 @@ export function AICourseDesignPage({ onNextStep }: AICourseDesignPageProps) {
             </div>
           </CardContent>
         </Card>
+        </div>
       )}
 
       {step === 'created' && createdCourse && (
