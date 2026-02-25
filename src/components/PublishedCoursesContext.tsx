@@ -33,7 +33,10 @@ export function PublishedCoursesProvider({ children }: { children: ReactNode }) 
   const [publishedCourses, setPublishedCourses] = useState<PublishedCourse[]>([]);
 
   const addPublishedCourse = (course: Omit<PublishedCourse, 'id' | 'publishedAt'>) => {
-    const title = `${course.subject} - ${course.topic}`;
+    const title =
+      course.grade && course.subject && course.topic
+        ? `${course.grade} - ${course.subject} - ${course.topic}`
+        : `${course.subject} - ${course.topic}`;
     const newCourse: PublishedCourse = {
       ...course,
       title: title,

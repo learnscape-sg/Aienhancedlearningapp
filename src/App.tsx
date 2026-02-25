@@ -28,14 +28,11 @@ import { AITutor } from './components/AITutor';
 // Teacher platform components
 import { TeacherOverview } from './components/TeacherOverview';
 import { AICourseDesignPage } from './components/AICourseDesignPage';
-import { CoreDesignPage } from './components/CoreDesignPage';
-import { TeachingDocumentPage } from './components/TeachingDocumentPage';
-import { TaskConfigurationPage } from './components/TaskConfigurationPage';
 import { CourseManagementPage } from './components/CourseManagementPage';
 import { ClassManagementPage } from './components/ClassManagementPage';
 import { TeachingResourcesPage } from './components/TeachingResourcesPage';
 
-type AppState = 'login' | 'onboarding' | 'dashboard' | 'chapter' | 'quiz' | 'learning-mode-selection' | 'immersive-text' | 'slides-narration' | 'audio-lesson' | 'mindmap' | 'game' | 'video' | 'core-design' | 'teaching-document' | 'task-configuration';
+type AppState = 'login' | 'onboarding' | 'dashboard' | 'chapter' | 'quiz' | 'learning-mode-selection' | 'immersive-text' | 'slides-narration' | 'audio-lesson' | 'mindmap' | 'game' | 'video';
 
 function AppContent() {
   const { user, loading, login } = useAuth();
@@ -214,59 +211,6 @@ function AppContent() {
 
   // Render teacher content
   const renderTeacherContent = () => {
-    // Handle teaching document page
-    if (appState === 'teaching-document') {
-      return (
-        <TeachingDocumentPage 
-          courseData={courseDesignData}
-          designData={courseDesignData}
-          onBack={() => {
-            setAppState('core-design');
-          }}
-          onNext={() => {
-            setAppState('task-configuration');
-          }}
-        />
-      );
-    }
-
-    // Handle task configuration page
-    if (appState === 'task-configuration') {
-      return (
-        <TaskConfigurationPage
-          courseData={courseDesignData}
-          designData={courseDesignData}
-          courseId={courseDesignData?.courseId}
-          onBack={() => {
-            setAppState('teaching-document');
-          }}
-          onPublish={() => {
-            alert('课程已成功发布！');
-            setAppState('dashboard');
-            setActiveSection('courses');
-          }}
-        />
-      );
-    }
-
-    // Handle core design page separately (appState-based)
-    if (appState === 'core-design') {
-      return (
-        <CoreDesignPage 
-          courseData={courseDesignData}
-          onBack={() => {
-            setAppState('dashboard');
-            setActiveSection('course-design');
-          }}
-          onComplete={(designData) => {
-            console.log('Design completed:', designData);
-            setCourseDesignData({ ...courseDesignData, ...designData });
-            setAppState('teaching-document');
-          }}
-        />
-      );
-    }
-
     // Normal section-based navigation
     switch (activeSection) {
       case 'overview':

@@ -137,11 +137,12 @@ export async function generateTaskAsset(
 
 export async function createCourse(
   input: SystemTaskPlan | { taskIds: string[] },
-  teacherId?: string
+  teacherId?: string,
+  meta?: { subject?: string; topic?: string; grade?: string }
 ): Promise<{ courseId: string; url: string }> {
   const base = Array.isArray((input as { taskIds?: string[] }).taskIds)
     ? { taskIds: (input as { taskIds: string[] }).taskIds }
-    : { plan: input as SystemTaskPlan };
+    : { plan: input as SystemTaskPlan, ...(meta && { subject: meta.subject, topic: meta.topic, grade: meta.grade }) };
   const body = teacherId != null ? { ...base, teacherId } : base;
   return apiCall<{ courseId: string; url: string }>('/api/courses', {
     method: 'POST',

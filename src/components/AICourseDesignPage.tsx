@@ -294,7 +294,7 @@ export function AICourseDesignPage({ onNextStep }: AICourseDesignPageProps) {
     setCreateLoading(true);
     setCreateError(null);
     try {
-      const result = await createCourse(plan, user?.id);
+      const result = await createCourse(plan, user?.id, { subject, topic, grade });
 
       // 尝试将课程元数据写入 Supabase，再更新前端课程管理列表
       if (user && user.role === 'teacher') {

@@ -239,14 +239,14 @@ export function CourseManagementPage({ initialCourseTab }: { initialCourseTab?: 
     );
   });
 
-  const taskDisplayName = (task: TaskItem) =>
-    [
-      task.topic || task.subject || '未命名任务',
-      task.taskType ? (TASK_TYPE_LABELS[task.taskType] ?? task.taskType) : null,
-      task.durationMin ? `${task.durationMin}分钟` : null,
-    ]
-      .filter(Boolean)
-      .join(' - ');
+  const taskDisplayName = (task: TaskItem) => {
+    const grade = task.grade?.trim() || '';
+    const subject = task.subject?.trim() || '';
+    const topic = task.topic?.trim() || task.subject || '未命名任务';
+    const taskTypeLabel = task.taskType ? (TASK_TYPE_LABELS[task.taskType] ?? task.taskType) : null;
+    const base = grade && subject ? `${grade} - ${subject} - ${topic}` : topic;
+    return taskTypeLabel ? `${base} - ${taskTypeLabel}` : base;
+  };
 
   const toggleTaskSelection = (taskId: string) => {
     setSelectedTaskIds((prev) => (prev.includes(taskId) ? prev.filter((id) => id !== taskId) : [...prev, taskId]));
