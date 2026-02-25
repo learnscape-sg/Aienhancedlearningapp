@@ -20,7 +20,14 @@ import {
   ExternalLink,
   RefreshCw,
   Layers,
+  ChevronDown,
+  ChevronUp,
+  Pencil,
 } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import remarkMath from 'remark-math';
+import rehypeKatex from 'rehype-katex';
 import { useAuth } from './AuthContext';
 import {
   getTeacherPreferencesFromProfile,
@@ -32,6 +39,7 @@ import {
   generateCurriculumDesign,
   generateTaskDocuments,
   generateSystemTaskPlan,
+  generateTaskAsset,
   createCourse,
 } from '../lib/backendApi';
 import type {
@@ -43,7 +51,10 @@ import { saveCourseMetaToSupabase } from '../lib/coursesRepository';
 
 type Step = 'form' | 'generating' | 'preview' | 'created';
 
-type GenStep = 'curriculum' | 'documents' | 'tasks';
+type GenStep = 'curriculum' | 'documents' | 'tasks' | 'assets';
+
+const needsAssetGeneration = (assetType: string): boolean =>
+  assetType !== 'editable_text' && assetType !== 'math_editable';
 
 interface AICourseDesignPageProps {
   onNextStep?: (data: { plan: SystemTaskPlan; courseId?: string; courseUrl?: string }) => void;
@@ -73,6 +84,9 @@ export function AICourseDesignPage({ onNextStep }: AICourseDesignPageProps) {
   } | null>(null);
   const [createLoading, setCreateLoading] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
+  const [regeneratingTaskId, setRegeneratingTaskId] = useState<string | null>(null);
+  const [editingTaskIndex, setEditingTaskIndex] = useState<number | null>(null);
+  const [expandedDescIds, setExpandedDescIds] = useState<Set<string>>(new Set());
 
   const hasPrefilledRef = useRef(false);
   useEffect(() => {
@@ -129,7 +143,35 @@ export function AICourseDesignPage({ onNextStep }: AICourseDesignPageProps) {
         grade.trim(),
         contextVal
       );
-      setPlan(planResult);
+
+      // Step 4: 预生成素材
+      setGenStep('assets');
+      const newTasks = [...planResult.tasks];
+      for (let i = 0; i < newTasks.length; i++) {
+        const task = newTasks[i];
+        if (needsAssetGeneration(task.assetType) && task.assetPrompt?.trim()) {
+          try {
+            const assetResult = await generateTaskAsset(task.assetType, task.assetPrompt);
+            if (assetResult != null) {
+              newTasks[i] = {
+                ...task,
+                generatedAssetContent:
+                  typeof assetResult === 'object'
+                    ? JSON.stringify(assetResult)
+                    : String(assetResult),
+              };
+            }
+          } catch (e) {
+            console.error(`Asset generation failed for task ${task.id}:`, e);
+          }
+        }
+      }
+
+      const planWithAssets = {
+        ...planResult,
+        tasks: newTasks,
+      };
+      setPlan(planWithAssets);
       setGenStep(null);
       setStep('preview');
     } catch (err) {
@@ -170,13 +212,76 @@ export function AICourseDesignPage({ onNextStep }: AICourseDesignPageProps) {
         grade.trim(),
         contextVal
       );
-      setPlan(planResult);
+
+      setGenStep('assets');
+      const newTasks = [...planResult.tasks];
+      for (let i = 0; i < newTasks.length; i++) {
+        const task = newTasks[i];
+        if (needsAssetGeneration(task.assetType) && task.assetPrompt?.trim()) {
+          try {
+            const assetResult = await generateTaskAsset(task.assetType, task.assetPrompt);
+            if (assetResult != null) {
+              newTasks[i] = {
+                ...task,
+                generatedAssetContent:
+                  typeof assetResult === 'object'
+                    ? JSON.stringify(assetResult)
+                    : String(assetResult),
+              };
+            }
+          } catch (e) {
+            console.error(`Asset generation failed for task ${task.id}:`, e);
+          }
+        }
+      }
+
+      const planWithAssets = { ...planResult, tasks: newTasks };
+      setPlan(planWithAssets);
       setGenStep(null);
       setStep('preview');
     } catch (err) {
       setGenError(err instanceof Error ? err.message : String(err));
       setGenStep(null);
     }
+  };
+
+  const handleUpdateTask = (taskIndex: number, updates: { title?: string; description?: string }) => {
+    if (!plan) return;
+    const newTasks = [...plan.tasks];
+    newTasks[taskIndex] = { ...newTasks[taskIndex], ...updates };
+    setPlan({ ...plan, tasks: newTasks });
+  };
+
+  const handleRegenerateAsset = async (taskIndex: number) => {
+    if (!plan) return;
+    const task = plan.tasks[taskIndex];
+    if (!needsAssetGeneration(task.assetType) || !task.assetPrompt?.trim()) return;
+    setRegeneratingTaskId(task.id);
+    try {
+      const assetResult = await generateTaskAsset(task.assetType, task.assetPrompt);
+      if (assetResult != null) {
+        const newTasks = [...plan.tasks];
+        newTasks[taskIndex] = {
+          ...task,
+          generatedAssetContent:
+            typeof assetResult === 'object'
+              ? JSON.stringify(assetResult)
+              : String(assetResult),
+        };
+        setPlan({ ...plan, tasks: newTasks });
+      }
+    } catch (e) {
+      console.error('Regenerate asset failed:', e);
+    } finally {
+      setRegeneratingTaskId(null);
+    }
+  };
+
+  const normalizeBase64Image = (content?: string): string | null => {
+    if (!content) return null;
+    if (content.startsWith('data:image')) return content;
+    const looksLikeBase64 = /^[A-Za-z0-9+/=\r\n]+$/.test(content);
+    return looksLikeBase64 ? `data:image/png;base64,${content}` : null;
   };
 
   const handleCreateCourse = async () => {
@@ -331,12 +436,14 @@ export function AICourseDesignPage({ onNextStep }: AICourseDesignPageProps) {
               <Progress
                 value={
                   genStep === 'curriculum'
-                    ? 33
+                    ? 25
                     : genStep === 'documents'
-                      ? 66
+                      ? 50
                       : genStep === 'tasks'
-                        ? 90
-                        : 100
+                        ? 75
+                        : genStep === 'assets'
+                          ? 90
+                          : 100
                 }
                 className="h-2"
               />
@@ -344,6 +451,7 @@ export function AICourseDesignPage({ onNextStep }: AICourseDesignPageProps) {
                 {genStep === 'curriculum' && '正在生成课程设计…'}
                 {genStep === 'documents' && '正在生成任务单与教师指南…'}
                 {genStep === 'tasks' && '正在生成系统任务计划…'}
+                {genStep === 'assets' && '正在生成素材…'}
                 {!genStep && '处理中…'}
               </p>
             </div>
@@ -415,17 +523,212 @@ export function AICourseDesignPage({ onNextStep }: AICourseDesignPageProps) {
           <CardHeader>
             <CardTitle className="text-lg">3. 任务列表与创建课程</CardTitle>
             <p className="text-sm text-muted-foreground">
-              共 {plan.tasks.length} 个任务，确认后点击「创建课程」。
+              共 {plan.tasks.length} 个任务，请确认素材后点击「创建课程」。
             </p>
           </CardHeader>
           <CardContent className="space-y-4">
-            <ul className="list-disc list-inside space-y-1 text-sm">
-              {plan.tasks.map((t, i) => (
-                <li key={t.id}>
-                  {i + 1}. {t.title}
-                </li>
-              ))}
-            </ul>
+            <div className="space-y-4">
+              {plan.tasks.map((t, i) => {
+                const needsAsset = needsAssetGeneration(t.assetType) && t.assetPrompt;
+                const hasAsset = !!t.generatedAssetContent;
+                return (
+                  <div
+                    key={t.id}
+                    className="border rounded-lg p-4 bg-gray-50/50 space-y-3"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex-1 space-y-2">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm text-muted-foreground">{i + 1}.</span>
+                          <Input
+                            value={t.title}
+                            onChange={(e) => handleUpdateTask(i, { title: e.target.value })}
+                            className="font-medium text-gray-900 h-8 flex-1"
+                            placeholder="任务标题"
+                          />
+                        </div>
+                        <div className="text-sm text-muted-foreground">
+                            {editingTaskIndex === i ? (
+                              <div className="space-y-2">
+                                <Textarea
+                                  value={t.description || ''}
+                                  onChange={(e) => {
+                                    if (!plan) return;
+                                    const newTasks = [...plan.tasks];
+                                    newTasks[i] = { ...newTasks[i], description: e.target.value };
+                                    setPlan({ ...plan, tasks: newTasks });
+                                  }}
+                                  onBlur={() => setEditingTaskIndex(null)}
+                                  className="min-h-24 text-sm"
+                                  placeholder="任务描述"
+                                  autoFocus
+                                />
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => setEditingTaskIndex(null)}
+                                >
+                                  完成编辑
+                                </Button>
+                              </div>
+                            ) : t.description ? (
+                              <div className="space-y-1">
+                                <div className="prose prose-sm max-w-none text-slate-700">
+                                  <ReactMarkdown
+                                    remarkPlugins={[remarkMath, remarkGfm]}
+                                    rehypePlugins={[rehypeKatex]}
+                                    components={{
+                                      p: ({ children }) => (
+                                        <p className="mb-2 last:mb-0">{children}</p>
+                                      ),
+                                      strong: ({ children }) => (
+                                        <strong className="font-semibold text-slate-800">
+                                          {children}
+                                        </strong>
+                                      ),
+                                      ul: ({ children }) => (
+                                        <ul className="list-disc list-inside mb-2 ml-4">
+                                          {children}
+                                        </ul>
+                                      ),
+                                      ol: ({ children }) => (
+                                        <ol className="list-decimal list-inside mb-2 ml-4">
+                                          {children}
+                                        </ol>
+                                      ),
+                                      li: ({ children }) => (
+                                        <li className="mb-1">{children}</li>
+                                      ),
+                                    }}
+                                  >
+                                    {(t.description?.length ?? 0) > 200 &&
+                                    !expandedDescIds.has(t.id)
+                                      ? `${t.description.slice(0, 200)}...`
+                                      : t.description}
+                                  </ReactMarkdown>
+                                </div>
+                                {(t.description?.length ?? 0) > 200 && (
+                                  <button
+                                    type="button"
+                                    className="flex items-center gap-1 text-cyan-600 hover:text-cyan-700 text-xs font-medium"
+                                    onClick={() =>
+                                      setExpandedDescIds((prev) => {
+                                        const next = new Set(prev);
+                                        if (next.has(t.id)) next.delete(t.id);
+                                        else next.add(t.id);
+                                        return next;
+                                      })
+                                    }
+                                  >
+                                    {expandedDescIds.has(t.id) ? (
+                                      <>
+                                        <ChevronUp className="w-4 h-4" />
+                                        收起
+                                      </>
+                                    ) : (
+                                      <>
+                                        <ChevronDown className="w-4 h-4" />
+                                        展开全文
+                                      </>
+                                    )}
+                                  </button>
+                                )}
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-7 px-2 text-xs text-slate-500 hover:text-slate-700 -ml-1"
+                                  onClick={() => setEditingTaskIndex(i)}
+                                >
+                                  <Pencil className="w-3 h-3 mr-1" />
+                                  编辑
+                                </Button>
+                              </div>
+                            ) : (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-7 text-xs text-slate-500"
+                                onClick={() => setEditingTaskIndex(i)}
+                              >
+                                <Pencil className="w-3 h-3 mr-1" />
+                                添加描述
+                              </Button>
+                            )}
+                        </div>
+                      </div>
+                      {needsAsset && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleRegenerateAsset(i)}
+                          disabled={regeneratingTaskId === t.id}
+                        >
+                          {regeneratingTaskId === t.id ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <RefreshCw className="w-4 h-4" />
+                          )}
+                          <span className="ml-1">重新生成</span>
+                        </Button>
+                      )}
+                    </div>
+                    {needsAsset && (
+                      <div className="mt-2">
+                        {hasAsset ? (
+                          <>
+                            {t.assetType === 'image_gen' && (() => {
+                              const src = normalizeBase64Image(t.generatedAssetContent);
+                              return src ? (
+                                <img
+                                  src={src}
+                                  alt={t.title}
+                                  className="max-h-48 w-auto object-contain rounded border border-gray-200"
+                                />
+                              ) : (
+                                <p className="text-sm text-amber-600">图片预览不可用</p>
+                              );
+                            })()}
+                            {t.assetType === 'video_gen' &&
+                              (t.generatedAssetContent?.startsWith('data:video') ? (
+                                <video
+                                  src={t.generatedAssetContent}
+                                  controls
+                                  className="max-h-48 rounded border border-gray-200"
+                                />
+                              ) : (
+                                <p className="text-sm text-amber-600">视频预览不可用</p>
+                              )
+                            )}
+                            {t.assetType === 'html_webpage' && (
+                              <iframe
+                                srcDoc={t.generatedAssetContent}
+                                title={t.title}
+                                className="w-full h-48 rounded border border-gray-200 bg-white"
+                                sandbox="allow-scripts"
+                              />
+                            )}
+                            {t.assetType === 'mindmap_code' && (
+                              <pre className="text-xs overflow-auto max-h-32 p-2 bg-white rounded border border-gray-200">
+                                {t.generatedAssetContent?.slice(0, 300)}
+                                {(t.generatedAssetContent?.length ?? 0) > 300 && '…'}
+                              </pre>
+                            )}
+                            {t.assetType === 'table_json' && (
+                              <pre className="text-xs overflow-auto max-h-32 p-2 bg-white rounded border border-gray-200">
+                                {t.generatedAssetContent?.slice(0, 300)}
+                                {(t.generatedAssetContent?.length ?? 0) > 300 && '…'}
+                              </pre>
+                            )}
+                          </>
+                        ) : (
+                          <p className="text-sm text-muted-foreground">未生成素材</p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
             {createError && (
               <Alert variant="destructive">
                 <AlertDescription>{createError}</AlertDescription>
