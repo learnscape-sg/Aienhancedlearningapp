@@ -2532,6 +2532,13 @@ CRITICAL TASK COMPLETION PROTOCOL:
     if (viewType === 'table_editor') {
         return (
              <div className="w-full h-full bg-white flex flex-col relative">
+                 {currentTask.description && (
+                   <div className="shrink-0 p-4 bg-slate-50 border-b border-slate-200">
+                     <p className="text-sm text-slate-600 leading-relaxed">
+                       <MathTextPreview text={currentTask.description} />
+                     </p>
+                   </div>
+                 )}
                  <div className="flex-1 p-8 overflow-auto custom-scrollbar bg-slate-50/30">
                     <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
                         <table className="w-full text-sm text-left text-slate-600">
@@ -2593,6 +2600,13 @@ CRITICAL TASK COMPLETION PROTOCOL:
 
         return (
             <div className="w-full h-full bg-white flex flex-col relative border-r border-slate-200">
+                {currentTask.description && (
+                  <div className="shrink-0 p-4 bg-slate-50 border-b border-slate-200">
+                    <p className="text-sm text-slate-600 leading-relaxed">
+                      <MathTextPreview text={currentTask.description} />
+                    </p>
+                  </div>
+                )}
                 {/* Fullscreen button */}
                 {visualizationData && (
                     <div className="absolute top-2 right-2 z-50">
@@ -2639,6 +2653,13 @@ CRITICAL TASK COMPLETION PROTOCOL:
     if (viewType === 'text_editor') {
         return (
              <div className="w-full h-full flex flex-col bg-white shadow-inner">
+                 {currentTask.description && (
+                   <div className="shrink-0 p-4 bg-slate-50 border-b border-slate-200">
+                     <p className="text-sm text-slate-600 leading-relaxed">
+                       <MathTextPreview text={currentTask.description} />
+                     </p>
+                   </div>
+                 )}
                  <div className="p-4 bg-slate-50 border-b border-slate-200 shrink-0 flex items-center justify-between">
                      <div className="flex items-center gap-2 text-emerald-700 font-bold text-sm">
                          <FileText size={16}/> 写作空间
@@ -2689,6 +2710,13 @@ CRITICAL TASK COMPLETION PROTOCOL:
     if (viewType === 'math_editor') {
         return (
             <div className="w-full h-full flex flex-col bg-white shadow-inner">
+                {currentTask.description && (
+                  <div className="shrink-0 p-4 bg-slate-50 border-b border-slate-200">
+                    <p className="text-sm text-slate-600 leading-relaxed">
+                      <MathTextPreview text={currentTask.description} />
+                    </p>
+                  </div>
+                )}
                 <div className="p-4 bg-slate-50 border-b border-slate-200 shrink-0">
                     <div className="flex items-center gap-2 text-purple-700 font-bold text-sm">
                         <Type size={16}/> 数学编辑器
@@ -2726,6 +2754,13 @@ CRITICAL TASK COMPLETION PROTOCOL:
                      </div>
                 ) : assetData ? (
                     <div className="w-full h-full flex flex-col relative">
+                        {currentTask.description && (
+                          <div className="shrink-0 p-4 bg-slate-50 border-b border-slate-200">
+                            <p className="text-sm text-slate-600 leading-relaxed">
+                              <MathTextPreview text={currentTask.description} />
+                            </p>
+                          </div>
+                        )}
                         <div className="h-8 bg-slate-100 border-b border-slate-200 flex items-center justify-between px-4 text-[10px] text-slate-500 shrink-0">
                             <span className="font-bold flex items-center gap-1"><Sparkles size={12}/> 交互式实验室</span>
                             <div className="flex items-center gap-2">
@@ -2772,6 +2807,13 @@ CRITICAL TASK COMPLETION PROTOCOL:
                 <>
                     {viewType === 'image_gallery' && (
                        <div className="flex flex-col rounded-xl overflow-hidden shadow-2xl border border-slate-200 max-h-full bg-white">
+                           {currentTask.description && (
+                             <div className="shrink-0 p-4 bg-slate-50 border-b border-slate-200">
+                               <p className="text-sm text-slate-600 leading-relaxed">
+                                 <MathTextPreview text={currentTask.description} />
+                               </p>
+                             </div>
+                           )}
                            <div className="relative flex-1 flex items-center justify-center bg-black/5 min-h-[200px]">
                                <img src={assetData} alt="AI Generated" className="max-w-full max-h-[70vh] object-contain" />
                            </div>
@@ -2782,6 +2824,13 @@ CRITICAL TASK COMPLETION PROTOCOL:
                     )}
                     {viewType === 'video_player' && (
                         <div className="w-full max-w-3xl space-y-4 bg-black rounded-lg overflow-hidden shadow-2xl">
+                             {currentTask.description && (
+                               <div className="p-4 bg-slate-50 border-b border-slate-200 rounded-t-lg">
+                                 <p className="text-sm text-slate-600 leading-relaxed">
+                                   <MathTextPreview text={currentTask.description} />
+                                 </p>
+                               </div>
+                             )}
                              <div className="flex items-center gap-2 p-3 bg-slate-900 text-cyan-400 border-b border-slate-800">
                                  <Video size={18}/>
                                 <span className="font-bold text-xs uppercase tracking-wider">教学视频</span>
