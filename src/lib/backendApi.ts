@@ -1271,3 +1271,21 @@ export async function generateTaskDesign(params: {
     }
   );
 }
+
+export interface FeedbackFormData {
+  pagePath: string;
+  pageName: string;
+  feedbackText: string;
+  rating?: number;
+  feedbackType?: 'bug' | 'suggestion' | 'other';
+  metadata?: Record<string, unknown>;
+}
+
+export async function submitFeedback(
+  feedbackData: FeedbackFormData
+): Promise<{ id: string; message: string }> {
+  return apiCall<{ id: string; message: string }>('/api/feedback', {
+    method: 'POST',
+    body: JSON.stringify(feedbackData),
+  });
+}

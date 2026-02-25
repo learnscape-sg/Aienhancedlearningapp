@@ -1,6 +1,7 @@
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { AuthProvider } from './components/AuthContext';
+import { FeedbackButton } from './components/shared/FeedbackButton';
 import App from './App.tsx';
 import { CoursePage } from './components/student/CoursePage';
 import { SharedCourseLandingPage } from './components/SharedCourseLandingPage';
@@ -12,6 +13,7 @@ import './styles/globals.css';
 createRoot(document.getElementById('root')!).render(
   <AuthProvider>
     <BrowserRouter>
+      <FeedbackButton />
       <Routes>
         <Route path="/" element={<App />} />
         <Route path="/shared-course/:token" element={<SharedCourseLandingPage />} />
