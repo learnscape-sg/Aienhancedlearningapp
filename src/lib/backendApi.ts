@@ -772,6 +772,323 @@ export async function deleteTwinMemory(
   );
 }
 
+// --- Teacher Twin Wizard (new generation) ---
+export interface TeacherTwin {
+  id: string;
+  teacherId: string;
+  legacyTwinId?: string;
+  name: string;
+  status: 'draft' | 'calibrating' | 'published' | 'archived';
+  subject?: string | null;
+  gradeBand?: string | null;
+  autonomyLevel: 0 | 1 | 2;
+  activePromptVersionId?: string | null;
+  wizardState: Record<string, unknown>;
+  metadata: Record<string, unknown>;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface TeacherTwinArtifact {
+  id: string;
+  twinId: string;
+  fileUri?: string | null;
+  fileName?: string | null;
+  fileType?: string | null;
+  artifactType: 'lecture' | 'worksheet' | 'question_bank' | 'lesson_plan' | 'syllabus' | 'rubric' | 'model_answer';
+  subject?: string | null;
+  grade?: string | null;
+  authorityLevel: 'official' | 'teacher' | 'third_party';
+  permissions: 'extract_only' | 'rag' | 'generate';
+  indexed: boolean;
+  chunksCount: number;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export async function listTeacherTwins(teacherId: string): Promise<{ twins: TeacherTwin[] }> {
+  return apiCall<{ twins: TeacherTwin[] }>(`/api/teacher-twins?teacherId=${encodeURIComponent(teacherId)}`, {
+    method: 'GET',
+  });
+}
+
+export async function getTeacherTwin(twinId: string, teacherId: string): Promise<TeacherTwin> {
+  return apiCall<TeacherTwin>(
+    `/api/teacher-twins/${encodeURIComponent(twinId)}?teacherId=${encodeURIComponent(teacherId)}`,
+    { method: 'GET' }
+  );
+}
+
+export async function createTeacherTwin(params: {
+  teacherId: string;
+  name: string;
+  subject?: string;
+  gradeBand?: string;
+  stepA?: Record<string, unknown>;
+}): Promise<{ id: string }> {
+  return apiCall('/api/teacher-twins', {
+    method: 'POST',
+    body: JSON.stringify(params),
+  });
+}
+
+export async function patchTeacherTwin(
+  twinId: string,
+  params: {
+    teacherId: string;
+    name?: string;
+    status?: 'draft' | 'calibrating' | 'published' | 'archived';
+    subject?: string;
+    gradeBand?: string;
+    autonomyLevel?: number;
+    metadata?: Record<string, unknown>;
+  }
+): Promise<{ success: boolean }> {
+  return apiCall(`/api/teacher-twins/${encodeURIComponent(twinId)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(params),
+  });
+}
+
+export async function saveTeacherTwinWizardStep(
+  twinId: string,
+  step: 'step-a' | 'step-b' | 'step-c' | 'step-d',
+  params: {
+    teacherId: string;
+    payload: Record<string, unknown>;
+  }
+): Promise<{ success: boolean; step: string }> {
+  return apiCall(`/api/teacher-twins/${encodeURIComponent(twinId)}/wizard/${step}`, {
+    method: 'PATCH',
+    body: JSON.stringify(params),
+  });
+}
+
+export async function extractTeacherTwin(params: {
+  twinId: string;
+  teacherId: string;
+  interviewTranscript?: string;
+}): Promise<{
+  twinId: string;
+  profileVersionId: string;
+  profile: Record<string, unknown>;
+  ragIndexPlan: unknown[];
+  clarifyingQuestions: string[];
+}> {
+  return apiCall(`/api/teacher-twins/${encodeURIComponent(params.twinId)}/extract`, {
+    method: 'POST',
+    body: JSON.stringify(params),
+  });
+}
+
+export async function compileTeacherTwin(params: {
+  twinId: string;
+  teacherId: string;
+  profileVersionId?: string;
+}): Promise<{
+  twinId: string;
+  promptVersionId: string;
+  systemPrompt: string;
+  configurableParameters: Record<string, unknown>;
+  fewShotSet: unknown[];
+}> {
+  return apiCall(`/api/teacher-twins/${encodeURIComponent(params.twinId)}/compile`, {
+    method: 'POST',
+    body: JSON.stringify(params),
+  });
+}
+
+export async function publishTeacherTwin(twinId: string, teacherId: string): Promise<{ success: boolean }> {
+  return apiCall(`/api/teacher-twins/${encodeURIComponent(twinId)}/publish`, {
+    method: 'POST',
+    body: JSON.stringify({ teacherId }),
+  });
+}
+
+export async function listTeacherTwinArtifacts(
+  twinId: string,
+  teacherId: string
+): Promise<{ artifacts: TeacherTwinArtifact[] }> {
+  return apiCall(`/api/teacher-twins/${encodeURIComponent(twinId)}/artifacts?teacherId=${encodeURIComponent(teacherId)}`, {
+    method: 'GET',
+  });
+}
+
+export async function uploadTeacherTwinArtifact(params: {
+  twinId: string;
+  teacherId: string;
+  artifactType: TeacherTwinArtifact['artifactType'];
+  authorityLevel: TeacherTwinArtifact['authorityLevel'];
+  permissions: TeacherTwinArtifact['permissions'];
+  subject?: string;
+  grade?: string;
+  text?: string;
+  file?: File;
+}): Promise<{ id: string; chunksCount: number; indexed: boolean }> {
+  const base = getBaseUrl();
+  const form = new FormData();
+  form.append('teacherId', params.teacherId);
+  form.append('artifactType', params.artifactType);
+  form.append('authorityLevel', params.authorityLevel);
+  form.append('permissions', params.permissions);
+  if (params.subject) form.append('subject', params.subject);
+  if (params.grade) form.append('grade', params.grade);
+  if (params.text) form.append('text', params.text);
+  if (params.file) form.append('file', params.file);
+  const response = await fetch(`${base}/api/teacher-twins/${encodeURIComponent(params.twinId)}/artifacts`, {
+    method: 'POST',
+    body: form,
+  });
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.error || `Upload failed with status ${response.status}`);
+  }
+  const json = await response.json();
+  return json.data as { id: string; chunksCount: number; indexed: boolean };
+}
+
+export async function deleteTeacherTwinArtifact(
+  twinId: string,
+  teacherId: string,
+  artifactId: string
+): Promise<{ success: boolean }> {
+  return apiCall(
+    `/api/teacher-twins/${encodeURIComponent(twinId)}/artifacts?teacherId=${encodeURIComponent(teacherId)}&artifactId=${encodeURIComponent(artifactId)}`,
+    { method: 'DELETE' }
+  );
+}
+
+export async function runTeacherTwinExplain(params: {
+  twinId: string;
+  teacherId: string;
+  studentInput: string;
+  constraints?: Record<string, unknown>;
+}): Promise<{ runId: string; output: Record<string, unknown>; retrievalTrace: Record<string, unknown>; teacherApproval: string }> {
+  return apiCall(`/api/teacher-twins/${encodeURIComponent(params.twinId)}/runtime/explain`, {
+    method: 'POST',
+    body: JSON.stringify(params),
+  });
+}
+
+export async function runTeacherTwinPractice(params: {
+  twinId: string;
+  teacherId: string;
+  topic: string;
+  difficulty?: string;
+  constraints?: Record<string, unknown>;
+}): Promise<{ runId: string; output: Record<string, unknown>; retrievalTrace: Record<string, unknown>; teacherApproval: string }> {
+  return apiCall(`/api/teacher-twins/${encodeURIComponent(params.twinId)}/runtime/practice`, {
+    method: 'POST',
+    body: JSON.stringify(params),
+  });
+}
+
+export async function runTeacherTwinGrade(params: {
+  twinId: string;
+  teacherId: string;
+  studentAnswer: string;
+  retrievedReference?: unknown;
+}): Promise<{ runId: string; output: Record<string, unknown>; retrievalTrace: Record<string, unknown>; teacherApproval: string }> {
+  return apiCall(`/api/teacher-twins/${encodeURIComponent(params.twinId)}/runtime/grade`, {
+    method: 'POST',
+    body: JSON.stringify(params),
+  });
+}
+
+export async function reviewTeacherTwinGrade(params: {
+  twinId: string;
+  runId: string;
+  teacherId: string;
+  status: 'approved' | 'rejected';
+  reviewComment?: string;
+}): Promise<{ success: boolean; status: string }> {
+  return apiCall(`/api/teacher-twins/${encodeURIComponent(params.twinId)}/runs/${encodeURIComponent(params.runId)}/approval`, {
+    method: 'PATCH',
+    body: JSON.stringify(params),
+  });
+}
+
+export async function submitTeacherTwinFeedback(params: {
+  twinId: string;
+  teacherId: string;
+  runId?: string;
+  scenario: 'explain' | 'practice' | 'grade';
+  outputId?: string;
+  labelLike?: 'like' | 'dislike';
+  labelCorrect?: 'correct' | 'incorrect';
+  reasonTags?: string[];
+  commentText?: string;
+}): Promise<{ success: boolean }> {
+  return apiCall(`/api/teacher-twins/${encodeURIComponent(params.twinId)}/feedback`, {
+    method: 'POST',
+    body: JSON.stringify(params),
+  });
+}
+
+export async function listTeacherTwinFeedback(
+  twinId: string,
+  teacherId: string
+): Promise<{ feedback: Record<string, unknown>[] }> {
+  return apiCall(`/api/teacher-twins/${encodeURIComponent(twinId)}/feedback?teacherId=${encodeURIComponent(teacherId)}`, {
+    method: 'GET',
+  });
+}
+
+export async function listTeacherTwinDashboard(
+  twinId: string,
+  teacherId: string
+): Promise<{
+  totalRuns: number;
+  gradeRuns: number;
+  approvalRate: number;
+  citationMissingRate: number;
+  negativeFeedbackRate: number;
+}> {
+  return apiCall(`/api/teacher-twins/${encodeURIComponent(twinId)}/dashboard?teacherId=${encodeURIComponent(teacherId)}`, {
+    method: 'GET',
+  });
+}
+
+export async function createGoldenSetItem(params: {
+  twinId: string;
+  teacherId: string;
+  taskType: 'explain' | 'practice' | 'grade';
+  promptJson: Record<string, unknown>;
+  expectedJson: Record<string, unknown>;
+}): Promise<{ success: boolean }> {
+  return apiCall(`/api/teacher-twins/${encodeURIComponent(params.twinId)}/golden-set`, {
+    method: 'POST',
+    body: JSON.stringify(params),
+  });
+}
+
+export async function listGoldenSetItems(
+  twinId: string,
+  teacherId: string
+): Promise<{ items: Record<string, unknown>[] }> {
+  return apiCall(`/api/teacher-twins/${encodeURIComponent(twinId)}/golden-set?teacherId=${encodeURIComponent(teacherId)}`, {
+    method: 'GET',
+  });
+}
+
+export async function sendTeacherTwinOnboardingMessage(params: {
+  twinId: string;
+  teacherId: string;
+  message: string;
+}): Promise<{
+  assistantReply: string;
+  collectedSignals: string[];
+  isReadyForExtract: boolean;
+  profileVersionId: string;
+  profilePreview: Record<string, unknown>;
+  messages: Array<{ role: 'assistant' | 'teacher'; text: string; timestamp: number }>;
+}> {
+  return apiCall(`/api/teacher-twins/${encodeURIComponent(params.twinId)}/onboarding/chat`, {
+    method: 'POST',
+    body: JSON.stringify(params),
+  });
+}
+
 // --- Chat & Exit Ticket (StudentConsole) ---
 export async function sendChatMessage(
   history: ChatMessage[],
