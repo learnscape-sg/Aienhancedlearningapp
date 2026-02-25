@@ -37,6 +37,7 @@ import {
   prefSubjectIdToDisplay,
   GRADE_OPTIONS,
 } from '../hooks/useTeacherPreferences';
+import { downloadMarkdownAsPdf } from '../lib/markdownToPdf';
 import { Tabs, TabsList, TabsTrigger } from './ui/tabs';
 import { TypingText } from './ui/typing-text';
 import type {
@@ -272,6 +273,7 @@ export function TeachingResourcesPage() {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [generateError, setGenerateError] = useState<string | null>(null);
   const [restReady, setRestReady] = useState(false);
+  const [pdfExporting, setPdfExporting] = useState(false);
 
   useEffect(() => {
     if (!user?.id) return;
@@ -496,27 +498,28 @@ export function TeachingResourcesPage() {
     }
   };
 
-  const handleExportTask = () => {
+  const handleExportTask = async () => {
     const markdown = taskDesignMarkdownRef.current;
     if (!markdown?.trim()) {
       window.alert('暂无可导出的任务文档');
       return;
     }
-    const blob = new Blob([markdown], { type: 'text/markdown;charset=utf-8' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = `学习任务-${entryTopic}-${Date.now()}.md`;
-    a.click();
-    URL.revokeObjectURL(a.href);
+    setPdfExporting(true);
+    try {
+      await downloadMarkdownAsPdf(
+        markdown,
+        `学习任务-${entryTopic}-${Date.now()}.pdf`
+      );
+    } finally {
+      setPdfExporting(false);
+    }
   };
 
-  const handleExportFull = () => {
+  const handleExportFull = async () => {
     const markdown = taskDesignMarkdownRef.current;
-    let text: string;
-    let ext: string;
+    let content: string;
     if (markdown?.trim()) {
-      text = markdown;
-      ext = '.md';
+      content = markdown;
     } else {
       const lines: string[] = [];
       lines.push('# 学习目标');
@@ -551,15 +554,14 @@ export function TeachingResourcesPage() {
         if (exitTicketQuestion.correctAnswer)
           lines.push(`参考答案：${exitTicketQuestion.correctAnswer}`);
       }
-      text = lines.join('\n');
-      ext = '.txt';
+      content = lines.join('\n');
     }
-    const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = `课程-${Date.now()}${ext}`;
-    a.click();
-    URL.revokeObjectURL(a.href);
+    setPdfExporting(true);
+    try {
+      await downloadMarkdownAsPdf(content, `课程-${Date.now()}.pdf`);
+    } finally {
+      setPdfExporting(false);
+    }
   };
 
   return (
@@ -1371,8 +1373,8 @@ export function TeachingResourcesPage() {
                     <ChevronLeft className="w-4 h-4 mr-1" />
                     上一页
                   </Button>
-                  <Button variant="outline" onClick={handleExportTask}>
-                    <Download className="w-4 h-4 mr-1" />
+                  <Button variant="outline" onClick={handleExportTask} disabled={pdfExporting}>
+                    {pdfExporting ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Download className="w-4 h-4 mr-1" />}
                     导出任务文档
                   </Button>
                   <Button

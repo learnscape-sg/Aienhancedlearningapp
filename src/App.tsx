@@ -34,9 +34,11 @@ import { TeachingResourcesPage } from './components/TeachingResourcesPage';
 
 type AppState = 'login' | 'onboarding' | 'dashboard' | 'chapter' | 'quiz' | 'learning-mode-selection' | 'immersive-text' | 'slides-narration' | 'audio-lesson' | 'mindmap' | 'game' | 'video';
 
+const TEACHER_SECTIONS = ['overview', 'course-design', 'courses', 'materials', 'classes', 'settings'];
+
 function AppContent() {
   const { user, loading, login } = useAuth();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [appState, setAppState] = useState<AppState>('login');
   const [activeSection, setActiveSection] = useState('learn-your-way');
   const [initialCourseTab, setInitialCourseTab] = useState<'active' | 'shared' | 'recycle' | undefined>(undefined);
@@ -45,15 +47,30 @@ function AppContent() {
   const [tutorQuestionTrigger, setTutorQuestionTrigger] = useState<{ selectedText: string; context: string; timestamp: number } | null>(null);
   const [courseDesignData, setCourseDesignData] = useState<any>(null);
 
-  // Read URL params for deep linking (e.g. ?section=courses&courseTab=shared)
+  // Read URL params for deep linking (e.g. ?section=course-design, ?section=courses&courseTab=shared)
   useEffect(() => {
     const section = searchParams.get('section');
     const courseTab = searchParams.get('courseTab');
-    if (section === 'courses' && (courseTab === 'active' || courseTab === 'shared' || courseTab === 'recycle')) {
-      setActiveSection('courses');
-      setInitialCourseTab(courseTab as 'active' | 'shared' | 'recycle');
+    if (section && TEACHER_SECTIONS.includes(section)) {
+      setActiveSection(section);
+      if (section === 'courses' && (courseTab === 'active' || courseTab === 'shared' || courseTab === 'recycle')) {
+        setInitialCourseTab(courseTab as 'active' | 'shared' | 'recycle');
+      }
     }
   }, [searchParams]);
+
+  // Sync teacher activeSection to URL so tab switch/reload restores correct section
+  useEffect(() => {
+    if (user?.role === 'teacher' && TEACHER_SECTIONS.includes(activeSection)) {
+      const current = searchParams.get('section');
+      if (current !== activeSection) {
+        const params = new URLSearchParams(searchParams);
+        params.set('section', activeSection);
+        if (activeSection !== 'courses') params.delete('courseTab');
+        setSearchParams(params, { replace: true });
+      }
+    }
+  }, [user?.role, activeSection, searchParams, setSearchParams]);
 
   // Update app state based on user status
   useEffect(() => {
@@ -124,6 +141,17 @@ function AppContent() {
   const handleSectionChange = (section: string) => {
     setActiveSection(section);
     setAppState('dashboard');
+    if (user?.role === 'teacher' && TEACHER_SECTIONS.includes(section)) {
+      const params = new URLSearchParams(searchParams);
+      params.set('section', section);
+      if (section === 'courses') {
+        const tab = searchParams.get('courseTab');
+        if (tab && ['active', 'shared', 'recycle'].includes(tab)) params.set('courseTab', tab);
+      } else {
+        params.delete('courseTab');
+      }
+      setSearchParams(params, { replace: true });
+    }
   };
 
   const handleStartPDFLearning = (data: { fileName: string; grade: string; interests: string[] }) => {

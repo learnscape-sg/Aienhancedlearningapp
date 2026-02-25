@@ -49,6 +49,7 @@ import type {
   SystemTaskPlan,
 } from '../types/backend';
 import { saveCourseMetaToSupabase } from '../lib/coursesRepository';
+import { downloadMarkdownAsPdf } from '../lib/markdownToPdf';
 
 type Step = 'form' | 'generating' | 'preview' | 'created';
 
@@ -89,6 +90,7 @@ export function AICourseDesignPage({ onNextStep }: AICourseDesignPageProps) {
   const [editingTaskIndex, setEditingTaskIndex] = useState<number | null>(null);
   const [editingPromptTaskIndex, setEditingPromptTaskIndex] = useState<number | null>(null);
   const [expandedDescIds, setExpandedDescIds] = useState<Set<string>>(new Set());
+  const [pdfDownloading, setPdfDownloading] = useState<'task' | 'guide' | null>(null);
 
   const hasPrefilledRef = useRef(false);
   useEffect(() => {
@@ -508,38 +510,40 @@ export function AICourseDesignPage({ onNextStep }: AICourseDesignPageProps) {
                     >
                       <button
                         type="button"
-                        onClick={() => {
-                          const blob = new Blob([documents.studentTaskSheet], {
-                            type: 'text/markdown;charset=utf-8',
-                          });
-                          const url = URL.createObjectURL(blob);
-                          const a = document.createElement('a');
-                          a.href = url;
-                          a.download = `任务单-${topic || '课程'}-${Date.now()}.md`;
-                          a.click();
-                          URL.revokeObjectURL(url);
+                        disabled={pdfDownloading === 'task'}
+                        onClick={async () => {
+                          setPdfDownloading('task');
+                          try {
+                            await downloadMarkdownAsPdf(
+                              documents.studentTaskSheet,
+                              `任务单-${topic || '课程'}-${Date.now()}.pdf`
+                            );
+                          } finally {
+                            setPdfDownloading(null);
+                          }
                         }}
-                        className="flex items-center gap-1 text-xs text-cyan-600 hover:text-cyan-700 hover:underline bg-transparent border-0 cursor-pointer p-0"
+                        className="flex items-center gap-1 text-xs text-cyan-600 hover:text-cyan-700 hover:underline bg-transparent border-0 cursor-pointer p-0 disabled:opacity-50"
                       >
-                        <Download className="w-3 h-3" />
+                        {pdfDownloading === 'task' ? <Loader2 className="w-3 h-3 animate-spin" /> : <Download className="w-3 h-3" />}
                         任务单
                       </button>
                       <button
                         type="button"
-                        onClick={() => {
-                          const blob = new Blob([documents.teacherGuide], {
-                            type: 'text/markdown;charset=utf-8',
-                          });
-                          const url = URL.createObjectURL(blob);
-                          const a = document.createElement('a');
-                          a.href = url;
-                          a.download = `教师指南-${topic || '课程'}-${Date.now()}.md`;
-                          a.click();
-                          URL.revokeObjectURL(url);
+                        disabled={pdfDownloading === 'guide'}
+                        onClick={async () => {
+                          setPdfDownloading('guide');
+                          try {
+                            await downloadMarkdownAsPdf(
+                              documents.teacherGuide,
+                              `教师指南-${topic || '课程'}-${Date.now()}.pdf`
+                            );
+                          } finally {
+                            setPdfDownloading(null);
+                          }
                         }}
-                        className="flex items-center gap-1 text-xs text-cyan-600 hover:text-cyan-700 hover:underline bg-transparent border-0 cursor-pointer p-0"
+                        className="flex items-center gap-1 text-xs text-cyan-600 hover:text-cyan-700 hover:underline bg-transparent border-0 cursor-pointer p-0 disabled:opacity-50"
                       >
-                        <Download className="w-3 h-3" />
+                        {pdfDownloading === 'guide' ? <Loader2 className="w-3 h-3 animate-spin" /> : <Download className="w-3 h-3" />}
                         教师指南
                       </button>
                     </span>
@@ -591,38 +595,40 @@ export function AICourseDesignPage({ onNextStep }: AICourseDesignPageProps) {
                 <div className="flex flex-wrap gap-2">
                   <button
                     type="button"
-                    onClick={() => {
-                      const blob = new Blob([documents.studentTaskSheet], {
-                        type: 'text/markdown;charset=utf-8',
-                      });
-                      const url = URL.createObjectURL(blob);
-                      const a = document.createElement('a');
-                      a.href = url;
-                      a.download = `任务单-${topic || '课程'}-${Date.now()}.md`;
-                      a.click();
-                      URL.revokeObjectURL(url);
+                    disabled={pdfDownloading === 'task'}
+                    onClick={async () => {
+                      setPdfDownloading('task');
+                      try {
+                        await downloadMarkdownAsPdf(
+                          documents.studentTaskSheet,
+                          `任务单-${topic || '课程'}-${Date.now()}.pdf`
+                        );
+                      } finally {
+                        setPdfDownloading(null);
+                      }
                     }}
-                    className="inline-flex items-center gap-1 px-3 py-1.5 text-sm text-cyan-600 hover:text-cyan-700 hover:underline border border-cyan-200 rounded-md"
+                    className="inline-flex items-center gap-1 px-3 py-1.5 text-sm text-cyan-600 hover:text-cyan-700 hover:underline border border-cyan-200 rounded-md disabled:opacity-50"
                   >
-                    <Download className="w-4 h-4" />
+                    {pdfDownloading === 'task' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
                     下载任务单
                   </button>
                   <button
                     type="button"
-                    onClick={() => {
-                      const blob = new Blob([documents.teacherGuide], {
-                        type: 'text/markdown;charset=utf-8',
-                      });
-                      const url = URL.createObjectURL(blob);
-                      const a = document.createElement('a');
-                      a.href = url;
-                      a.download = `教师指南-${topic || '课程'}-${Date.now()}.md`;
-                      a.click();
-                      URL.revokeObjectURL(url);
+                    disabled={pdfDownloading === 'guide'}
+                    onClick={async () => {
+                      setPdfDownloading('guide');
+                      try {
+                        await downloadMarkdownAsPdf(
+                          documents.teacherGuide,
+                          `教师指南-${topic || '课程'}-${Date.now()}.pdf`
+                        );
+                      } finally {
+                        setPdfDownloading(null);
+                      }
                     }}
-                    className="inline-flex items-center gap-1 px-3 py-1.5 text-sm text-cyan-600 hover:text-cyan-700 hover:underline border border-cyan-200 rounded-md"
+                    className="inline-flex items-center gap-1 px-3 py-1.5 text-sm text-cyan-600 hover:text-cyan-700 hover:underline border border-cyan-200 rounded-md disabled:opacity-50"
                   >
-                    <Download className="w-4 h-4" />
+                    {pdfDownloading === 'guide' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
                     下载教师指南
                   </button>
                 </div>
