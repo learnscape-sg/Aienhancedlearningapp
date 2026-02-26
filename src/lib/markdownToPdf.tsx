@@ -31,12 +31,41 @@ export async function downloadMarkdownAsPdf(
   wrapper.appendChild(container);
   document.body.appendChild(wrapper);
 
+  const pdfNoBreak = { breakInside: 'avoid' as const, pageBreakInside: 'avoid' as const };
+  const pdfComponents = {
+    p: ({ children, ...props }: React.HTMLAttributes<HTMLParagraphElement>) => (
+      <p style={pdfNoBreak} {...props}>{children}</p>
+    ),
+    li: ({ children, ...props }: React.HTMLAttributes<HTMLLIElement>) => (
+      <li style={pdfNoBreak} {...props}>{children}</li>
+    ),
+    h1: ({ children, ...props }: React.HTMLAttributes<HTMLHeadingElement>) => (
+      <h1 style={pdfNoBreak} {...props}>{children}</h1>
+    ),
+    h2: ({ children, ...props }: React.HTMLAttributes<HTMLHeadingElement>) => (
+      <h2 style={pdfNoBreak} {...props}>{children}</h2>
+    ),
+    h3: ({ children, ...props }: React.HTMLAttributes<HTMLHeadingElement>) => (
+      <h3 style={pdfNoBreak} {...props}>{children}</h3>
+    ),
+    h4: ({ children, ...props }: React.HTMLAttributes<HTMLHeadingElement>) => (
+      <h4 style={pdfNoBreak} {...props}>{children}</h4>
+    ),
+    h5: ({ children, ...props }: React.HTMLAttributes<HTMLHeadingElement>) => (
+      <h5 style={pdfNoBreak} {...props}>{children}</h5>
+    ),
+    h6: ({ children, ...props }: React.HTMLAttributes<HTMLHeadingElement>) => (
+      <h6 style={pdfNoBreak} {...props}>{children}</h6>
+    ),
+  };
+
   const root: Root = createRoot(container);
   root.render(
     <div className="markdown-pdf-source">
       <ReactMarkdown
         remarkPlugins={[remarkGfm, remarkMath]}
         rehypePlugins={[rehypeKatex]}
+        components={pdfComponents}
       >
         {markdown}
       </ReactMarkdown>
@@ -51,6 +80,10 @@ export async function downloadMarkdownAsPdf(
       .set({
         margin: 10,
         filename: baseName,
+        pagebreak: {
+          mode: ['avoid-all', 'css'],
+          avoid: ['p', 'li', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'table', '.katex', '.katex-display'],
+        },
         image: { type: 'jpeg', quality: 0.98 },
         html2canvas: {
           scale: 2,

@@ -5,6 +5,7 @@ import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Textarea } from './ui/textarea';
 import { Alert, AlertDescription, AlertTitle } from './ui/alert';
+import * as AccordionPrimitive from '@radix-ui/react-accordion';
 import {
   Accordion,
   AccordionContent,
@@ -488,10 +489,17 @@ export function AICourseDesignPage({ onNextStep }: AICourseDesignPageProps) {
                     </span>
                   </AccordionTrigger>
                   <AccordionContent>
-                    <p className="text-sm text-muted-foreground mb-2">
-                      大概念：{curriculum.bigConcept}
-                    </p>
-                    <p className="text-sm whitespace-pre-wrap">{curriculum.logicChain}</p>
+                    <p className="text-sm text-muted-foreground mb-2">大概念：</p>
+                    <div className="text-sm [&_p]:mb-2 [&_*]:break-words">
+                      <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]}>
+                        {curriculum.bigConcept}
+                      </ReactMarkdown>
+                    </div>
+                    <div className="text-sm leading-relaxed [&_p]:mb-2 [&_*]:break-words mt-2">
+                      <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]}>
+                        {curriculum.logicChain}
+                      </ReactMarkdown>
+                    </div>
                   </AccordionContent>
                 </AccordionItem>
               </Accordion>
@@ -499,15 +507,15 @@ export function AICourseDesignPage({ onNextStep }: AICourseDesignPageProps) {
             {documents && (
               <Accordion type="single" collapsible defaultValue="documents">
                 <AccordionItem value="documents">
-                  <AccordionTrigger className="flex items-center">
-                    <span className="flex items-center gap-2 flex-1">
-                      <CheckCircle2 className="w-4 h-4 text-green-600" />
-                      任务单与教师指南已生成
-                    </span>
-                    <span
-                      className="flex items-center gap-2 shrink-0 mr-2"
-                      onClick={(e) => e.stopPropagation()}
+                  <AccordionPrimitive.Header className="flex items-center">
+                    <AccordionPrimitive.Trigger
+                      className="flex flex-1 items-center gap-2 py-4 text-left text-sm font-medium outline-none transition-all hover:underline [&[data-state=open]_svg]:rotate-180"
                     >
+                      <CheckCircle2 className="w-4 h-4 shrink-0 text-green-600" />
+                      任务单与教师指南已生成
+                      <ChevronDown className="ml-auto h-4 w-4 shrink-0 opacity-50" />
+                    </AccordionPrimitive.Trigger>
+                    <span className="flex shrink-0 items-center gap-2 py-4 pl-2" onClick={(e) => e.stopPropagation()}>
                       <button
                         type="button"
                         disabled={pdfDownloading === 'task'}
@@ -522,7 +530,7 @@ export function AICourseDesignPage({ onNextStep }: AICourseDesignPageProps) {
                             setPdfDownloading(null);
                           }
                         }}
-                        className="flex items-center gap-1 text-xs text-cyan-600 hover:text-cyan-700 hover:underline bg-transparent border-0 cursor-pointer p-0 disabled:opacity-50"
+                        className="inline-flex items-center gap-1 text-xs text-cyan-600 hover:text-cyan-700 hover:underline disabled:opacity-50"
                       >
                         {pdfDownloading === 'task' ? <Loader2 className="w-3 h-3 animate-spin" /> : <Download className="w-3 h-3" />}
                         任务单
@@ -541,19 +549,20 @@ export function AICourseDesignPage({ onNextStep }: AICourseDesignPageProps) {
                             setPdfDownloading(null);
                           }
                         }}
-                        className="flex items-center gap-1 text-xs text-cyan-600 hover:text-cyan-700 hover:underline bg-transparent border-0 cursor-pointer p-0 disabled:opacity-50"
+                        className="inline-flex items-center gap-1 text-xs text-cyan-600 hover:text-cyan-700 hover:underline disabled:opacity-50"
                       >
                         {pdfDownloading === 'guide' ? <Loader2 className="w-3 h-3 animate-spin" /> : <Download className="w-3 h-3" />}
                         教师指南
                       </button>
                     </span>
-                  </AccordionTrigger>
+                  </AccordionPrimitive.Header>
                   <AccordionContent>
                     <p className="text-sm text-muted-foreground mb-2">任务单摘要（前 500 字）：</p>
-                    <p className="text-sm whitespace-pre-wrap max-h-48 overflow-y-auto">
-                      {documents.studentTaskSheet.slice(0, 500)}
-                      {documents.studentTaskSheet.length > 500 && '…'}
-                    </p>
+                    <div className="text-sm max-h-48 overflow-y-auto prose prose-sm dark:prose-invert max-w-none [&_*]:break-words">
+                      <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]}>
+                        {`${documents.studentTaskSheet.slice(0, 500)}${documents.studentTaskSheet.length > 500 ? '\n…' : ''}`}
+                      </ReactMarkdown>
+                    </div>
                   </AccordionContent>
                 </AccordionItem>
               </Accordion>
@@ -576,12 +585,17 @@ export function AICourseDesignPage({ onNextStep }: AICourseDesignPageProps) {
                 <CardTitle className="text-lg">1. 课程设计 / 大概念</CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="text-sm text-muted-foreground mb-2">
-                  <strong>大概念：</strong>{curriculum.bigConcept}
-                </p>
-                <p className="text-sm whitespace-pre-wrap leading-relaxed">
-                  {curriculum.logicChain}
-                </p>
+                <p className="text-sm text-muted-foreground mb-2"><strong>大概念：</strong></p>
+                <div className="text-sm [&_p]:mb-2 [&_*]:break-words mb-4">
+                  <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]}>
+                    {curriculum.bigConcept}
+                  </ReactMarkdown>
+                </div>
+                <div className="text-sm leading-relaxed prose prose-sm dark:prose-invert max-w-none [&_p]:mb-2 [&_*]:break-words">
+                  <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]}>
+                    {curriculum.logicChain}
+                  </ReactMarkdown>
+                </div>
               </CardContent>
             </Card>
           )}
@@ -636,19 +650,21 @@ export function AICourseDesignPage({ onNextStep }: AICourseDesignPageProps) {
                   <AccordionItem value="task">
                     <AccordionTrigger>任务单摘要（前 500 字）</AccordionTrigger>
                     <AccordionContent>
-                      <p className="text-sm whitespace-pre-wrap max-h-48 overflow-y-auto">
-                        {documents.studentTaskSheet.slice(0, 500)}
-                        {documents.studentTaskSheet.length > 500 && '…'}
-                      </p>
+                      <div className="text-sm max-h-48 overflow-y-auto prose prose-sm dark:prose-invert max-w-none [&_*]:break-words">
+                        <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]}>
+                          {`${documents.studentTaskSheet.slice(0, 500)}${documents.studentTaskSheet.length > 500 ? '\n…' : ''}`}
+                        </ReactMarkdown>
+                      </div>
                     </AccordionContent>
                   </AccordionItem>
                   <AccordionItem value="guide">
                     <AccordionTrigger>教师指南摘要（前 500 字）</AccordionTrigger>
                     <AccordionContent>
-                      <p className="text-sm whitespace-pre-wrap max-h-48 overflow-y-auto">
-                        {documents.teacherGuide.slice(0, 500)}
-                        {documents.teacherGuide.length > 500 && '…'}
-                      </p>
+                      <div className="text-sm max-h-48 overflow-y-auto prose prose-sm dark:prose-invert max-w-none [&_*]:break-words">
+                        <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]}>
+                          {`${documents.teacherGuide.slice(0, 500)}${documents.teacherGuide.length > 500 ? '\n…' : ''}`}
+                        </ReactMarkdown>
+                      </div>
                     </AccordionContent>
                   </AccordionItem>
                 </Accordion>
