@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { CreationMode } from '@/types/backend';
 import { Type, MousePointerClick, Move } from 'lucide-react';
 
@@ -13,30 +14,16 @@ export const CreationModeSelector: React.FC<CreationModeSelectorProps> = ({
   onSelect,
   disabled = false
 }) => {
-  const modes: Array<{ mode: CreationMode; label: string; icon: React.ReactNode; description: string }> = [
-    {
-      mode: 'simple-input',
-      label: '简单输入',
-      icon: <Type size={18} />,
-      description: '输入文本，自动解析'
-    },
-    {
-      mode: 'click-create',
-      label: '点击创建',
-      icon: <MousePointerClick size={18} />,
-      description: '点击画布创建节点'
-    },
-    {
-      mode: 'drag-drop',
-      label: '拖拽构建',
-      icon: <Move size={18} />,
-      description: '拖拽节点连接关系'
-    }
+  const { t } = useTranslation('visualizationEditor');
+  const modes: Array<{ mode: CreationMode; labelKey: string; descKey: string; icon: React.ReactNode }> = [
+    { mode: 'simple-input', labelKey: 'simpleInput', descKey: 'simpleInputDesc', icon: <Type size={18} /> },
+    { mode: 'click-create', labelKey: 'clickCreate', descKey: 'clickCreateDesc', icon: <MousePointerClick size={18} /> },
+    { mode: 'drag-drop', labelKey: 'dragDrop', descKey: 'dragDropDesc', icon: <Move size={18} /> },
   ];
 
   return (
     <div className="flex gap-2 p-2 bg-slate-50 rounded-lg border border-slate-200">
-      {modes.map(({ mode, label, icon, description }) => (
+      {modes.map(({ mode, labelKey, descKey, icon }) => (
         <button
           key={mode}
           onClick={() => !disabled && onSelect(mode)}
@@ -49,10 +36,10 @@ export const CreationModeSelector: React.FC<CreationModeSelectorProps> = ({
             }
             ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
           `}
-          title={description}
+          title={t(descKey)}
         >
           {icon}
-          <span>{label}</span>
+          <span>{t(labelKey)}</span>
         </button>
       ))}
     </div>

@@ -1,0 +1,8 @@
+{
+  "close": "Close",
+  "restore": "Restore",
+  "restoreTitle": "Restore to small window (ESC)",
+  "parseError": "Parse error",
+  "renderError": "Error rendering mind map",
+  "syntaxError": "Syntax error"
+}

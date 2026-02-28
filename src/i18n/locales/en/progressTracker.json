@@ -1,0 +1,22 @@
+{
+  "title": "Real-time Learning Progress",
+  "taskProgress": "Task Progress",
+  "taskCount": "Task {{current}} / {{total}}",
+  "traitTitle": "Scholar Traits Score",
+  "selfDrive": "Self Drive",
+  "focus": "Focus",
+  "thinking": "Enjoy Thinking",
+  "improvement": "Obsessed with Improvement",
+  "questionCount": "Questions",
+  "improvementCount": "Improvements",
+  "deepThinking": "Deep Thinking",
+  "completion": "Completion",
+  "recentAchievements": "Recent Achievements ✨",
+  "points": "+{{count}} pts",
+  "firstQuestion": "You asked your first question! 💡",
+  "questionsCount": "You've asked {{count}} questions! Keep exploring!",
+  "firstEdit": "You started improving your answer! ✨",
+  "editsCount": "You've made {{count}} improvements! Keep refining!",
+  "deepInsight": "You showed deep thinking! 🌟",
+  "tasksCompleted": "Completed {{completed}}/{{total}} tasks! Keep going! 🎯"
+}

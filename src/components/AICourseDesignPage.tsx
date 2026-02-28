@@ -43,6 +43,7 @@ import {
   generateSystemTaskPlan,
   generateTaskAsset,
   createCourse,
+  trackProductEvent,
 } from '../lib/backendApi';
 import type {
   CurriculumDesign,
@@ -74,6 +75,7 @@ export function AICourseDesignPage({ onNextStep }: AICourseDesignPageProps) {
   const [topic, setTopic] = useState('');
   const [textbook, setTextbook] = useState('');
   const [context, setContext] = useState('');
+  const [language, setLanguage] = useState<'zh' | 'en'>('zh');
 
   const [curriculum, setCurriculum] = useState<CurriculumDesign | null>(null);
   const [documents, setDocuments] = useState<TaskDocuments | null>(null);
@@ -116,9 +118,15 @@ export function AICourseDesignPage({ onNextStep }: AICourseDesignPageProps) {
     setDocuments(null);
     setPlan(null);
 
-    const lang = 'zh';
     const textbookVal = textbook.trim() || '统编版';
     const contextVal = context.trim();
+    void trackProductEvent({
+      eventName: 'task_create_started',
+      role: 'teacher',
+      teacherId: user?.id,
+      language,
+      properties: { source: 'AICourseDesignPage', subject: subject.trim(), grade: grade.trim(), topic: topic.trim() },
+    }).catch(() => undefined);
 
     try {
       setGenStep('curriculum');
@@ -128,7 +136,7 @@ export function AICourseDesignPage({ onNextStep }: AICourseDesignPageProps) {
         topic.trim(),
         textbookVal,
         contextVal,
-        lang
+        language
       );
       setCurriculum(curriculumResult);
 
@@ -137,7 +145,8 @@ export function AICourseDesignPage({ onNextStep }: AICourseDesignPageProps) {
         subject.trim(),
         topic.trim(),
         curriculumResult,
-        contextVal
+        contextVal,
+        language
       );
       setDocuments(documentsResult);
 
@@ -146,7 +155,8 @@ export function AICourseDesignPage({ onNextStep }: AICourseDesignPageProps) {
         documentsResult.studentTaskSheet,
         subject.trim(),
         grade.trim(),
-        contextVal
+        contextVal,
+        language
       );
 
       // Step 4: 预生成素材
@@ -156,7 +166,7 @@ export function AICourseDesignPage({ onNextStep }: AICourseDesignPageProps) {
         const task = newTasks[i];
         if (needsAssetGeneration(task.assetType) && task.assetPrompt?.trim()) {
           try {
-            const assetResult = await generateTaskAsset(task.assetType, task.assetPrompt);
+            const assetResult = await generateTaskAsset(task.assetType, task.assetPrompt, undefined, undefined, language);
             if (assetResult != null) {
               newTasks[i] = {
                 ...task,
@@ -177,6 +187,13 @@ export function AICourseDesignPage({ onNextStep }: AICourseDesignPageProps) {
         tasks: newTasks,
       };
       setPlan(planWithAssets);
+      void trackProductEvent({
+        eventName: 'task_create_succeeded',
+        role: 'teacher',
+        teacherId: user?.id,
+        language,
+        properties: { source: 'AICourseDesignPage', taskCount: planWithAssets.tasks.length },
+      }).catch(() => undefined);
       setGenStep(null);
       setStep('preview');
     } catch (err) {
@@ -189,7 +206,6 @@ export function AICourseDesignPage({ onNextStep }: AICourseDesignPageProps) {
   const retryFromCurriculum = async () => {
     setGenError(null);
     setGenStep('curriculum');
-    const lang = 'zh';
     const textbookVal = textbook.trim() || '统编版';
     const contextVal = context.trim();
     try {
@@ -199,7 +215,7 @@ export function AICourseDesignPage({ onNextStep }: AICourseDesignPageProps) {
         topic.trim(),
         textbookVal,
         contextVal,
-        lang
+        language
       );
       setCurriculum(curriculumResult);
       setGenStep('documents');
@@ -207,7 +223,8 @@ export function AICourseDesignPage({ onNextStep }: AICourseDesignPageProps) {
         subject.trim(),
         topic.trim(),
         curriculumResult,
-        contextVal
+        contextVal,
+        language
       );
       setDocuments(documentsResult);
       setGenStep('tasks');
@@ -215,7 +232,8 @@ export function AICourseDesignPage({ onNextStep }: AICourseDesignPageProps) {
         documentsResult.studentTaskSheet,
         subject.trim(),
         grade.trim(),
-        contextVal
+        contextVal,
+        language
       );
 
       setGenStep('assets');
@@ -224,7 +242,7 @@ export function AICourseDesignPage({ onNextStep }: AICourseDesignPageProps) {
         const task = newTasks[i];
         if (needsAssetGeneration(task.assetType) && task.assetPrompt?.trim()) {
           try {
-            const assetResult = await generateTaskAsset(task.assetType, task.assetPrompt);
+            const assetResult = await generateTaskAsset(task.assetType, task.assetPrompt, undefined, undefined, language);
             if (assetResult != null) {
               newTasks[i] = {
                 ...task,
@@ -266,7 +284,7 @@ export function AICourseDesignPage({ onNextStep }: AICourseDesignPageProps) {
     if (!needsAssetGeneration(task.assetType) || !task.assetPrompt?.trim()) return;
     setRegeneratingTaskId(task.id);
     try {
-      const assetResult = await generateTaskAsset(task.assetType, task.assetPrompt);
+      const assetResult = await generateTaskAsset(task.assetType, task.assetPrompt, undefined, undefined, language);
       if (assetResult != null) {
         const newTasks = [...plan.tasks];
         newTasks[taskIndex] = {
@@ -297,7 +315,15 @@ export function AICourseDesignPage({ onNextStep }: AICourseDesignPageProps) {
     setCreateLoading(true);
     setCreateError(null);
     try {
-      const result = await createCourse(plan, user?.id, { subject, topic, grade });
+      const result = await createCourse(plan, user?.id, { subject, topic, grade, language });
+      void trackProductEvent({
+        eventName: 'course_create_succeeded',
+        role: 'teacher',
+        teacherId: user?.id,
+        language,
+        courseId: result.courseId,
+        properties: { source: 'AICourseDesignPage', taskCount: plan.tasks.length },
+      }).catch(() => undefined);
 
       // 尝试将课程元数据写入 Supabase，再更新前端课程管理列表
       if (user && user.role === 'teacher') {
@@ -422,6 +448,18 @@ export function AICourseDesignPage({ onNextStep }: AICourseDesignPageProps) {
                 onChange={(e) => setContext(e.target.value)}
                 rows={3}
               />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="language">内容语言</Label>
+              <select
+                id="language"
+                value={language}
+                onChange={(e) => setLanguage(e.target.value as 'zh' | 'en')}
+                className="w-full h-12 px-3 py-2 border border-input rounded-md bg-input-background"
+              >
+                <option value="zh">简体中文</option>
+                <option value="en">English</option>
+              </select>
             </div>
             <Button
               onClick={runGeneration}

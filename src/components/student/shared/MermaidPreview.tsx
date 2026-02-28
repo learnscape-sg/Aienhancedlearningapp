@@ -1,4 +1,5 @@
 import React, { useRef, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import mermaid from 'mermaid';
 
 interface MermaidPreviewProps {
@@ -11,9 +12,11 @@ interface MermaidPreviewProps {
 export const MermaidPreview: React.FC<MermaidPreviewProps> = ({
   code,
   className = 'w-full h-full flex items-center justify-center overflow-auto custom-scrollbar',
-  errorMessage = '渲染思维导图时出错',
+  errorMessage,
   idPrefix = 'mermaid',
 }) => {
+  const { t } = useTranslation('common');
+  const displayError = errorMessage ?? t('renderError');
   const ref = useRef<HTMLDivElement>(null);
   const idRef = useRef<string | null>(null);
 
@@ -51,11 +54,11 @@ export const MermaidPreview: React.FC<MermaidPreviewProps> = ({
       } catch (e) {
         console.error('Mermaid render error', e);
         if (ref.current) {
-          ref.current.innerHTML = `<div class='text-xs text-red-400 p-4'>${errorMessage}</div>`;
+          ref.current.innerHTML = `<div class='text-xs text-red-400 p-4'>${displayError}</div>`;
         }
       }
     }
-  }, [code, idPrefix, errorMessage]);
+  }, [code, idPrefix, displayError]);
 
   return <div ref={ref} className={className} />;
 };

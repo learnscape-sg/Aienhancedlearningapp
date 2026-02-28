@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useEffect, ReactNode } from
 import { supabase } from '../utils/supabase/client';
 import type { ProfilePreferences } from '../types/preferences';
 
-type UserRole = 'student' | 'teacher' | 'parent';
+type UserRole = 'student' | 'teacher' | 'parent' | 'admin';
 
 interface User {
   id: string;
@@ -11,6 +11,7 @@ interface User {
   grade: string;
   interests: string[];
   role: UserRole;
+  tenantId?: string;
 }
 
 interface AuthContextType {
@@ -29,7 +30,7 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 function mapUserTypeToRole(userType: string | null): UserRole {
-  if (userType === 'teacher' || userType === 'student' || userType === 'parent') {
+  if (userType === 'teacher' || userType === 'student' || userType === 'parent' || userType === 'admin') {
     return userType;
   }
   return 'student';
@@ -57,7 +58,7 @@ async function loadProfileFromSupabase(
 ): Promise<{ user: User; preferences: ProfilePreferences } | null> {
   const { data: profile } = await supabase
     .from('profiles')
-    .select('id, name, user_type, preferences')
+    .select('id, name, user_type, preferences, tenant_id')
     .eq('id', userId)
     .maybeSingle();
 
@@ -71,6 +72,7 @@ async function loadProfileFromSupabase(
         grade: prefs.grade ?? '',
         interests: prefs.interests ?? [],
         role: mapUserTypeToRole(profile.user_type),
+        tenantId: profile.tenant_id ?? undefined,
       },
       preferences: prefs,
     };
@@ -87,9 +89,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (result) {
       setUser(result.user);
       setPreferences(result.preferences);
+      if (typeof window !== 'undefined') {
+        if (result.user.tenantId) {
+          localStorage.setItem('runtimeTenantId', result.user.tenantId);
+        } else {
+          localStorage.removeItem('runtimeTenantId');
+        }
+      }
     } else {
       setUser(null);
       setPreferences({});
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('runtimeTenantId');
+      }
     }
   };
 

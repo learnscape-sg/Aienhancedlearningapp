@@ -1,4 +1,5 @@
 import React, { useState, useEffect, lazy, Suspense } from 'react';
+import { useTranslation } from 'react-i18next';
 import { VisualizationData, VisualizationType, CreationMode, VisualizationNode, VisualizationEdge, VisualizationProgress } from '@/types/backend';
 import { VisualizationTypeSelector } from './VisualizationTypeSelector';
 import { CreationModeSelector } from './CreationModeSelector';
@@ -38,6 +39,7 @@ export const VisualizationEditor: React.FC<VisualizationEditorProps> = ({
   onConfusionMarked,
   onProgressUpdate
 }) => {
+  const { t } = useTranslation('visualizationEditor');
   const [data, setData] = useState<VisualizationData>(() => {
     if (initialData) {
       return initialData;
@@ -154,17 +156,17 @@ export const VisualizationEditor: React.FC<VisualizationEditorProps> = ({
                   onClick={handleGenerateFramework}
                   disabled={isGenerating}
                   className="flex items-center gap-2 px-3 py-1.5 bg-gradient-to-r from-purple-500 to-cyan-500 text-white text-xs font-bold rounded-lg hover:from-purple-600 hover:to-cyan-600 transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
-                  title="AI生成思维导图框架"
+                  title={t('aiGenerateFrameworkTitle')}
                 >
                   {isGenerating ? (
                     <>
                       <Loader2 size={14} className="animate-spin" />
-                      <span>生成中...</span>
+                      <span>{t('generating')}</span>
                     </>
                   ) : (
                     <>
                       <Sparkles size={14} />
-                      <span>AI生成框架</span>
+                      <span>{t('aiGenerateFramework')}</span>
                     </>
                   )}
                 </button>
@@ -177,7 +179,7 @@ export const VisualizationEditor: React.FC<VisualizationEditorProps> = ({
           <button
             onClick={onClose}
             className="p-1.5 rounded-lg hover:bg-white/50 transition-colors text-slate-600 hover:text-slate-800"
-            title="关闭编辑器"
+            title={t('closeEditor')}
           >
             <X size={18} />
           </button>

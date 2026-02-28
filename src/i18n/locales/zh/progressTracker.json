@@ -1,0 +1,22 @@
+{
+  "title": "实时学习进度",
+  "taskProgress": "任务进度",
+  "taskCount": "任务 {{current}} / {{total}}",
+  "traitTitle": "学霸特质实时得分",
+  "selfDrive": "自驱力",
+  "focus": "专注力",
+  "thinking": "享受思考",
+  "improvement": "痴迷改进",
+  "questionCount": "提问数",
+  "improvementCount": "改进次数",
+  "deepThinking": "深度思考",
+  "completion": "完成度",
+  "recentAchievements": "最近成就 ✨",
+  "points": "+{{count}} 分",
+  "firstQuestion": "你提出了第一个问题！💡",
+  "questionsCount": "你已经提出了 {{count}} 个问题！继续探索！",
+  "firstEdit": "你开始改进你的答案了！✨",
+  "editsCount": "你已经进行了 {{count}} 次改进！精益求精！",
+  "deepInsight": "你展现了深度思考！🌟",
+  "tasksCompleted": "已完成 {{completed}}/{{total}} 个任务！继续加油！🎯"
+}

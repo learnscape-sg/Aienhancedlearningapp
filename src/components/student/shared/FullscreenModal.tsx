@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { X, Minimize2 } from 'lucide-react';
 
 interface FullscreenModalProps {
@@ -14,6 +15,7 @@ export const FullscreenModal: React.FC<FullscreenModalProps> = ({
   title,
   children,
 }) => {
+  const { t } = useTranslation('common');
   useEffect(() => {
     if (!isOpen) return;
     const handleEscape = (e: KeyboardEvent) => {
@@ -47,10 +49,10 @@ export const FullscreenModal: React.FC<FullscreenModalProps> = ({
           <button
             onClick={onClose}
             className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-slate-700 hover:bg-slate-100 transition-colors"
-            title="还原到小窗口 (ESC)"
+            title={t('restoreTitle')}
           >
             <Minimize2 size={16} />
-            <span>还原</span>
+            <span>{t('restore')}</span>
           </button>
         </div>
         <div className="flex-1 overflow-hidden relative">{children}</div>

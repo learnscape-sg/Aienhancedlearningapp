@@ -7,6 +7,7 @@ import { Input } from './ui/input';
 import {
   Search,
   Link as LinkIcon,
+  Upload,
   Loader2,
   Download,
   Video,
@@ -27,6 +28,8 @@ import {
   generateTaskDesign,
   createCourse,
   saveTask,
+  uploadMaterialResource,
+  trackProductEvent,
   listTeacherDigitalTwins,
   type TeacherDigitalTwin,
 } from '../lib/backendApi';
@@ -40,6 +43,8 @@ import {
 import { downloadMarkdownAsPdf } from '../lib/markdownToPdf';
 import { Tabs, TabsList, TabsTrigger } from './ui/tabs';
 import { TypingText } from './ui/typing-text';
+import { resolveRuntimeExperienceConfig } from '@/lib/entryDetector';
+import { useRuntimePolicy } from '@/hooks/useRuntimePolicy';
 import type {
   VideoSearchItem,
   VideoContentResult,
@@ -59,19 +64,82 @@ const STEPS = [
 
 type StepKey = (typeof STEPS)[number]['key'];
 
-function extractYouTubeVideoId(url: string): string | null {
+type ParsedVideoRef = {
+  platform: 'youtube' | 'bilibili';
+  id: string;
+};
+
+function parseVideoUrl(url: string): ParsedVideoRef | null {
   try {
     const parsed = new URL(url);
-    if (parsed.hostname === 'www.youtube.com' || parsed.hostname === 'youtube.com') {
-      return parsed.searchParams.get('v');
+    const host = parsed.hostname.toLowerCase();
+
+    if (host === 'www.youtube.com' || host === 'youtube.com') {
+      const v = parsed.searchParams.get('v');
+      if (v) return { platform: 'youtube', id: v };
+      const parts = parsed.pathname.split('/').filter(Boolean);
+      if ((parts[0] === 'shorts' || parts[0] === 'embed') && parts[1]) {
+        return { platform: 'youtube', id: parts[1] };
+      }
     }
-    if (parsed.hostname === 'youtu.be') {
-      return parsed.pathname.replace(/^\//, '').split('/')[0] || null;
+
+    if (host === 'youtu.be') {
+      const id = parsed.pathname.replace(/^\//, '').split('/')[0] || '';
+      if (id) return { platform: 'youtube', id };
     }
+
+    if (host.endsWith('bilibili.com')) {
+      const match = parsed.pathname.match(/\/video\/(BV[0-9A-Za-z]+)/i);
+      if (match?.[1]) {
+        return { platform: 'bilibili', id: match[1] };
+      }
+    }
+
     return null;
   } catch {
     return null;
   }
+}
+
+function normalizePlatform(item: VideoSearchItem): 'youtube' | 'bilibili' | 'unknown' {
+  if (item.platform === 'youtube' || item.platform === 'bilibili') return item.platform;
+  try {
+    const parsed = new URL(item.url);
+    const host = parsed.hostname.toLowerCase();
+    if (host.includes('youtube.com') || host.includes('youtu.be')) return 'youtube';
+    if (host.includes('bilibili.com') || host.includes('b23.tv')) return 'bilibili';
+  } catch {
+    return 'unknown';
+  }
+  return 'unknown';
+}
+
+function getVideoItemKey(item: VideoSearchItem): string {
+  const platform = normalizePlatform(item);
+  if (platform !== 'unknown') return `${platform}:${item.id}`;
+  if (item.url) return `url:${item.url}`;
+  return `id:${item.id}`;
+}
+
+function getVideoEmbedUrl(item: VideoSearchItem): string | null {
+  const platform = normalizePlatform(item);
+  if (platform === 'youtube') {
+    return `https://www.youtube.com/embed/${item.id}`;
+  }
+  if (platform === 'bilibili') {
+    return `https://player.bilibili.com/player.html?bvid=${item.id}&page=1`;
+  }
+  return null;
+}
+
+function detectResourceKind(item: VideoSearchItem): 'video' | 'document' {
+  if (item.resourceKind) return item.resourceKind;
+  const mime = item.mimeType?.toLowerCase() || '';
+  if (mime.startsWith('video/')) return 'video';
+  if (mime) return 'document';
+  const lowerUrl = (item.url || '').toLowerCase();
+  if (/\.(mp4|webm|mov|m4v|ogg)(\?|#|$)/i.test(lowerUrl)) return 'video';
+  return 'video';
 }
 
 function Stepper({
@@ -165,6 +233,9 @@ function buildSystemTask(opts: {
   taskDesignMarkdown: string | null;
   twinId?: string;
 }): SystemTask {
+  const selectedResourceKind = opts.selectedVideoItem?.resourceKind || 'video';
+  const resourceLabel = selectedResourceKind === 'document' ? '学习资料' : '视频';
+  const resourceActionText = selectedResourceKind === 'document' ? '阅读资料' : '观看视频';
   const videoUrl = opts.selectedVideoItem?.url
     ?? (opts.selectedVideoItem?.id
       ? `https://www.youtube.com/watch?v=${opts.selectedVideoItem.id}`
@@ -182,13 +253,15 @@ function buildSystemTask(opts: {
       practiceQuestions: opts.practiceQuestions,
       exitTicket: opts.exitTicketQuestion,
       taskDesignJson: opts.taskDesignJson,
+      resourceKind: selectedResourceKind,
+      resourceMimeType: opts.selectedVideoItem?.mimeType || '',
     }),
     // video_player should use externalResourceUrl (YouTube URL or media URL),
     // not markdown content.
     generatedAssetContent: '',
     description: [
       `学习目标：${opts.learningObjective}`,
-      opts.selectedVideoItem ? `视频：${opts.selectedVideoItem.title}` : '',
+      opts.selectedVideoItem ? `${resourceLabel}：${opts.selectedVideoItem.title}` : '',
       `关键要点：${opts.keyIdeas.length} 条`,
       `练习题目：${opts.practiceQuestions.length} 题`,
       opts.exitTicketQuestion ? `离场券：1 题` : '',
@@ -200,7 +273,7 @@ function buildSystemTask(opts: {
       systemInstruction: [
         `你是学生的学习助手。本节课主题是「${opts.topic}」（${opts.subject}，${opts.grade}）。`,
         `学习目标：${opts.learningObjective}`,
-        `学生将观看视频并完成以下任务：`,
+        `学生将${resourceActionText}并完成以下任务：`,
         `1. 记录关键要点（${opts.keyIdeas.length} 条）`,
         `2. 完成练习题目（${opts.practiceQuestions.length} 题）`,
         `3. 完成离场券`,
@@ -231,6 +304,8 @@ const TASK_TYPES = [
 
 export function TeachingResourcesPage() {
   const { user, preferences } = useAuth();
+  const { policy } = useRuntimePolicy();
+  const experience = resolveRuntimeExperienceConfig();
   const { refreshTasks } = useTasks();
   const [availableTwins, setAvailableTwins] = useState<TeacherDigitalTwin[]>([]);
   const [selectedTwinId, setSelectedTwinId] = useState<string>('');
@@ -240,6 +315,7 @@ export function TeachingResourcesPage() {
   const [entrySubject, setEntrySubject] = useState('物理');
   const [entryTopic, setEntryTopic] = useState('牛顿第一定律');
   const [entryGrade, setEntryGrade] = useState('高一');
+  const [entryLanguage, setEntryLanguage] = useState<'zh' | 'en'>('zh');
   const [entryDuration, setEntryDuration] = useState('15');
   const [entryDifficulty, setEntryDifficulty] = useState('基础');
   const [entryPrerequisites, setEntryPrerequisites] = useState('力，运动状态，惯性');
@@ -258,6 +334,7 @@ export function TeachingResourcesPage() {
   const [customVideoItems, setCustomVideoItems] = useState<VideoSearchItem[]>([]);
   const [pasteUrl, setPasteUrl] = useState('');
   const [loading, setLoading] = useState(false);
+  const [uploadingResource, setUploadingResource] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [objectiveLoading, setObjectiveLoading] = useState(false);
   const generateTaskDesignPromiseRef = useRef<Promise<{ objective: string; json?: Record<string, unknown>; markdown?: string }> | null>(null);
@@ -274,6 +351,17 @@ export function TeachingResourcesPage() {
   const [generateError, setGenerateError] = useState<string | null>(null);
   const [restReady, setRestReady] = useState(false);
   const [pdfExporting, setPdfExporting] = useState(false);
+
+  const preferredVideoPlatform: 'youtube' | 'bilibili' | 'all' =
+    policy?.video?.platformDefault
+      ?? (experience.entry.marketCode === 'SG' ? 'youtube' : 'bilibili');
+  const marketLabel = experience.entry.marketCode === 'SG' ? 'SG' : experience.entry.marketCode === 'CN' ? 'CN' : 'GLOBAL';
+  const preferredPlatformLabel =
+    preferredVideoPlatform === 'youtube'
+      ? 'YouTube'
+      : preferredVideoPlatform === 'bilibili'
+        ? 'Bilibili'
+        : 'YouTube + Bilibili';
 
   useEffect(() => {
     if (!user?.id) return;
@@ -304,6 +392,13 @@ export function TeachingResourcesPage() {
     if (!topic) return;
     setTaskDesignReady(false);
     setRestReady(false);
+    void trackProductEvent({
+      eventName: 'task_create_started',
+      role: 'teacher',
+      teacherId: user?.id,
+      language: entryLanguage,
+      properties: { source: 'TeachingResourcesPage', subject: entrySubject, grade: entryGrade, topic },
+    }).catch(() => undefined);
     const promise = generateTaskDesign({
       subject: entrySubject,
       topic,
@@ -311,6 +406,7 @@ export function TeachingResourcesPage() {
       duration: entryDuration.trim() || '15',
       difficulty: entryDifficulty || undefined,
       prerequisites: entryPrerequisites || undefined,
+      language: entryLanguage,
     });
     generateTaskDesignPromiseRef.current = promise;
     promise.then(() => setTaskDesignReady(true)).catch(() => setTaskDesignReady(false));
@@ -348,7 +444,7 @@ export function TeachingResourcesPage() {
     setLoading(true);
     setError(null);
     try {
-      const { items } = await searchVideos(q, 6);
+      const { items } = await searchVideos(q, 6, preferredVideoPlatform);
       setSearchResults(items);
     } catch (e) {
       setError(e instanceof Error ? e.message : '搜索失败');
@@ -360,31 +456,43 @@ export function TeachingResourcesPage() {
   const handlePasteUrl = async () => {
     const url = pasteUrl.trim();
     if (!url) return;
-    const videoId = extractYouTubeVideoId(url);
-    if (!videoId) {
-      setError('请输入有效的 YouTube 视频链接');
+    const parsed = parseVideoUrl(url);
+    if (!parsed) {
+      setError('请输入有效的 YouTube 或 B站视频链接');
       return;
     }
-    if (searchResults.some((v) => v.id === videoId) || customVideoItems.some((v) => v.id === videoId)) {
+    const candidateKey = `${parsed.platform}:${parsed.id}`;
+    if (
+      searchResults.some((v) => getVideoItemKey(v) === candidateKey) ||
+      customVideoItems.some((v) => getVideoItemKey(v) === candidateKey)
+    ) {
       setError('该视频已在列表中');
       return;
     }
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(
-        `https://www.youtube.com/oembed?url=${encodeURIComponent(url)}&format=json`
-      );
-      let title = '自定义视频';
-      if (res.ok) {
-        const data = await res.json();
-        if (data?.title) title = data.title;
+      let title = parsed.platform === 'bilibili' ? '自定义B站视频' : '自定义YouTube视频';
+      let thumbnailUrl = '';
+
+      if (parsed.platform === 'youtube') {
+        const res = await fetch(
+          `https://www.youtube.com/oembed?url=${encodeURIComponent(url)}&format=json`
+        );
+        if (res.ok) {
+          const data = await res.json();
+          if (data?.title) title = data.title;
+        }
+        thumbnailUrl = `https://img.youtube.com/vi/${parsed.id}/mqdefault.jpg`;
       }
+
       const item: VideoSearchItem = {
-        id: videoId,
+        id: parsed.id,
         title,
-        thumbnailUrl: `https://img.youtube.com/vi/${videoId}/mqdefault.jpg`,
+        thumbnailUrl,
         url,
+        platform: parsed.platform,
+        resourceKind: 'video',
       };
       setCustomVideoItems((prev) => [...prev, item]);
       setPasteUrl('');
@@ -399,6 +507,29 @@ export function TeachingResourcesPage() {
     setSelectedVideoItem(item);
     setVideoContent({ title: item.title });
     setError(null);
+  };
+
+  const handleUploadResource = async (file: File) => {
+    setUploadingResource(true);
+    setError(null);
+    try {
+      const uploaded = await uploadMaterialResource(file);
+      const item: VideoSearchItem = {
+        id: `${uploaded.resourceKind}-${Date.now()}`,
+        title: uploaded.name,
+        thumbnailUrl: '',
+        url: uploaded.url,
+        resourceKind: uploaded.resourceKind,
+        mimeType: uploaded.mimeType,
+      };
+      setCustomVideoItems((prev) => [item, ...prev]);
+      setSelectedVideoItem(item);
+      setVideoContent({ title: uploaded.name });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '上传失败，请改用粘贴视频链接');
+    } finally {
+      setUploadingResource(false);
+    }
   };
 
   const handleViewKeyIdeas = () => {
@@ -485,8 +616,26 @@ export function TeachingResourcesPage() {
         difficulty: entryDifficulty,
         prerequisites: entryPrerequisites,
       });
-      const result = await createCourse({ taskIds: [taskId] }, user?.id);
-      setPreviewUrl(`${window.location.origin}/course/${result.courseId}`);
+      void trackProductEvent({
+        eventName: 'task_create_succeeded',
+        role: 'teacher',
+        teacherId: user?.id,
+        language: entryLanguage,
+        taskId,
+        properties: { source: 'TeachingResourcesPage', taskType },
+      }).catch(() => undefined);
+      const result = await createCourse({ taskIds: [taskId] }, user?.id, { language: entryLanguage });
+      void trackProductEvent({
+        eventName: 'course_create_succeeded',
+        role: 'teacher',
+        teacherId: user?.id,
+        language: entryLanguage,
+        courseId: result.courseId,
+        taskId,
+        properties: { source: 'TeachingResourcesPage' },
+      }).catch(() => undefined);
+      const langParam = entryLanguage === 'en' ? '?lang=en' : '';
+      setPreviewUrl(`${window.location.origin}/course/${result.courseId}${langParam}`);
       await refreshTasks();
 
       // 3. Stay on step 6; user clicks button to proceed
@@ -680,6 +829,19 @@ export function TeachingResourcesPage() {
               </div>
               <div>
                 <label className="text-sm font-medium text-muted-foreground block mb-1">
+                  内容语言
+                </label>
+                <select
+                  value={entryLanguage}
+                  onChange={(e) => setEntryLanguage(e.target.value as 'zh' | 'en')}
+                  className="w-full h-11 rounded-md border border-input bg-background px-3 py-2 text-sm"
+                >
+                  <option value="zh">简体中文</option>
+                  <option value="en">English</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-sm font-medium text-muted-foreground block mb-1">
                   难度 <span className="text-xs text-muted-foreground">（可选）</span>
                 </label>
                 <select
@@ -814,6 +976,7 @@ export function TeachingResourcesPage() {
                         difficulty: entryDifficulty || undefined,
                         prerequisites: entryPrerequisites || undefined,
                         objective: learningObjective.trim(),
+                        language: entryLanguage,
                       })
                         .then((res) => {
                           taskDesignJsonRef.current = res.json ?? null;
@@ -846,11 +1009,9 @@ export function TeachingResourcesPage() {
               <Card className="flex-1 min-w-0 border border-gray-200 shadow-sm overflow-hidden">
                 <CardContent className="p-6">
                   <TypingText
-                    text={`不同学习者有不同的需求。这意味着传统以教师为主导的课堂往往难以吸引每一位学生，这对教师来说也是一种压力。
+                    text={`当前市场策略：${marketLabel}，默认视频来源为 ${preferredPlatformLabel}。
 
-但如果让学生观看视频呢？学生可以按自己的节奏学习，而成人提供鼓励与支持。这样，每个人都能成功！
-
-我们正在扫描经过审核的教育类 YouTube 频道，分析视频内容与字幕……为您找到高质量、适龄的教学内容，帮助每位学生有效学习。`}
+您可以使用推荐搜索，也可以直接粘贴视频链接，或上传视频/文档资料作为学习输入。`}
                     speed={35}
                     className="mb-6"
                   />
@@ -859,12 +1020,12 @@ export function TeachingResourcesPage() {
                       size="lg"
                       onClick={async () => {
                         setVideoStepIntroDismissed(true);
-                        const q = entryTopic.trim() || '物理 教学';
+                        const q = entryTopic.trim() || 'physics teaching';
                         setSearchQuery(q);
                         setLoading(true);
                         setError(null);
                         try {
-                          const { items } = await searchVideos(q, 6);
+                          const { items } = await searchVideos(q, 6, preferredVideoPlatform);
                           setSearchResults(items);
                         } catch (e) {
                           setError(e instanceof Error ? e.message : '搜索视频失败');
@@ -887,11 +1048,11 @@ export function TeachingResourcesPage() {
           <div>
             <h2 className="text-lg font-semibold mb-1">教学视频</h2>
             <p className="text-sm text-muted-foreground mb-4">
-              查看我们为您推荐的视频，选择一支供学生观看，或者通过粘贴视频的 URL 来添加自定义视频。
+              {`当前默认来源：${preferredPlatformLabel}。您可查看推荐视频，或粘贴链接/上传资料。`}
             </p>
             <div className="mb-4">
               <Input
-                placeholder="搜索关键词，如：牛顿第一定律（按 Enter 搜索）"
+                placeholder="Search keyword, e.g. Newton's first law (Enter to search)"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleSearchVideos()}
@@ -909,26 +1070,41 @@ export function TeachingResourcesPage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 items-stretch">
               {[
                 ...searchResults,
-                ...customVideoItems.filter((c) => !searchResults.some((s) => s.id === c.id)),
+                ...customVideoItems.filter((c) => !searchResults.some((s) => getVideoItemKey(s) === getVideoItemKey(c))),
               ].map((item) => (
                 <Card
-                  key={item.id}
+                  key={getVideoItemKey(item)}
                   className="overflow-hidden hover:ring-2 hover:ring-primary transition-all group h-full grid grid-rows-[auto_1fr_auto] gap-0 min-h-0"
                 >
                   <div className="relative aspect-video w-full bg-muted overflow-hidden">
-                    <iframe
-                      src={`https://www.youtube.com/embed/${item.id}`}
-                      title={item.title}
-                      className="absolute inset-0 w-full h-full"
-                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                      allowFullScreen
-                    />
+                    {getVideoEmbedUrl(item) ? (
+                      <iframe
+                        src={getVideoEmbedUrl(item)!}
+                        title={item.title}
+                        className="absolute inset-0 w-full h-full"
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                        allowFullScreen
+                      />
+                    ) : detectResourceKind(item) === 'video' ? (
+                      <video
+                        controls
+                        className="absolute inset-0 w-full h-full object-cover"
+                        src={item.url}
+                      />
+                    ) : (
+                      <div className="absolute inset-0 flex flex-col items-center justify-center text-xs text-muted-foreground gap-2 px-3 text-center">
+                        <p>文档资料</p>
+                        <a href={item.url} target="_blank" rel="noreferrer" className="underline">
+                          打开文档
+                        </a>
+                      </div>
+                    )}
                   </div>
                   <div className="p-3 min-h-0 flex items-start">
                     <p className="text-sm font-medium line-clamp-2">{item.title}</p>
                   </div>
                   <div className="p-3 pt-0">
-                    {selectedVideoItem?.id === item.id ? (
+                    {selectedVideoItem && getVideoItemKey(selectedVideoItem) === getVideoItemKey(item) ? (
                       <div
                         className="flex h-8 w-full items-center justify-center gap-1.5 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground"
                         aria-label="已选中"
@@ -967,7 +1143,7 @@ export function TeachingResourcesPage() {
           <div className="flex gap-2 pt-2">
             <Input
               id="paste-url-input"
-              placeholder="或粘贴 YouTube 视频链接"
+              placeholder="Paste YouTube / Bilibili URL"
               value={pasteUrl}
               onChange={(e) => setPasteUrl(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handlePasteUrl()}
@@ -977,6 +1153,22 @@ export function TeachingResourcesPage() {
               <LinkIcon className="w-4 h-4 mr-1" />
               获取
             </Button>
+            <label className="inline-flex items-center">
+              <input
+                type="file"
+                className="hidden"
+                accept="video/*,.pdf,.doc,.docx,.ppt,.pptx,.png,.jpg,.jpeg,.webp,.gif"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) void handleUploadResource(file);
+                  e.currentTarget.value = '';
+                }}
+              />
+              <span className="inline-flex h-10 items-center rounded-md border border-input bg-background px-3 text-sm cursor-pointer hover:bg-accent">
+                {uploadingResource ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Upload className="w-4 h-4 mr-1" />}
+                上传资料
+              </span>
+            </label>
           </div>
 
           {videoContent && (

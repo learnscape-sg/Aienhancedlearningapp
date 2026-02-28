@@ -15,6 +15,22 @@ import type {
   ExitTicketAnalysis,
   ObjectiveMetrics,
 } from '../types/backend';
+import { appConfig } from '@/config/appConfig';
+
+export type ProductEventName =
+  | 'teacher_signup_completed'
+  | 'task_create_started'
+  | 'task_create_succeeded'
+  | 'course_create_succeeded'
+  | 'course_publish_succeeded'
+  | 'course_assign_succeeded'
+  | 'course_opened'
+  | 'step_entered'
+  | 'step_completed'
+  | 'stuck_clicked'
+  | 'course_completed'
+  | 'language_switched'
+  | 'feedback_submitted';
 
 const getBaseUrl = (): string => {
   const url = import.meta.env.VITE_API_URL;
@@ -27,6 +43,30 @@ const getBaseUrl = (): string => {
   return url.replace(/\/$/, '');
 };
 
+function getExperienceHeaders(): Record<string, string> {
+  if (typeof window === 'undefined') return {};
+  const host = window.location.hostname.toLowerCase();
+  const marketCode = host.startsWith('sg.') || host.includes('.sg.') ? 'SG' : host.startsWith('cn.') || host.includes('.cn.') ? 'CN' : '';
+  const language = (localStorage.getItem('i18nextLng') || '').startsWith('en') ? 'en' : 'zh';
+  const tenantId = (() => {
+    if (!appConfig.enableTenantScoping) return '';
+    const urlTenantId = new URLSearchParams(window.location.search).get('tenantId') || '';
+    if (urlTenantId.trim()) return urlTenantId.trim();
+    // Profile-derived runtime tenant (AuthContext writes this key).
+    const authTenantId = (localStorage.getItem('runtimeTenantId') || '').trim();
+    if (authTenantId) return authTenantId;
+    // Generic local cache fallback for temporary overrides/debugging.
+    const cachedTenantId = (localStorage.getItem('tenantId') || '').trim();
+    if (cachedTenantId) return cachedTenantId;
+    return '';
+  })();
+  const headers: Record<string, string> = {};
+  if (marketCode) headers['x-market-code'] = marketCode;
+  headers['x-language-space'] = language;
+  if (tenantId) headers['x-tenant-id'] = tenantId;
+  return headers;
+}
+
 async function apiCall<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
   const base = getBaseUrl();
   const url = endpoint.startsWith('http') ? endpoint : `${base}${endpoint}`;
@@ -36,6 +76,7 @@ async function apiCall<T>(endpoint: string, options: RequestInit = {}): Promise<
       ...options,
       headers: {
         'Content-Type': 'application/json',
+        ...getExperienceHeaders(),
         ...options.headers,
       },
     });
@@ -87,7 +128,8 @@ export async function generateTaskDocuments(
   subject: string,
   topic: string,
   curriculum: CurriculumDesign,
-  context: string = ''
+  context: string = '',
+  language?: 'zh' | 'en'
 ): Promise<TaskDocuments> {
   return apiCall<TaskDocuments>('/api/documents', {
     method: 'POST',
@@ -96,6 +138,7 @@ export async function generateTaskDocuments(
       topic,
       curriculumJson: JSON.stringify(curriculum),
       context,
+      ...(language && { language }),
     }),
   });
 }
@@ -104,7 +147,8 @@ export async function generateSystemTaskPlan(
   taskSheetMarkdown: string,
   subject: string,
   grade: string,
-  context: string = ''
+  context: string = '',
+  language?: 'zh' | 'en'
 ): Promise<SystemTaskPlan> {
   return apiCall<SystemTaskPlan>('/api/tasks', {
     method: 'POST',
@@ -113,6 +157,7 @@ export async function generateSystemTaskPlan(
       subject,
       grade,
       context,
+      ...(language && { language }),
     }),
   });
 }
@@ -121,13 +166,14 @@ export async function generateTaskAsset(
   type: string,
   prompt: string,
   courseId?: string,
-  taskId?: string
+  taskId?: string,
+  language?: 'zh' | 'en'
 ): Promise<unknown> {
   if (!prompt?.trim()) return null;
   try {
     return await apiCall<unknown>('/api/assets', {
       method: 'POST',
-      body: JSON.stringify({ type, prompt, courseId, taskId }),
+      body: JSON.stringify({ type, prompt, courseId, taskId, ...(language && { language }) }),
     });
   } catch (err) {
     console.error('Asset generation failed:', err);
@@ -138,11 +184,11 @@ export async function generateTaskAsset(
 export async function createCourse(
   input: SystemTaskPlan | { taskIds: string[] },
   teacherId?: string,
-  meta?: { subject?: string; topic?: string; grade?: string }
+  meta?: { subject?: string; topic?: string; grade?: string; language?: 'zh' | 'en' }
 ): Promise<{ courseId: string; url: string }> {
   const base = Array.isArray((input as { taskIds?: string[] }).taskIds)
-    ? { taskIds: (input as { taskIds: string[] }).taskIds }
-    : { plan: input as SystemTaskPlan, ...(meta && { subject: meta.subject, topic: meta.topic, grade: meta.grade }) };
+    ? { taskIds: (input as { taskIds: string[] }).taskIds, ...(meta?.language && { language: meta.language }) }
+    : { plan: input as SystemTaskPlan, ...(meta && { subject: meta.subject, topic: meta.topic, grade: meta.grade, language: meta.language }) };
   const body = teacherId != null ? { ...base, teacherId } : base;
   return apiCall<{ courseId: string; url: string }>('/api/courses', {
     method: 'POST',
@@ -1225,9 +1271,13 @@ export async function speechToText(
 // --- Materials (teaching resources) ---
 export async function searchVideos(
   q: string,
-  maxResults: number = 5
+  maxResults: number = 5,
+  platform?: 'youtube' | 'bilibili' | 'all'
 ): Promise<{ items: VideoSearchItem[] }> {
   const params = new URLSearchParams({ q: q.trim(), maxResults: String(Math.min(maxResults, 10)) });
+  if (platform) {
+    params.set('platform', platform);
+  }
   return apiCall<{ items: VideoSearchItem[] }>(`/api/materials/video-search?${params}`);
 }
 
@@ -1236,6 +1286,34 @@ export async function getVideoContent(url: string): Promise<VideoContentResult> 
     method: 'POST',
     body: JSON.stringify({ url: url.trim() }),
   });
+}
+
+export async function uploadMaterialResource(file: File): Promise<{
+  url: string;
+  mimeType: string;
+  name: string;
+  size: number;
+  resourceKind: 'video' | 'document';
+}> {
+  const base = getBaseUrl();
+  const form = new FormData();
+  form.append('file', file);
+  const response = await fetch(`${base}/api/materials/upload-resource`, {
+    method: 'POST',
+    body: form,
+  });
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.error || `Upload failed with status ${response.status}`);
+  }
+  const json = await response.json();
+  return json.data as {
+    url: string;
+    mimeType: string;
+    name: string;
+    size: number;
+    resourceKind: 'video' | 'document';
+  };
 }
 
 export type GenerateTaskDesignResult = {
@@ -1252,6 +1330,7 @@ export async function generateTaskDesign(params: {
   difficulty?: string;
   prerequisites?: string;
   objective?: string;
+  language?: 'zh' | 'en';
 }): Promise<GenerateTaskDesignResult> {
   const body: Record<string, unknown> = {
     subject: params.subject.trim(),
@@ -1263,6 +1342,9 @@ export async function generateTaskDesign(params: {
   };
   if (params.objective?.trim()) {
     body.objective = params.objective.trim();
+  }
+  if (params.language) {
+    body.language = params.language;
   }
   return apiCall<GenerateTaskDesignResult>(
     '/api/materials/generate-task-design',
@@ -1283,10 +1365,431 @@ export interface FeedbackFormData {
 }
 
 export async function submitFeedback(
-  feedbackData: FeedbackFormData
+  feedbackData: FeedbackFormData,
+  accessToken?: string
 ): Promise<{ id: string; message: string }> {
   return apiCall<{ id: string; message: string }>('/api/feedback', {
     method: 'POST',
+    headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined,
     body: JSON.stringify(feedbackData),
+  });
+}
+
+export async function trackProductEvent(
+  payload: {
+    eventId?: string;
+    eventName: ProductEventName;
+    eventTime?: string;
+    role?: 'teacher' | 'student' | 'admin' | 'anon';
+    sessionId?: string;
+    language?: 'zh' | 'en';
+    courseId?: string;
+    taskId?: string;
+    classId?: string;
+    teacherId?: string;
+    studentId?: string;
+    platform?: string;
+    appVersion?: string;
+    tenantId?: string;
+    marketCode?: 'CN' | 'SG';
+    properties?: Record<string, unknown>;
+  },
+  accessToken?: string
+): Promise<void> {
+  await apiCall<{ success: boolean }>('/api/events', {
+    method: 'POST',
+    headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined,
+    body: JSON.stringify(payload),
+  });
+}
+
+export interface RuntimeMarketPolicy {
+  video: {
+    platformDefault: 'youtube' | 'bilibili' | 'all';
+    fallbackPlatforms?: Array<'youtube' | 'bilibili'>;
+  };
+  contentLanguageDefault: {
+    defaultLanguage: 'zh' | 'en';
+    allowOverride?: boolean;
+  };
+  featureFlags: {
+    flags: Record<string, boolean>;
+  };
+  navLanding: {
+    hiddenSectionsByRole?: Record<string, string[]>;
+    sectionOrderByRole?: Record<string, string[]>;
+    labelOverrides?: Record<string, { zh?: string; en?: string }>;
+    landingVariantByRole?: Record<string, string>;
+  };
+  matchedScopes: string[];
+}
+
+export interface AdminMarketPolicyRow {
+  id: number;
+  policy_key: 'video_platform' | 'content_language_default' | 'feature_flags' | 'nav_landing';
+  scope_key: string;
+  tenant_id: string | null;
+  market_code: 'CN' | 'SG' | null;
+  space: 'zh' | 'en' | null;
+  role: 'teacher' | 'student' | 'parent' | 'admin' | null;
+  policy_json: Record<string, unknown>;
+  enabled: boolean;
+  updated_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AdminTenantRow {
+  id: string;
+  name: string;
+  market_code: 'CN' | 'SG' | null;
+  default_language: 'zh' | 'en' | null;
+  active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export async function getRuntimePolicy(params: {
+  role?: 'teacher' | 'student' | 'parent' | 'admin';
+}): Promise<{ policy: RuntimeMarketPolicy }> {
+  const qs = new URLSearchParams();
+  if (params.role) qs.set('role', params.role);
+  return apiCall<{ policy: RuntimeMarketPolicy }>(`/api/runtime/policy${qs.toString() ? `?${qs}` : ''}`, {
+    method: 'GET',
+  });
+}
+
+export async function listAdminMarketPolicies(
+  params: {
+    policyKey?: 'video_platform' | 'content_language_default' | 'feature_flags' | 'nav_landing';
+    tenantId?: string;
+    marketCode?: 'CN' | 'SG';
+    space?: 'zh' | 'en';
+    role?: 'teacher' | 'student' | 'parent' | 'admin';
+  },
+  accessToken: string
+): Promise<{ policies: AdminMarketPolicyRow[] }> {
+  const qs = new URLSearchParams();
+  if (params.policyKey) qs.set('policyKey', params.policyKey);
+  if (params.tenantId) qs.set('tenantId', params.tenantId);
+  if (params.marketCode) qs.set('marketCode', params.marketCode);
+  if (params.space) qs.set('space', params.space);
+  if (params.role) qs.set('role', params.role);
+  return apiCall<{ policies: AdminMarketPolicyRow[] }>(`/api/admin/settings/policies${qs.toString() ? `?${qs}` : ''}`, {
+    method: 'GET',
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+}
+
+export async function upsertAdminMarketPolicy(
+  payload: {
+    policyKey: 'video_platform' | 'content_language_default' | 'feature_flags' | 'nav_landing';
+    tenantId?: string | null;
+    marketCode?: 'CN' | 'SG' | null;
+    space?: 'zh' | 'en' | null;
+    role?: 'teacher' | 'student' | 'parent' | 'admin' | null;
+    policyJson: Record<string, unknown>;
+    enabled?: boolean;
+  },
+  accessToken: string
+): Promise<{ policy: AdminMarketPolicyRow }> {
+  return apiCall<{ policy: AdminMarketPolicyRow }>('/api/admin/settings/policies', {
+    method: 'PUT',
+    headers: { Authorization: `Bearer ${accessToken}` },
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function resolveAdminMarketPolicy(
+  payload: {
+    tenantId?: string | null;
+    marketCode?: 'CN' | 'SG' | null;
+    space?: 'zh' | 'en' | null;
+    role?: 'teacher' | 'student' | 'parent' | 'admin' | null;
+  },
+  accessToken: string
+): Promise<{ policy: RuntimeMarketPolicy }> {
+  return apiCall<{ policy: RuntimeMarketPolicy }>('/api/admin/settings/policies/resolve', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${accessToken}` },
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function listAdminTenants(
+  params: { q?: string; limit?: number },
+  accessToken: string
+): Promise<{ tenants: AdminTenantRow[] }> {
+  const qs = new URLSearchParams();
+  if (params.q) qs.set('q', params.q);
+  if (params.limit != null) qs.set('limit', String(params.limit));
+  return apiCall<{ tenants: AdminTenantRow[] }>(`/api/admin/settings/tenants${qs.toString() ? `?${qs}` : ''}`, {
+    method: 'GET',
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+}
+
+export interface AdminCostAnalyticsResponse {
+  summary: {
+    totalRequests: number;
+    totalTokensIn: number;
+    totalTokensOut: number;
+    totalTokens: number;
+    totalCostUsd: number;
+    /** Domain metric: finance efficiency. */
+    avgCostPerRequestUsd: number;
+    dateRange: { startIso: string; endIso: string };
+  };
+  byDay: Array<{ day: string; requests: number; tokensIn: number; tokensOut: number; costUsd: number }>;
+  byModel: Array<{ model: string; requests: number; tokensIn: number; tokensOut: number; costUsd: number }>;
+  byEndpoint: Array<{ endpoint: string; requests: number; tokensIn: number; tokensOut: number; costUsd: number }>;
+  highCostAnomalies: Array<{
+    runId: string;
+    createdAt: string;
+    endpoint: string;
+    model: string;
+    teacherId: string | null;
+    studentId: string | null;
+    tokensIn: number;
+    tokensOut: number;
+    tokensTotal: number;
+    retryCount: number;
+    latencyMs: number;
+    success: boolean;
+    costUsd: number;
+  }>;
+  teacherTopN: Array<{
+    teacherId: string;
+    teacherName: string;
+    requests: number;
+    tokensIn: number;
+    tokensOut: number;
+    costUsd: number;
+  }>;
+  studentTopN: Array<{
+    studentId: string;
+    studentName: string;
+    userType?: string | null;
+    requests: number;
+    tokensIn: number;
+    tokensOut: number;
+    costUsd: number;
+  }>;
+}
+
+export async function getAdminCostAnalytics(
+  params: { startDate?: string; endDate?: string; language?: string; modelUsed?: string; endpoint?: string; teacherId?: string; topN?: number },
+  accessToken: string
+): Promise<AdminCostAnalyticsResponse> {
+  const qs = new URLSearchParams();
+  if (params.startDate) qs.set('startDate', params.startDate);
+  if (params.endDate) qs.set('endDate', params.endDate);
+  if (params.language) qs.set('language', params.language);
+  if (params.modelUsed) qs.set('modelUsed', params.modelUsed);
+  if (params.endpoint) qs.set('endpoint', params.endpoint);
+  if (params.teacherId) qs.set('teacherId', params.teacherId);
+  if (params.topN != null) qs.set('topN', String(params.topN));
+  return apiCall<AdminCostAnalyticsResponse>(`/api/admin/cost-analytics?${qs.toString()}`, {
+    method: 'GET',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+  });
+}
+
+export interface AdminPerformanceAnalyticsResponse {
+  summary: {
+    /** Shared reliability metric alias. */
+    totalRequests: number;
+    /** Shared reliability metric alias. */
+    successRate: number;
+    failRate: number;
+    avgLatencyMs: number;
+    /** Shared reliability metric alias. */
+    p95LatencyMs: number;
+    p99LatencyMs: number;
+    /** Shared reliability metric alias. */
+    retriedRequestRate: number;
+    /** Shared reliability metric alias. */
+    avgRetryCount: number;
+    dateRange: { startIso: string; endIso: string };
+  };
+  dailyTrend: Array<{
+    day: string;
+    requests: number;
+    successCount: number;
+    failCount: number;
+    successRate: number;
+    p95LatencyMs: number;
+  }>;
+  endpointTop: Array<{
+    endpoint: string;
+    requests: number;
+    successRate: number;
+    failRate: number;
+    retriedRequestRate: number;
+    avgRetryCount: number;
+    p95LatencyMs: number;
+  }>;
+  modelTop: Array<{
+    model: string;
+    requests: number;
+    successRate: number;
+    failRate: number;
+    avgRetryCount: number;
+    p95LatencyMs: number;
+  }>;
+  highLatencyAnomalies: Array<{
+    runId: string;
+    createdAt: string;
+    endpoint: string;
+    model: string;
+    latencyMs: number;
+    retryCount: number;
+    success: boolean;
+  }>;
+}
+
+export async function getAdminPerformanceAnalytics(
+  params: { startDate?: string; endDate?: string; tenantId?: string; marketCode?: 'CN' | 'SG'; language?: string; topN?: number },
+  accessToken: string
+): Promise<AdminPerformanceAnalyticsResponse> {
+  const qs = new URLSearchParams();
+  if (params.startDate) qs.set('startDate', params.startDate);
+  if (params.endDate) qs.set('endDate', params.endDate);
+  if (params.tenantId) qs.set('tenantId', params.tenantId);
+  if (params.marketCode) qs.set('marketCode', params.marketCode);
+  if (params.language) qs.set('language', params.language);
+  if (params.topN != null) qs.set('topN', String(params.topN));
+  return apiCall<AdminPerformanceAnalyticsResponse>(`/api/admin/performance-analytics?${qs.toString()}`, {
+    method: 'GET',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+  });
+}
+
+export interface AdminBusinessAnalyticsResponse {
+  summary: {
+    teachersTotal: number;
+    studentsTotal: number;
+    newTeachers: number;
+    newStudents: number;
+    activeTeachers: number;
+    activeStudents: number;
+    coursesCreated: number;
+    coursesPublished: number;
+    coursesAssigned: number;
+    courseCompletionRate: number;
+    avgProgress: number;
+    avgTimeSpentMinutes: number;
+    teacherD7Retention: number;
+    studentD7Retention: number;
+    teacherMedianActivationHours: number;
+    studentMedianActivationHours: number;
+    stuckPerCourseOpen: number;
+    dateRange: { startIso: string; endIso: string };
+  };
+  funnel: {
+    courseCreated: number;
+    coursePublished: number;
+    courseAssigned: number;
+    courseCompleted: number;
+  };
+  dailyTrend: Array<{
+    day: string;
+    courseCreated: number;
+    coursePublished: number;
+    courseCompleted: number;
+    activeStudents: number;
+  }>;
+  teacherActivationFunnel: Array<{ stage: string; value: number }>;
+  studentLearningFunnel: Array<{ stage: string; value: number }>;
+  retention: {
+    teacher: { d1: number; d7: number; d30: number };
+    student: { d1: number; d7: number; d30: number };
+    byDay: Array<{ day: string; teacherD1: number; teacherD7: number; studentD1: number; studentD7: number }>;
+  };
+  timeToValue: {
+    teacherMedianHours: number;
+    studentMedianHours: number;
+  };
+  learningQualityProxy: {
+    stuckDensity: number;
+    topStuckSteps: Array<{ step: string; count: number }>;
+    highRiskFeedbackCount: number;
+  };
+  releaseAlerts: Array<{ level: 'info' | 'warn' | 'critical'; metric: string; value: number; threshold: number; message: string }>;
+  weeklyReview: Array<{ metric: string; current: number; previous: number; deltaPct: number }>;
+  topTeachersByCourses: Array<{ teacherId: string; teacherName: string; courseCount: number }>;
+  topStudentsByCompletion: Array<{ studentId: string; studentName: string; completedCourses: number; avgProgress: number }>;
+  topSubjects: Array<{ subject: string; count: number }>;
+  topGrades: Array<{ grade: string; count: number }>;
+}
+
+export async function getAdminBusinessAnalytics(
+  params: { startDate?: string; endDate?: string; topN?: number },
+  accessToken: string
+): Promise<AdminBusinessAnalyticsResponse> {
+  const qs = new URLSearchParams();
+  if (params.startDate) qs.set('startDate', params.startDate);
+  if (params.endDate) qs.set('endDate', params.endDate);
+  if (params.topN != null) qs.set('topN', String(params.topN));
+  return apiCall<AdminBusinessAnalyticsResponse>(`/api/admin/business-analytics?${qs.toString()}`, {
+    method: 'GET',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+  });
+}
+
+export interface AdminFeedbackItem {
+  id: string;
+  userId: string | null;
+  userName: string;
+  userEmail: string;
+  pagePath: string;
+  pageName: string;
+  feedbackText: string;
+  rating: number | null;
+  feedbackType: 'bug' | 'suggestion' | 'other' | string;
+  userIdentifier: string;
+  createdAt: number;
+  metadata: Record<string, unknown>;
+}
+
+export interface AdminFeedbackResponse {
+  summary: {
+    total: number;
+    bugCount: number;
+    suggestionCount: number;
+    otherCount: number;
+    avgRating: number;
+    dateRange: { startIso: string; endIso: string };
+  };
+  topicDistribution: Array<{ topic: string; count: number }>;
+  highRiskQueue: AdminFeedbackItem[];
+  items: AdminFeedbackItem[];
+}
+
+export async function getAdminFeedbacks(
+  params: { startDate?: string; endDate?: string; tenantId?: string; marketCode?: 'CN' | 'SG'; language?: string; feedbackType?: 'bug' | 'suggestion' | 'other' | ''; pagePath?: string; q?: string; limit?: number },
+  accessToken: string
+): Promise<AdminFeedbackResponse> {
+  const qs = new URLSearchParams();
+  if (params.startDate) qs.set('startDate', params.startDate);
+  if (params.endDate) qs.set('endDate', params.endDate);
+  if (params.tenantId) qs.set('tenantId', params.tenantId);
+  if (params.marketCode) qs.set('marketCode', params.marketCode);
+  if (params.language) qs.set('language', params.language);
+  if (params.feedbackType) qs.set('feedbackType', params.feedbackType);
+  if (params.pagePath) qs.set('pagePath', params.pagePath);
+  if (params.q) qs.set('q', params.q);
+  if (params.limit != null) qs.set('limit', String(params.limit));
+  return apiCall<AdminFeedbackResponse>(`/api/admin/feedback?${qs.toString()}`, {
+    method: 'GET',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
   });
 }

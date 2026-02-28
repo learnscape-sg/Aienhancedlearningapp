@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from './components/AuthContext';
 import { PublishedCoursesProvider } from './components/PublishedCoursesContext';
 import { TasksProvider } from './components/TasksContext';
@@ -7,6 +8,7 @@ import { LoginPage } from './components/LoginPage';
 import { OnboardingPage } from './components/OnboardingPage';
 import { Sidebar } from './components/Sidebar';
 import { TeacherSidebar } from './components/TeacherSidebar';
+import { ParentSidebar } from './components/ParentSidebar';
 import { HomePage } from './components/HomePage';
 import { EnhancedChapterPage } from './components/EnhancedChapterPage';
 import { QuizPage } from './components/QuizPage';
@@ -24,6 +26,12 @@ import { VideoPage } from './components/VideoPage';
 import { SettingsPage } from './components/SettingsPage';
 import { TeacherSettingsPage } from './components/TeacherSettingsPage';
 import { AITutor } from './components/AITutor';
+import { ParentDashboard } from './components/ParentDashboard';
+import { resolveRuntimeExperienceConfig } from '@/lib/entryDetector';
+import { useTheme } from '@/hooks/useTheme';
+import type { EntryId, LanguageSpace } from '@/config/entryConfig';
+import { RoleBasedLayout } from '@/components/shared/RoleBasedLayout';
+import { useRuntimePolicy } from '@/hooks/useRuntimePolicy';
 
 // Teacher platform components
 import { TeacherOverview } from './components/TeacherOverview';
@@ -39,8 +47,19 @@ const TEACHER_SECTIONS = ['overview', 'course-design', 'courses', 'materials', '
 function AppContent() {
   const { user, loading, login } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
+  const { i18n } = useTranslation();
+  const forcedEntryId = (searchParams.get('entry') as EntryId | null) ?? null;
+  const experience = useMemo(
+    () => resolveRuntimeExperienceConfig({ forcedEntryId }),
+    [forcedEntryId]
+  );
+  const { policy } = useRuntimePolicy();
+  const navPolicy = policy?.navLanding;
+  const parentWorkspaceEnabled = policy?.featureFlags?.flags?.enableParentWorkspace ?? true;
+  useTheme(experience.brand.themeTokens);
   const [appState, setAppState] = useState<AppState>('login');
   const [activeSection, setActiveSection] = useState('learn-your-way');
+  const [languageSpace, setLanguageSpace] = useState<LanguageSpace>(experience.entry.defaultLanguageSpace);
   const [initialCourseTab, setInitialCourseTab] = useState<'active' | 'shared' | 'recycle' | undefined>(undefined);
   const [currentChapter, setCurrentChapter] = useState<string | null>(null);
   const [pdfData, setPdfData] = useState<{ fileName: string; grade: string; interests: string[] } | null>(null);
@@ -49,6 +68,10 @@ function AppContent() {
 
   // Read URL params for deep linking (e.g. ?section=course-design, ?section=courses&courseTab=shared)
   useEffect(() => {
+    const space = searchParams.get('space');
+    if (space === 'zh' || space === 'en') {
+      setLanguageSpace(space);
+    }
     const section = searchParams.get('section');
     const courseTab = searchParams.get('courseTab');
     if (section && TEACHER_SECTIONS.includes(section)) {
@@ -58,6 +81,19 @@ function AppContent() {
       }
     }
   }, [searchParams]);
+
+  useEffect(() => {
+    i18n.changeLanguage(languageSpace);
+  }, [i18n, languageSpace]);
+
+  useEffect(() => {
+    const hasSpaceFromUrl = Boolean(searchParams.get('space'));
+    if (hasSpaceFromUrl) return;
+    const policyDefault = policy?.contentLanguageDefault?.defaultLanguage;
+    if (policyDefault === 'zh' || policyDefault === 'en') {
+      setLanguageSpace(policyDefault);
+    }
+  }, [policy?.contentLanguageDefault?.defaultLanguage, searchParams]);
 
   // Sync teacher activeSection to URL so tab switch/reload restores correct section
   useEffect(() => {
@@ -80,6 +116,9 @@ function AppContent() {
         setActiveSection(sectionFromUrl);
       }
       if (user.role === 'teacher') {
+        if (!sectionFromUrl) setActiveSection('overview');
+        setAppState('dashboard');
+      } else if (user.role === 'parent') {
         if (!sectionFromUrl) setActiveSection('overview');
         setAppState('dashboard');
       } else {
@@ -152,6 +191,14 @@ function AppContent() {
       }
       setSearchParams(params, { replace: true });
     }
+  };
+
+  const handleLanguageSpaceChange = (space: LanguageSpace) => {
+    setLanguageSpace(space);
+    const params = new URLSearchParams(searchParams);
+    params.set('space', space);
+    params.set('lang', space);
+    setSearchParams(params, { replace: true });
   };
 
   const handleStartPDFLearning = (data: { fileName: string; grade: string; interests: string[] }) => {
@@ -263,6 +310,10 @@ function AppContent() {
       default:
         return <TeacherOverview />;
     }
+  };
+
+  const renderParentContent = () => {
+    return <ParentDashboard activeSection={activeSection} languageSpace={languageSpace} />;
   };
 
   // Render student content
@@ -408,15 +459,45 @@ function AppContent() {
   // Render teacher platform
   if (user?.role === 'teacher') {
     return (
-      <div className="flex h-screen bg-muted">
-        <TeacherSidebar
-          activeSection={activeSection}
-          onSectionChange={handleSectionChange}
-        />
-        <main className="flex-1 overflow-auto">
-          {renderTeacherContent()}
-        </main>
-      </div>
+      <RoleBasedLayout
+        sidebar={
+          <TeacherSidebar
+            activeSection={activeSection}
+            onSectionChange={handleSectionChange}
+            languageSpace={languageSpace}
+            onLanguageSpaceChange={handleLanguageSpaceChange}
+            navPolicy={navPolicy}
+          />
+        }
+        content={renderTeacherContent()}
+      />
+    );
+  }
+
+  if (user?.role === 'parent') {
+    if (!parentWorkspaceEnabled) {
+      return (
+        <div className="min-h-screen bg-muted flex items-center justify-center p-6">
+          <div className="max-w-lg rounded-xl border bg-white p-6">
+            <h2 className="text-xl font-semibold mb-2">Parent workspace is disabled</h2>
+            <p className="text-sm text-muted-foreground">Current market policy has disabled parent workspace.</p>
+          </div>
+        </div>
+      );
+    }
+    return (
+      <RoleBasedLayout
+        sidebar={
+          <ParentSidebar
+            activeSection={activeSection}
+            onSectionChange={handleSectionChange}
+            languageSpace={languageSpace}
+            onLanguageSpaceChange={handleLanguageSpaceChange}
+            navPolicy={navPolicy}
+          />
+        }
+        content={renderParentContent()}
+      />
     );
   }
 
@@ -428,6 +509,9 @@ function AppContent() {
         <Sidebar
           activeSection={activeSection}
           onSectionChange={handleSectionChange}
+          languageSpace={languageSpace}
+          onLanguageSpaceChange={handleLanguageSpaceChange}
+          navPolicy={navPolicy}
         />
       )}
       

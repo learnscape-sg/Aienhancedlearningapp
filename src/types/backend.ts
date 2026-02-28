@@ -83,6 +83,11 @@ export interface VideoSearchItem {
   title: string;
   thumbnailUrl: string;
   url: string;
+  platform?: 'youtube' | 'bilibili';
+  author?: string;
+  durationSec?: number;
+  resourceKind?: 'video' | 'document';
+  mimeType?: string;
 }
 
 export interface VideoContentResult {

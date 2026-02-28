@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import {
   SystemTaskPlan,
   ChatMessage,
@@ -7,9 +8,10 @@ import {
   Characteristic,
   ObjectiveMetrics,
 } from '@/types/backend';
-import { sendChatMessage, generateTaskAsset, generateExitTicket, getSpeechVoices } from '@/lib/backendApi';
+import { sendChatMessage, generateTaskAsset, generateExitTicket, getSpeechVoices, trackProductEvent } from '@/lib/backendApi';
 import { upsertStudentCourseProgress } from '@/lib/studentProgressApi';
 import { useAuth } from '../AuthContext';
+import { supabase } from '@/utils/supabase/client';
 import { 
   BookOpen, 
   MessageCircle, 
@@ -61,6 +63,7 @@ import { RealTimeProgressTracker } from './shared/RealTimeProgressTracker';
 import { VisualizationEditor } from './shared/VisualizationEditor';
 import { AnimatedAvatar, type AvatarState } from './shared/AnimatedAvatar';
 import { FullscreenModal } from './shared/FullscreenModal';
+import { LanguageSwitcher } from '../shared/LanguageSwitcher';
 import { useSpeechRecognition } from '@/hooks/useSpeechRecognition';
 import { useTextToSpeech } from '@/hooks/useTextToSpeech';
 import { visualizationDataToMermaid, mermaidToVisualizationData } from './shared/VisualizationEditor/utils/mermaidConverter';
@@ -73,6 +76,10 @@ interface StudentConsoleProps {
   plan: SystemTaskPlan;
   onComplete: (log: string, finalMindMap?: string) => void;
   onApiKeyError?: () => void;
+  /** Content language (from URL ?lang= or course meta). Used for API calls and TTS/STT. */
+  contentLanguage?: 'zh' | 'en';
+  /** Called when user switches language; updates URL ?lang= */
+  onLanguageChange?: (lang: 'zh' | 'en') => void;
 }
 
 interface GuidedKeyIdea {
@@ -161,11 +168,12 @@ function extractYouTubeVideoId(url: string): string | null {
 
 // Text Editor Preview Component for writing space
 const TextEditorPreview = ({ content, onEditClick }: { content: string; onEditClick: () => void }) => {
+  const { t } = useTranslation('studentConsole');
   return (
     <div 
       className="h-full overflow-y-auto custom-scrollbar bg-white p-8 cursor-text hover:bg-slate-50/50 transition-colors"
       onClick={onEditClick}
-      title="点击进入编辑模式"
+      title={t('clickToEdit')}
     >
       <div className="prose prose-slate prose-sm max-w-none text-slate-700 font-sans leading-relaxed">
         <ReactMarkdown
@@ -189,16 +197,17 @@ const TextEditorPreview = ({ content, onEditClick }: { content: string; onEditCl
             pre: ({...props}: MarkdownComponentProps<'pre'>) => <pre className="mb-4" {...props} />,
           }}
         >
-          {content || '暂无内容，点击此处开始编辑...'}
+          {content || t('noContentEditHint')}
         </ReactMarkdown>
       </div>
     </div>
   );
 };
 
-const StudentConsole: React.FC<StudentConsoleProps> = ({ plan, onComplete, onApiKeyError }) => {
+const StudentConsole: React.FC<StudentConsoleProps> = ({ plan, onComplete, onApiKeyError, contentLanguage = 'zh', onLanguageChange }) => {
   const { user } = useAuth();
   const params = useParams();
+  const { t } = useTranslation('studentConsole');
   const courseId = params.id as string | undefined;
   const sessionStartRef = useRef(Date.now());
 
@@ -215,6 +224,27 @@ const StudentConsole: React.FC<StudentConsoleProps> = ({ plan, onComplete, onApi
       }).catch((err) => console.warn('[StudentConsole] Progress report failed:', err));
     },
     [courseId, user?.id]
+  );
+  const emitEvent = useCallback(
+    async (
+      eventName: 'step_entered' | 'step_completed' | 'stuck_clicked' | 'course_completed',
+      properties?: Record<string, unknown>
+    ) => {
+      const { data: sessionData } = await supabase.auth.getSession();
+      await trackProductEvent(
+        {
+          eventName,
+          role: 'student',
+          language: contentLanguage,
+          courseId,
+          taskId: plan.tasks[currentTaskIndex]?.id,
+          studentId: user?.id,
+          properties: { taskIndex: currentTaskIndex, ...properties },
+        },
+        sessionData.session?.access_token
+      );
+    },
+    [contentLanguage, courseId, currentTaskIndex, plan.tasks, user?.id]
   );
 
   // --- State ---
@@ -335,8 +365,8 @@ const StudentConsole: React.FC<StudentConsoleProps> = ({ plan, onComplete, onApi
     }
   }, [user?.name]);
 
-  // AI Tutor: 使用默认名字，后续再定义个性化
-  const tutorName = 'AI导师';
+  // AI Tutor: 使用 i18n，后续再定义个性化
+  const tutorName = t('aiSystem');
   const tutorAvatar = '🤖';
   
   // Avatar animation state
@@ -404,7 +434,7 @@ const StudentConsole: React.FC<StudentConsoleProps> = ({ plan, onComplete, onApi
     stopRecording,
     cancelRecording,
   } = useSpeechRecognition({
-    language: 'cmn-CN',
+    language: contentLanguage === 'en' ? 'en-US' : 'zh-CN',
     onResult: (text) => {
       // Hold-to-talk UX: release sends recognized text immediately
       handleSendMessage(text);
@@ -427,7 +457,7 @@ const StudentConsole: React.FC<StudentConsoleProps> = ({ plan, onComplete, onApi
     play: playVoice,
     stop: stopVoice,
   } = useTextToSpeech({
-    language: 'cmn-CN',
+    language: contentLanguage === 'en' ? 'en-US' : 'cmn-CN',
     voiceName: selectedVoiceName,
     onPlayStart: () => {
       setAvatarState('speaking');
@@ -509,42 +539,6 @@ const StudentConsole: React.FC<StudentConsoleProps> = ({ plan, onComplete, onApi
       practiceCanvasRef.current?.clear();
     }
   }, [guidedStep, practiceCurrentIndex]);
-
-  // Translations
-  const t = {
-    task: '任务',
-    finish: '完成学习',
-    next: '进入下一阶段',
-    previous: '返回上一阶段',
-    inputPlaceholder: '请输入你的回答...',
-    aiProcessing: 'AI 导师思考中...',
-    operator: '学生',
-    aiSystem: 'AI 导师',
-    missionObjective: '任务目标',
-    systemInstructions: '操作指南',
-    mindMapTip: '编辑上方代码，下方实时生成',
-    readingTip: '请仔细阅读以下材料',
-    syntaxError: '语法错误',
-    stuck: '我卡住了',
-    done: '我做完了',
-    evaluate: '请求评价',
-    stuckTip: '点击这里，让 AI 导师基于你目前的表格内容提供思路',
-    myMap: '我的思维导图',
-    optimizeMap: 'AI 优化结构',
-    // Report translations
-    sessionComplete: '学习旅程完成',
-    ticketGenerated: '学习能力分析报告',
-    masteryScore: '综合掌握评分',
-    keyTakeaway: '核心收获',
-    nextSteps: '下一步建议',
-    restartLearning: '再学一遍',
-    endLearning: '结束学习',
-    processing: '正在生成分析报告...',
-    processingTip: '系统正在根据您的互动频率、任务质量和思维深度生成"竹子学霸"能力模型...',
-    neuralMap: '最终知识图谱',
-    radarTitle: '学霸四特质模型',
-    systemLog: '思维日志',
-  };
 
   const getIconForTrait = (key: string) => {
       switch(key) {
@@ -778,6 +772,7 @@ const StudentConsole: React.FC<StudentConsoleProps> = ({ plan, onComplete, onApi
   useEffect(() => {
     const initTask = () => {
       addLog(`Started Task ${currentTaskIndex + 1}: ${currentTask.title} (${viewType})`);
+      void emitEvent('step_entered', { taskTitle: currentTask.title }).catch(() => undefined);
       setAssetData(null);
       setMindMapError(null);
       setMindMapScale(1);
@@ -929,7 +924,7 @@ const StudentConsole: React.FC<StudentConsoleProps> = ({ plan, onComplete, onApi
                  // Fallback for images? Maybe not for v0.5 to keep it fast, 
                  // but if you really want "Original" feeling:
                  setIsAssetLoading(true);
-                 generateTaskAsset(currentTask.assetType, currentTask.assetPrompt, courseId, currentTask.id).then(res => {
+                 generateTaskAsset(currentTask.assetType, currentTask.assetPrompt, courseId, currentTask.id, contentLanguage).then(res => {
                      setAssetData(res);
                  }).finally(() => setIsAssetLoading(false));
              }
@@ -942,27 +937,20 @@ const StudentConsole: React.FC<StudentConsoleProps> = ({ plan, onComplete, onApi
       if (!greetingSentRef.current.has(currentTaskIndex)) {
         // 基于任务内容生成温暖的开场白
         const generateWarmGreeting = () => {
-          const taskTitle = currentTask.title || '新任务';
+          const taskTitle = currentTask.title || t('newTask');
           const taskDesc = currentTask.description || '';
-          
-          // 提取任务描述的前100个字符作为情境参考
           const scenarioHint = taskDesc.substring(0, 100).replace(/\n/g, ' ').trim();
-          
-          // 根据任务索引和内容生成个性化开场白
+
           if (currentTaskIndex === 0) {
-            // 第一个任务：更热情的欢迎
-            if (scenarioHint) {
-              return `嘿，${studentName}！😊 准备好开始我们的第一个挑战了吗？\n\n${taskTitle}，听起来是不是有点意思？让我们一起来探索吧！我会一直陪在你身边，有任何问题随时问我。\n\n准备好了吗？我们开始吧！`;
-            } else {
-              return `嘿，${studentName}！😊 准备好开始我们的第一个挑战了吗？\n\n${taskTitle}，让我们一起来探索吧！我会一直陪在你身边，有任何问题随时问我。\n\n准备好了吗？我们开始吧！`;
-            }
+            const first = t('greetingFirst', { name: studentName });
+            const body = scenarioHint ? t('greetingFirstWithHint', { title: taskTitle }) : t('greetingFirstNoHint', { title: taskTitle });
+            const end = t('greetingFirstEnd');
+            return `${first}\n\n${body}\n\n${end}`;
           } else {
-            // 后续任务：简洁但温暖的引导
-            if (scenarioHint) {
-              return `${studentName}，我们又见面了！✨\n\n现在我们要开始：${taskTitle}。这次的任务会更有趣，让我们一起看看会发生什么吧！\n\n准备好了就告诉我，我们开始！`;
-            } else {
-              return `${studentName}，我们又见面了！✨\n\n现在我们要开始：${taskTitle}。这次的任务会更有趣，让我们一起看看会发生什么吧！\n\n准备好了就告诉我，我们开始！`;
-            }
+            const later = t('greetingLater', { name: studentName });
+            const body = t('greetingLaterBody', { title: taskTitle });
+            const end = t('greetingLaterEnd');
+            return `${later}\n\n${body}\n\n${end}`;
           }
         };
         
@@ -991,7 +979,7 @@ const StudentConsole: React.FC<StudentConsoleProps> = ({ plan, onComplete, onApi
 
     initTask();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentTaskIndex, plan]);
+  }, [currentTaskIndex, emitEvent, plan]);
 
   // Monitor visualization progress and trigger AI feedback when student is stuck
   useEffect(() => {
@@ -1154,7 +1142,7 @@ const StudentConsole: React.FC<StudentConsoleProps> = ({ plan, onComplete, onApi
 4. 每个概念应该是该主题的核心知识点
 5. 输出格式：mindmap\\n  Root((${topic}))\\n    概念1\\n    概念2\\n    ...`;
 
-      const mermaidCode = await generateTaskAsset('mindmap_code', prompt);
+      const mermaidCode = await generateTaskAsset('mindmap_code', prompt, courseId, currentTask?.id, contentLanguage);
       if (mermaidCode) {
         const vData = mermaidToVisualizationData(mermaidCode);
         setVisualizationData(vData);
@@ -1170,7 +1158,7 @@ const StudentConsole: React.FC<StudentConsoleProps> = ({ plan, onComplete, onApi
     } finally {
       setIsAssetLoading(false);
     }
-  }, []);
+  }, [courseId, currentTask?.id, contentLanguage]);
 
   const getTaskContext = () => {
       let context = "";
@@ -1246,7 +1234,8 @@ const StudentConsole: React.FC<StudentConsoleProps> = ({ plan, onComplete, onApi
         imageFallbackContext = `\n\n## 图像信息补充（当学生询问图像细节时使用）\n如果学生询问图像中的具体信息（如价格、数量、位置等），而图像信息不足时，请根据以下任务描述提供文字说明：\n${taskDesc}\n请用自然、生动的语言描述场景，帮助学生理解图像所表达的情境。`;
     }
 
-    const dynamicSystemInstruction = `
+    let dynamicSystemInstruction = `
+${contentLanguage === 'en' ? '## MANDATORY - RESPOND IN ENGLISH ONLY\nYour ENTIRE response must be in English. Do NOT use any Chinese characters. Every sentence must be written in English.\n' : ''}
 ## 当前任务信息
 - 任务标题：${currentTask.title}
 - 学习目标：${currentTask.outputGoal}
@@ -1257,7 +1246,7 @@ ${currentTask.tutorConfig.systemInstruction || '引导学生自主思考，通�
 
 ## 语气要求
 - 语气风格：${currentTask.tutorConfig.tone === 'Socratic' ? '苏格拉底式提问，但要用温暖、鼓励的方式提问，不要显得咄咄逼人' : currentTask.tutorConfig.tone}
-- 语言：简体中文
+- 语言：${contentLanguage === 'en' ? 'English only' : '简体中文'}
 
 ## 学科特别指导
 ${isMathOrScience ? `
@@ -1287,20 +1276,48 @@ ${isMathOrScience ? `
 - **避免信息过载**：一次只聚焦一个关键点，让学生有足够时间消化和理解
 
 ## 回复格式要求
-- 不要使用Markdown格式（如**粗体**、#标题等），用自然的中文表达
+- 不要使用Markdown格式（如**粗体**、#标题等），用自然的${contentLanguage === 'en' ? 'English' : '中文'}表达
 - 可以适当使用表情符号（如😊、💡、👍），但每条最多1个
-- **语言生动但简洁**：每次回复 2-4 句，总长度 60-120 字
+- **语言生动但简洁**：每次回复 2-4 句，总长度 60-120 字。${contentLanguage === 'en' ? 'Respond in English only.' : '使用简体中文。'}
 - 如果涉及数学公式，使用LaTeX格式：$公式$
 - **禁止重复**上一条消息中已说过的内容；禁止在同一条回复中出现重复段落
 - **只聚焦当前步骤**，不要主动提及其他任务类型（学生做视频任务时不提思维导图等）
 `;
+
+    if (contentLanguage === 'en') {
+      dynamicSystemInstruction = `
+## CURRENT TASK
+- Title: ${currentTask.title}
+- Learning objective: ${currentTask.outputGoal}
+- Student status: ${viewContext}
+
+## Teaching strategy
+- Be warm, encouraging, and concise.
+- Ask one focused question at a time.
+- Only discuss the CURRENT task/step.
+- Do not reveal full answers directly.
+
+## Subject guidance
+${isMathOrScience
+  ? `- For math/science, explain with concrete everyday examples and short formula references when needed (LaTeX: $...$).
+- Keep explanations intuitive before formal definitions.`
+  : `- For non-STEM tasks, use clear language and practical examples.`}
+
+## Response rules
+- Output language: English ONLY. Do not use any Chinese characters.
+- No Markdown formatting.
+- 2-4 sentences, concise and natural.
+- Do not repeat prior wording.
+- If student asks for hints, provide exactly ONE hint first.
+`;
+    }
 
     try {
         const responseText = await sendChatMessage(
           messages.concat(userMsg),
           userMsg.text,
           dynamicSystemInstruction,
-          'zh',
+          contentLanguage,
           {
             ...(images && images.length > 0 ? { images } : {}),
             ...(currentTask.tutorConfig.twinId ? { twinId: currentTask.tutorConfig.twinId } : {}),
@@ -1326,7 +1343,7 @@ ${isMathOrScience ? `
         if (errorMessage.includes("Requested entity was not found") && onApiKeyError) {
             onApiKeyError();
         }
-        setMessages(prev => [...prev, { role: 'model', text: "连接错误，请重试。", timestamp }]);
+        setMessages(prev => [...prev, { role: 'model', text: t('connectionError'), timestamp }]);
         setAvatarState('idle'); // Error occurred, return to idle
     } finally {
         setIsTyping(false);
@@ -1340,10 +1357,10 @@ ${isMathOrScience ? `
   const handleStuck = () => {
     const context = getTaskContext();
     const guidedCtx = isGuidedVideoFlow
-      ? `\nGuided step ${guidedStep}/5: ${['我能明确目标','我能看懂视频','我能总结要点','我能练一练','我能完成复盘'][guidedStep - 1] || ''}\n${getGuidedStepProgress()}`
+      ? `\nGuided step ${guidedStep}/5: ${[t('guidedStep1'),t('guidedStep2'),t('guidedStep3'),t('guidedStep4'),t('guidedStep5')][guidedStep - 1] || ''}\n${getGuidedStepProgress()}`
       : '';
     handleSendMessage(
-        "AI 老师，我卡住了，能给我一些提示吗？", 
+        t('stuckHint'), 
         `Student clicked 'I'm Stuck'. Context: ${context}${guidedCtx}
 
 CRITICAL: Give hints STEP BY STEP, not all at once.
@@ -1353,6 +1370,7 @@ CRITICAL: Give hints STEP BY STEP, not all at once.
 - Do NOT give the answer directly
 - Do NOT list multiple hints in one response - focus on ONE key point`
     );
+    void emitEvent('stuck_clicked', { guidedStep, isGuidedVideoFlow }).catch(() => undefined);
   };
 
   const handleDone = () => {
@@ -1365,11 +1383,12 @@ CRITICAL: Give hints STEP BY STEP, not all at once.
       setHasEditAfterDone(false);
     }
     setLastDoneClickTime(now);
+    void emitEvent('step_completed', { guidedStep, isGuidedVideoFlow }).catch(() => undefined);
 
     // ──── 引导流模式：按步骤验证 ────
     if (isGuidedVideoFlow) {
       guidedDoneInFlight.current = true;
-      const stepTitles = ['我能明确目标', '我能看懂视频', '我能总结要点', '我能练一练', '我能完成复盘'];
+      const stepTitles = [t('guidedStep1'), t('guidedStep2'), t('guidedStep3'), t('guidedStep4'), t('guidedStep5')];
       const currentStepTitle = stepTitles[guidedStep - 1] || `步骤${guidedStep}`;
       const stepProgress = getGuidedStepProgress();
 
@@ -1395,18 +1414,18 @@ STEP VERIFICATION PROTOCOL (guided flow):
 - ${isLightStep
   ? 'This is a lightweight step (reading/watching). Acknowledge and approve directly.'
   : guidedStep === 4 && practiceImages.length > 0
-  ? 'Review the student\'s practice answers. HANDWRITTEN IMAGES are attached - view each image and compare with the 参考答案 (correct answer) given for that question. Judge right/wrong and give specific feedback. Be encouraging.'
+  ? 'Review the student\'s practice answers. HANDWRITTEN IMAGES are attached - compare each answer with the provided reference answer, judge correctness, and give specific encouraging feedback.'
   : `Review the student's work for this step. Be encouraging but check completeness.`}
-- Language: vivid but concise, 2-4 sentences, max 100 chars.
+- Language: vivid but concise, 2-4 sentences, max 100 chars. Output in ${contentLanguage === 'en' ? 'English' : 'Simplified Chinese'} only.
 - Do NOT mention other steps, mindmaps, or unrelated concepts.
 - Do NOT repeat content from previous messages.
 - CRITICAL: If the step is satisfactorily completed, you MUST end your response with the EXACT marker: [STEP_PASS]
-  This marker tells the system to show an "进入下一步" button.
+  This marker tells the system to show a "${contentLanguage === 'en' ? 'Next Step' : '进入下一步'}" button.
 - If the step is NOT complete, give ONE specific suggestion to improve, then encourage retry. Do NOT include [STEP_PASS].
 - Do NOT include [STEP_PASS] unless you truly approve this step.`;
 
       handleSendMessage(
-        `AI 老师，我完成了「${currentStepTitle}」这一步。`,
+        t('guidedDoneStep', { step: currentStepTitle }),
         hiddenCtx,
         practiceImages.length > 0 ? practiceImages : undefined
       );
@@ -1416,7 +1435,7 @@ STEP VERIFICATION PROTOCOL (guided flow):
     // ──── 非引导流（原有逻辑）────
     const context = getTaskContext();
     handleSendMessage(
-        "AI 老师，我完成了这个任务，请评价我的成果。", 
+        t('guidedDoneTask'), 
         `Student clicked 'I'm Done'. Context: ${context}. 
 Evaluation Criteria: ${currentTask.evaluationCriteria}. 
 Output Goal: ${currentTask.outputGoal}
@@ -1425,8 +1444,8 @@ CRITICAL TASK COMPLETION PROTOCOL:
 1. First, review their work against the outputGoal: "${currentTask.outputGoal}"
 2. If their work meets the core requirements, give positive feedback
 3. If there are gaps, provide 1-2 specific improvement suggestions (but don't be overly strict)
-4. MOST IMPORTANT: After evaluation, if the task is substantially complete, you MUST explicitly tell the student:
-   "很好！你已经完成了这个任务。你可以点击'下一个任务'按钮继续学习了。"
+4. MOST IMPORTANT: After evaluation, if the task is substantially complete, you MUST explicitly tell the student (in ${contentLanguage === 'en' ? 'English' : 'Chinese'}):
+   ${contentLanguage === 'en' ? '"Great! You have completed this task. You can click the \'Next Task\' button to continue."' : '"很好！你已经完成了这个任务。你可以点击\'下一个任务\'按钮继续学习了。"'}
 5. Do NOT continue asking questions or requesting more work if the core goal is met
 6. Allow students to move forward even if their work isn't perfect - learning is iterative
 7. Give immediate positive feedback on what they did well before any suggestions`
@@ -1437,7 +1456,7 @@ CRITICAL TASK COMPLETION PROTOCOL:
       if (!mindMapInput) return;
       setIsAssetLoading(true);
       try {
-          const improvedCode = await generateTaskAsset('mindmap_code', `Optimize and expand this Mermaid code: ${mindMapInput}. Keep it concise but add relevant branches.`);
+          const improvedCode = await generateTaskAsset('mindmap_code', `Optimize and expand this Mermaid code: ${mindMapInput}. Keep it concise but add relevant branches.`, courseId, currentTask?.id, contentLanguage);
           if (improvedCode) setMindMapInput(improvedCode);
       } catch (e) {
           console.error(e);
@@ -1477,8 +1496,26 @@ CRITICAL TASK COMPLETION PROTOCOL:
       }, 100);
 
       // AI 同步反馈：评价上一步 + 引导下一步
-      const transitionInstruction = `
-你是学生的学习导师。请基于以下上下文，输出一段“过渡反馈”：
+      const transitionInstruction = contentLanguage === 'en'
+        ? `You are the student's learning tutor. Generate a short transition feedback using the context below.
+
+[Previous task]
+- Title: ${prevTask.title}
+- Goal: ${prevTask.outputGoal}
+- Evaluation criteria: ${prevTask.evaluationCriteria}
+- Current student state: ${prevContext}
+
+[Next task]
+- Title: ${nextTask?.title || 'Next task'}
+- Goal: ${nextTask?.outputGoal || 'Please read the task instruction'}
+
+Requirements:
+1) First sentence: affirm the previous step (praise + 1 practical suggestion)
+2) Second sentence: guide what to do first in the next step
+3) Warm and concise, no Markdown, 2-3 sentences
+4) English ONLY. Do not use Chinese.
+5) Do not ask the student to redo completed work.`
+        : `你是学生的学习导师。请基于以下上下文，输出一段“过渡反馈”：
 
 【上一步任务】
 - 标题：${prevTask.title}
@@ -1495,15 +1532,17 @@ CRITICAL TASK COMPLETION PROTOCOL:
 2) 再用 1 句话引导下一步（告诉他先做什么）
 3) 语气温暖、生动但简洁；不使用 Markdown；总长度 60-100 字
 4) 不要要求学生返回重做；不要重复前面消息中已说过的内容
+
+CRITICAL: Output language must be 简体中文 only.
 `;
 
       try {
         setIsTyping(true);
         const transitionText = await sendChatMessage(
           messages,
-          '系统事件：学生点击了“下一步”',
+          contentLanguage === 'en' ? 'System event: student clicked Next' : '系统事件：学生点击了“下一步”',
           transitionInstruction,
-          'zh',
+          contentLanguage,
           currentTask.tutorConfig.twinId ? { twinId: currentTask.tutorConfig.twinId } : undefined
         );
         const ts = Date.now();
@@ -1570,7 +1609,7 @@ CRITICAL TASK COMPLETION PROTOCOL:
 
   // 引导流步骤进度描述（供 handleDone 使用）
   const getGuidedStepProgress = (): string => {
-    const stepTitles = ['我能明确目标', '我能看懂视频', '我能总结要点', '我能练一练', '我能完成复盘'];
+    const stepTitles = [t('guidedStep1'), t('guidedStep2'), t('guidedStep3'), t('guidedStep4'), t('guidedStep5')];
     const currentStepTitle = stepTitles[guidedStep - 1] || `步骤${guidedStep}`;
 
     if (guidedStep === 1) return `当前步骤「${currentStepTitle}」：学生已阅读学习目标。`;
@@ -1758,7 +1797,7 @@ CRITICAL TASK COMPLETION PROTOCOL:
     // Count button clicks from log
     const stuckClicks = log.filter(entry => entry.includes('我卡住了') || entry.includes('stuck')).length;
     const doneClicks = log.filter(entry => entry.includes('我做完了') || entry.includes('done')).length;
-    const evaluateClicks = log.filter(entry => entry.includes('请求评价') || entry.includes('evaluate')).length;
+    const evaluateClicks = log.filter(entry => entry.includes('请求评价') || entry.includes('evaluate') || entry.includes('feedback')).length;
 
     // Count edits (approximate from log entries)
     const mindMapEdits = log.filter(entry => entry.includes('mindmap') || entry.includes('思维导图')).length;
@@ -1822,6 +1861,7 @@ CRITICAL TASK COMPLETION PROTOCOL:
     }
     
     reportProgress(100, true, plan.tasks.length - 1);
+    void emitEvent('course_completed', { totalTasks: plan.tasks.length }).catch(() => undefined);
     setLearningLog(log);
     if (finalMindMap) {
       setFinalMindMapCode(finalMindMap);
@@ -1835,7 +1875,7 @@ CRITICAL TASK COMPLETION PROTOCOL:
         studentName,
         hasObjectiveMetrics: !!objectiveMetrics
       });
-      const data = await generateExitTicket(log, 'zh', studentName, objectiveMetrics);
+      const data = await generateExitTicket(log, contentLanguage, studentName, objectiveMetrics);
       console.log('[StudentConsole] Exit ticket generated successfully');
       setExitData(data);
       if (data && Array.isArray(data.characteristics) && data.characteristics.length > 0) {
@@ -1898,9 +1938,9 @@ CRITICAL TASK COMPLETION PROTOCOL:
       <div className="relative min-h-screen bg-slate-50 flex flex-col p-6 text-slate-800 font-sans overflow-hidden">
         <div className="z-10 flex flex-col items-center justify-center flex-shrink-0">
            <Loader2 className="w-16 h-16 text-cyan-600 animate-spin mx-auto mb-4" />
-           <h2 className="text-2xl font-bold mb-2">{t.processing}</h2>
+           <h2 className="text-2xl font-bold mb-2">{t('processing')}</h2>
            <p className="text-slate-500 mb-4 leading-relaxed border-l-2 border-cyan-500 pl-4 text-left italic bg-white p-4 rounded-r-lg shadow-sm max-w-md">
-             {t.processingTip}
+             {t('processingTip')}
            </p>
            <div className="h-1 w-48 bg-slate-200 rounded-full mx-auto overflow-hidden mb-6">
              <div className="h-full bg-cyan-500 animate-[pulse_2s_cubic-bezier(0.4,0,0.6,1)_infinite] w-full origin-left"></div>
@@ -1930,7 +1970,7 @@ CRITICAL TASK COMPLETION PROTOCOL:
                   <div className="space-y-2 max-h-48 overflow-y-auto text-sm">
                     {messages.slice(-8).map((msg, i) => (
                       <div key={i} className={`px-3 py-2 rounded-lg ${msg.role === 'user' ? 'bg-emerald-50 text-slate-800' : 'bg-slate-50 text-slate-700'}`}>
-                        <span className="text-[10px] font-bold uppercase opacity-70">{msg.role === 'user' ? '我' : (tutorName || t.aiSystem)}</span>
+                        <span className="text-[10px] font-bold uppercase opacity-70">{msg.role === 'user' ? '我' : (tutorName || t('aiSystem'))}</span>
                         <div className="mt-0.5 line-clamp-2">{msg.text.slice(0, 120)}{msg.text.length > 120 ? '…' : ''}</div>
                       </div>
                     ))}
@@ -1972,15 +2012,15 @@ CRITICAL TASK COMPLETION PROTOCOL:
             <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-emerald-100 mb-4 border border-emerald-200">
                <Award size={32} className="text-emerald-600" />
             </div>
-            <h1 className="text-3xl font-bold text-slate-900 mb-2">{t.sessionComplete}</h1>
-            <p className="text-slate-500 uppercase tracking-widest text-xs">{t.ticketGenerated}</p>
+            <h1 className="text-3xl font-bold text-slate-900 mb-2">{t('sessionComplete')}</h1>
+            <p className="text-slate-500 uppercase tracking-widest text-xs">{t('ticketGenerated')}</p>
           </div>
           
           {/* Section 1: Score & Summary Card */}
           <div className="bg-white p-8 rounded-3xl border border-slate-200 shadow-xl transition-all hover:shadow-2xl">
               <div className="flex flex-col md:flex-row gap-8 items-start">
                  <div className="flex-none w-full md:w-auto md:min-w-[200px] text-center md:text-left md:border-r border-slate-100 md:pr-8 pb-6 md:pb-0 border-b md:border-b-0">
-                      <h3 className="text-xs uppercase font-bold text-slate-400 mb-3">{t.masteryScore}</h3>
+                      <h3 className="text-xs uppercase font-bold text-slate-400 mb-3">{t('masteryScore')}</h3>
                       <div className="flex items-baseline justify-center md:justify-start gap-2">
                          <span className="text-7xl font-bold text-emerald-600 tracking-tighter">{exitData.overallScore}</span>
                          <span className="text-xl text-slate-400 font-medium">/100</span>
@@ -1988,7 +2028,7 @@ CRITICAL TASK COMPLETION PROTOCOL:
                  </div>
                  <div className="flex-1">
                     <h3 className="text-xs uppercase font-bold text-slate-400 mb-3 flex items-center gap-2">
-                        <Star size={14} className="text-amber-500"/> {t.keyTakeaway}
+                        <Star size={14} className="text-amber-500"/> {t('keyTakeaway')}
                     </h3>
                     <p className="text-lg leading-relaxed text-slate-800 font-medium">
                         {exitData.summary}
@@ -2000,7 +2040,7 @@ CRITICAL TASK COMPLETION PROTOCOL:
           {/* Section 2: Next Steps */}
           <div className="bg-gradient-to-br from-indigo-50 to-white p-8 rounded-3xl border border-indigo-100 shadow-lg">
              <h3 className="text-indigo-700 font-bold mb-4 flex items-center gap-2 text-sm uppercase tracking-wider">
-               <List size={18}/> {t.nextSteps}
+               <List size={18}/> {t('nextSteps')}
              </h3>
              <p className="text-slate-700 text-md leading-relaxed">
                 {exitData.nextSteps}
@@ -2010,7 +2050,7 @@ CRITICAL TASK COMPLETION PROTOCOL:
           {/* Section 3: Xueba Four Characteristics (Interactive) */}
           <div className="bg-white p-8 rounded-3xl border border-slate-200 shadow-xl">
              <h4 className="text-sm font-bold text-slate-500 mb-8 uppercase w-full flex items-center gap-2 border-b border-slate-100 pb-4">
-                <Activity size={18} className="text-purple-600"/> {t.radarTitle}
+                <Activity size={18} className="text-purple-600"/> {t('radarTitle')}
              </h4>
              
              <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
@@ -2153,7 +2193,7 @@ CRITICAL TASK COMPLETION PROTOCOL:
           {/* Section 5: System Log */}
           <div className="bg-white p-8 rounded-3xl border border-slate-200 shadow-xl">
             <h3 className="text-xs uppercase font-bold text-slate-400 mb-4 flex items-center gap-2">
-              <List size={14}/> {t.systemLog}
+              <List size={14}/> {t('systemLog')}
             </h3>
             <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200 max-h-60 overflow-y-auto font-mono text-[11px] text-slate-500 leading-normal custom-scrollbar">
               {learningLog.split('\n').map((line, i) => (
@@ -2167,13 +2207,13 @@ CRITICAL TASK COMPLETION PROTOCOL:
                onClick={handleRestartLearning}
                className="px-8 py-4 bg-cyan-600 hover:bg-cyan-700 rounded-full text-white font-bold transition-all shadow-lg hover:shadow-cyan-600/30 flex items-center gap-3 transform hover:-translate-y-1 active:translate-y-0"
              >
-               <RefreshCcw size={20} /> {t.restartLearning}
+               <RefreshCcw size={20} /> {t('restartLearning')}
              </button>
              <button 
                onClick={handleEndLearning}
                className="px-8 py-4 bg-slate-600 hover:bg-slate-700 rounded-full text-white font-bold transition-all shadow-lg hover:shadow-slate-600/30 flex items-center gap-3 transform hover:-translate-y-1 active:translate-y-0"
              >
-               <CheckCircle size={20} /> {t.endLearning}
+               <CheckCircle size={20} /> {t('endLearning')}
              </button>
           </div>
         </div>
@@ -2186,7 +2226,7 @@ CRITICAL TASK COMPLETION PROTOCOL:
     if (isGuidedVideoFlow) {
       const source = currentTask.externalResourceUrl || (typeof assetData === 'string' ? assetData : '') || '';
       const youtubeId = extractYouTubeVideoId(source);
-      const stepTitles = ['我能明确目标', '我能看懂视频', '我能总结要点', '我能练一练', '我能完成复盘'];
+      const stepTitles = [t('guidedStep1'), t('guidedStep2'), t('guidedStep3'), t('guidedStep4'), t('guidedStep5')];
 
       return (
         <div className="w-full h-full bg-slate-50/30 flex flex-col">
@@ -2223,17 +2263,17 @@ CRITICAL TASK COMPLETION PROTOCOL:
             <div className="max-w-4xl mx-auto space-y-5">
               {guidedStep === 1 && (
                 <div className="bg-white rounded-xl border border-slate-200 p-6">
-                  <h3 className="text-lg font-bold text-slate-800 mb-3">我能明确目标</h3>
+                  <h3 className="text-lg font-bold text-slate-800 mb-3">{t('guidedStep1')}</h3>
                   <div className="text-slate-700 leading-relaxed space-y-4">
-                    <p>
-                      <strong>学习目标：</strong>
-                      {guidedPayload?.learningObjective || currentTask.outputGoal || '请先了解本节课学习目标。'}
+                      <p>
+                      <strong>{t('learningObjective')}：</strong>
+                      {guidedPayload?.learningObjective || currentTask.outputGoal || t('learnObjectivePlaceholder')}
                     </p>
                     {guidedPayload?.whyItMatters?.meaning_anchor && (
-                      <p><strong>为什么学这个？</strong> {guidedPayload.whyItMatters.meaning_anchor}</p>
+                      <p><strong>{t('whyLearnThis')}</strong> {guidedPayload.whyItMatters.meaning_anchor}</p>
                     )}
                     {guidedPayload?.whyItMatters?.advance_organizer && (
-                      <p><strong>学什么？</strong> {guidedPayload.whyItMatters.advance_organizer}</p>
+                      <p><strong>{t('whatToLearn')}</strong> {guidedPayload.whyItMatters.advance_organizer}</p>
                     )}
                   </div>
                 </div>
@@ -2241,23 +2281,23 @@ CRITICAL TASK COMPLETION PROTOCOL:
 
               {guidedStep === 2 && (
                 <div className="bg-white rounded-xl border border-slate-200 p-4">
-                  <h3 className="text-lg font-bold text-slate-800 mb-3 px-2">我能看懂视频</h3>
+                  <h3 className="text-lg font-bold text-slate-800 mb-3 px-2">{t('guidedStep2')}</h3>
                   <div className="rounded-lg overflow-hidden bg-black/80">
                     {youtubeId ? (
                       <iframe
                         src={`https://www.youtube.com/embed/${youtubeId}`}
-                        title="教学视频"
+                        title={t('instructionalVideo')}
                         className="w-full aspect-video"
                         allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
                         allowFullScreen
                       />
                     ) : source ? (
                       <video controls className="w-full aspect-video" src={source}>
-                        您的浏览器不支持视频标签。
+                        {t('browserNoVideo')}
                       </video>
                     ) : (
                       <div className="aspect-video flex items-center justify-center text-slate-300 text-sm">
-                        暂无可播放视频
+                        {t('noVideoAvailable')}
                       </div>
                     )}
                   </div>
@@ -2266,9 +2306,9 @@ CRITICAL TASK COMPLETION PROTOCOL:
 
               {guidedStep === 3 && (
                 <div className="bg-white rounded-xl border border-slate-200 p-6">
-                  <h3 className="text-lg font-bold text-slate-800 mb-4">我能总结要点</h3>
+                  <h3 className="text-lg font-bold text-slate-800 mb-4">{t('guidedStep3')}</h3>
                   <p className="text-xs text-slate-500 mb-4">
-                    请根据句意填写空格中的关键词。
+                    {t('fillKeywordHint')}
                   </p>
                   <div className="space-y-5">
                     {guidedKeyIdeas.map((idea, idx) => (
@@ -2314,7 +2354,7 @@ CRITICAL TASK COMPLETION PROTOCOL:
                                   onChange={(e) =>
                                     setKeywordAnswers((prev) => ({ ...prev, [`idea-${idx}`]: e.target.value }))
                                   }
-                                  placeholder="填空"
+                                  placeholder={t('fillBlank')}
                                   className="inline-block h-7 min-w-[72px] max-w-[120px] rounded-md border border-emerald-300 bg-emerald-50 px-2 text-xs text-emerald-700 align-middle focus:outline-none focus:ring-2 focus:ring-emerald-200"
                                 />
                               </div>
@@ -2336,7 +2376,7 @@ CRITICAL TASK COMPLETION PROTOCOL:
               {guidedStep === 4 && guidedPractice.length > 0 && (
                 <div className="bg-white rounded-xl border border-slate-200 p-6">
                   <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-lg font-bold text-slate-800">我能练一练</h3>
+                    <h3 className="text-lg font-bold text-slate-800">{t('guidedStep4')}</h3>
                     <span className="text-sm text-slate-500">
                       第 {practiceCurrentIndex + 1} / {guidedPractice.length} 题
                     </span>
@@ -2409,7 +2449,7 @@ CRITICAL TASK COMPLETION PROTOCOL:
                                 <textarea
                                   value={practiceTextAnswers[idx] || ''}
                                   onChange={(e) => setPracticeTextAnswers((prev) => ({ ...prev, [idx]: e.target.value }))}
-                                  placeholder="请输入你的答案"
+                                  placeholder={t('enterYourAnswer')}
                                   className="w-full min-h-[90px] rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-200 resize-y"
                                 />
                               )}
@@ -2417,7 +2457,7 @@ CRITICAL TASK COMPLETION PROTOCOL:
                                 <div className="space-y-2">
                                   <label className="flex flex-col items-center justify-center w-full min-h-[120px] border-2 border-dashed border-slate-300 rounded-lg cursor-pointer hover:bg-slate-50 transition-colors">
                                     <Upload className="w-8 h-8 text-slate-400 mb-2" />
-                                    <span className="text-sm text-slate-600">点击上传手写答案图片</span>
+                                    <span className="text-sm text-slate-600">{t('uploadHandwrittenAnswer')}</span>
                                     <input
                                       type="file"
                                       accept="image/*"
@@ -2437,7 +2477,7 @@ CRITICAL TASK COMPLETION PROTOCOL:
                                   </label>
                                   {hasImageAnswer && (
                                     <div className="flex items-center gap-2">
-                                      <img src={practiceImageAnswers[idx]} alt="手写答案" className="max-h-24 rounded border border-slate-200" />
+                                      <img src={practiceImageAnswers[idx]} alt={t('handwrittenAnswer')} className="max-h-24 rounded border border-slate-200" />
                                       <button
                                         type="button"
                                         onClick={() => setPracticeImageAnswers((prev) => ({ ...prev, [idx]: '' }))}
@@ -2480,7 +2520,7 @@ CRITICAL TASK COMPLETION PROTOCOL:
                                   </div>
                                   {hasImageAnswer && (
                                     <div className="flex items-center gap-2">
-                                      <img src={practiceImageAnswers[idx]} alt="手写答案" className="max-h-24 rounded border border-slate-200" />
+                                      <img src={practiceImageAnswers[idx]} alt={t('handwrittenAnswer')} className="max-h-24 rounded border border-slate-200" />
                                       <button
                                         type="button"
                                         onClick={() => setPracticeImageAnswers((prev) => ({ ...prev, [idx]: '' }))}
@@ -2538,12 +2578,12 @@ CRITICAL TASK COMPLETION PROTOCOL:
 
               {guidedStep === 5 && (
                 <div className="bg-white rounded-xl border border-slate-200 p-6">
-                  <h3 className="text-lg font-bold text-slate-800 mb-4">我能完成复盘</h3>
+                  <h3 className="text-lg font-bold text-slate-800 mb-4">{t('guidedStep5')}</h3>
                   <MathTextPreview text={guidedExitTicket?.question || '请用1-2句话总结本节课你最重要的收获。'} className="text-sm text-slate-800 mb-3 [&_p]:mb-0" />
                   <textarea
                     value={exitTicketAnswer}
                     onChange={(e) => setExitTicketAnswer(e.target.value)}
-                    placeholder="请输入你的复盘回答"
+                    placeholder={t('enterYourReviewAnswer')}
                     className="w-full min-h-[110px] rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-200 resize-y"
                   />
                   {guidedExitTicket?.correctAnswer && (
@@ -2553,7 +2593,7 @@ CRITICAL TASK COMPLETION PROTOCOL:
                         onClick={() => setShowExitTicketAnswer((prev) => !prev)}
                         className="text-xs text-slate-700 border border-slate-300 rounded-full px-3 py-1 bg-white hover:bg-slate-100"
                       >
-                        {showExitTicketAnswer ? '隐藏参考答案' : '查看参考答案'}
+                        {showExitTicketAnswer ? t('hideReferenceAnswer') : t('viewReferenceAnswer')}
                       </button>
                       {showExitTicketAnswer && (
                         <div className="text-xs text-emerald-700 mt-2 flex gap-1 items-start">
@@ -2656,7 +2696,7 @@ CRITICAL TASK COMPLETION PROTOCOL:
                         <button
                             onClick={() => setIsFullscreenMindmap(true)}
                             className="p-2 rounded-lg bg-white/90 hover:bg-white border border-slate-200 shadow-md transition-all hover:shadow-lg text-slate-700 hover:text-slate-900"
-                            title="全屏显示"
+                            title={t('fullscreen')}
                         >
                             <Maximize size={16} />
                         </button>
@@ -2725,12 +2765,12 @@ CRITICAL TASK COMPLETION PROTOCOL:
                  <div className="flex-1 relative bg-white">
                      {isTextEditorPreview ? (
                          <div className="absolute inset-0 w-full h-full p-8 overflow-y-auto custom-scrollbar">
-                             <MathTextPreview text={textEditorContent || '暂无内容'} />
+                             <MathTextPreview text={textEditorContent || t('noContent')} />
                          </div>
                      ) : (
                          <textarea 
                              className="absolute inset-0 w-full h-full p-8 resize-none focus:outline-none text-slate-900 bg-white leading-relaxed text-sm placeholder-slate-400 custom-scrollbar whitespace-pre-wrap"
-                             placeholder="在此输入文本内容...支持 LaTeX 公式，例如：$x^2 + y^2 = r^2$ 或 $$\\frac{-b \\pm \\sqrt{b^2-4ac}}{2a}$$"
+                             placeholder={t('textEditorPlaceholder')}
                              value={textEditorContent}
                              onChange={(e) => {
                                setTextEditorContent(e.target.value);
@@ -2768,7 +2808,7 @@ CRITICAL TASK COMPLETION PROTOCOL:
                 <div className="flex-1 relative bg-white">
                     <textarea 
                         className="absolute inset-0 w-full h-full p-8 resize-none focus:outline-none text-slate-900 bg-white leading-relaxed text-sm placeholder-slate-400 custom-scrollbar font-mono"
-                        placeholder="输入数学公式，使用 LaTeX 语法，例如：$x^2 + y^2 = r^2$ 或 $$\\frac{-b \\pm \\sqrt{b^2-4ac}}{2a}$$"
+                        placeholder={t('mathEditorPlaceholder')}
                         value={mathEditorContent}
                         onChange={(e) => {
                           setMathEditorContent(e.target.value);
@@ -2814,7 +2854,7 @@ CRITICAL TASK COMPLETION PROTOCOL:
                                 <button
                                     onClick={() => setIsFullscreenExperiment(true)}
                                     className="p-1.5 rounded-lg hover:bg-slate-200 transition-colors text-slate-600 hover:text-slate-800"
-                                    title="全屏显示"
+                                    title={t('fullscreen')}
                                 >
                                     <Maximize size={14} />
                                 </button>
@@ -2825,7 +2865,7 @@ CRITICAL TASK COMPLETION PROTOCOL:
                            srcDoc={assetData.trim().startsWith('http') ? undefined : assetData}
                            className="w-full flex-1 border-none"
                            sandbox="allow-scripts allow-same-origin allow-popups allow-forms" 
-                           title="交互式模拟"
+                           title={t('interactiveSimulation')}
                         />
                     </div>
                  ) : (
@@ -2844,7 +2884,7 @@ CRITICAL TASK COMPLETION PROTOCOL:
              {isAssetLoading ? (
                  <div className="flex flex-col items-center gap-2">
                      <Loader2 size={32} className="animate-spin text-cyan-600"/>
-                     <span className="text-xs font-bold text-slate-400">正在加载素材...</span>
+                     <span className="text-xs font-bold text-slate-400">{t('loadingAsset')}</span>
                  </div>
              ) : assetData ? (
                 <>
@@ -2876,7 +2916,7 @@ CRITICAL TASK COMPLETION PROTOCOL:
                              )}
                              <div className="flex items-center gap-2 p-3 bg-slate-900 text-cyan-400 border-b border-slate-800">
                                  <Video size={18}/>
-                                <span className="font-bold text-xs uppercase tracking-wider">教学视频</span>
+                                <span className="font-bold text-xs uppercase tracking-wider">{t('instructionalVideo')}</span>
                              </div>
                             {(() => {
                                 const source = typeof assetData === 'string' ? assetData : '';
@@ -2885,7 +2925,7 @@ CRITICAL TASK COMPLETION PROTOCOL:
                                   return (
                                     <iframe
                                       src={`https://www.youtube.com/embed/${youtubeId}`}
-                                      title="教学视频"
+                                      title={t('instructionalVideo')}
                                       className="w-full aspect-video"
                                       allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
                                       allowFullScreen
@@ -2901,7 +2941,7 @@ CRITICAL TASK COMPLETION PROTOCOL:
                                     className="w-full aspect-video"
                                     src={source}
                                   >
-                                    您的浏览器不支持视频标签。
+                                    {t('browserNoVideo')}
                                   </video>
                                 );
                             })()}
@@ -2933,43 +2973,46 @@ CRITICAL TASK COMPLETION PROTOCOL:
         {(isResizingLeft || isResizingRight) && <div className="absolute inset-0 z-50 bg-transparent" />} {/* Shield to prevent iframe capturing mouse */}
         
         {/* ENHANCED TASK HEADER - Single Row */}
-        <div className="bg-white border-b border-slate-200 p-5 shrink-0 z-20 shadow-sm">
+        <div className="bg-white border-b border-slate-200 p-3 shrink-0 z-20 shadow-sm">
             <div className="flex justify-between items-center gap-4 overflow-hidden">
                 <div className="flex items-center gap-3 overflow-hidden min-w-0 flex-1">
                     {/* Title */}
                     <div className="flex flex-col shrink-0">
-                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-0.5">任务 {currentTaskIndex + 1}</span>
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-0.5">{t('taskOrder', { n: currentTaskIndex + 1 })}</span>
                         <h2 className="text-lg font-bold text-slate-800 truncate" title={currentTask.title}>
                             {currentTask.title}
                         </h2>
                     </div>
-                    <div className="h-8 w-px bg-slate-200 hidden md:block shrink-0" />
-                    {/* Learning Objective - moved here */}
-                    <div className="bg-slate-50 rounded-lg border border-slate-200 px-3 py-2 text-sm min-w-0 flex-1">
-                        <div className="flex items-center gap-2">
-                            <span className="bg-cyan-100 text-cyan-800 text-[10px] font-bold px-1.5 py-0.5 rounded shrink-0">学习目标</span>
-                            <span className="text-slate-600 text-xs font-medium truncate">
-                                <MathTextPreview text={guidedPayload?.learningObjective || currentTask.outputGoal || '暂无学习目标'} />
-                            </span>
-                        </div>
-                    </div>
+                    <div className="h-6 w-px bg-slate-200 hidden md:block shrink-0" />
+                    {/* Learning objective - plain text, no box */}
+                    <span className="text-slate-600 text-xs font-medium line-clamp-2 min-w-0 flex-1" title={guidedPayload?.learningObjective || currentTask.outputGoal || ''}>
+                        <span className="text-slate-500">{t('learningObjective')}: </span>
+                        <MathTextPreview text={guidedPayload?.learningObjective || currentTask.outputGoal || t('noLearningObjective')} />
+                    </span>
                 </div>
-                {/* Progress Dots - 可点击跳转 */}
-                <div className="flex gap-1.5 shrink-0 ml-4">
-                    {plan.tasks.map((_, idx) => (
-                        <button
-                            key={idx}
-                            type="button"
-                            onClick={() => switchToTaskIndex(idx)}
-                            disabled={isTyping}
-                            title={`任务 ${idx + 1}`}
-                            className={`h-1.5 rounded-full transition-all duration-500 disabled:cursor-not-allowed ${
-                                idx === currentTaskIndex ? 'bg-cyan-500 w-6' :
-                                idx < currentTaskIndex ? 'bg-cyan-200 w-2 hover:bg-cyan-300' :
-                                'bg-slate-200 w-2 hover:bg-slate-300'
-                            }`}
-                        />
-                    ))}
+                <div className="flex items-center gap-4 shrink-0 ml-4">
+                    {/* Progress Dots - 可点击跳转 */}
+                    <div className="flex gap-1.5 shrink-0">
+                        {plan.tasks.map((_, idx) => (
+                            <button
+                                key={idx}
+                                type="button"
+                                onClick={() => switchToTaskIndex(idx)}
+                                disabled={isTyping}
+                                title={t('taskOrder', { n: idx + 1 })}
+                                className={`h-1.5 rounded-full transition-all duration-500 disabled:cursor-not-allowed ${
+                                    idx === currentTaskIndex ? 'bg-cyan-500 w-6' :
+                                    idx < currentTaskIndex ? 'bg-cyan-200 w-2 hover:bg-cyan-300' :
+                                    'bg-slate-200 w-2 hover:bg-slate-300'
+                                }`}
+                            />
+                        ))}
+                    </div>
+                    {onLanguageChange && (
+                        <div className="shrink-0">
+                            <LanguageSwitcher onLanguageChange={onLanguageChange} />
+                        </div>
+                    )}
                 </div>
             </div>
         </div>
@@ -3001,7 +3044,7 @@ CRITICAL TASK COMPLETION PROTOCOL:
                     </div>
                 )}
                 <p className="text-xs text-slate-500">
-                    完成后请点击 <span className="font-bold text-green-700">&quot;我做完了&quot;</span> ，遇到困难请点击 <span className="font-bold text-amber-700">&quot;我卡住了&quot;</span>
+                    {t('hintClickDone')}
                 </p>
             </div>
             <div className="flex items-center gap-2 shrink-0">
@@ -3009,13 +3052,13 @@ CRITICAL TASK COMPLETION PROTOCOL:
                     onClick={handleStuck}
                     className="flex items-center gap-2 px-4 py-2 rounded-full text-sm font-bold bg-amber-100 text-amber-700 hover:bg-amber-200 border border-amber-200 transition-colors shadow-sm"
                 >
-                    <HelpCircle size={16} /> {t.stuck}
+                    <HelpCircle size={16} /> {t('stuck')}
                 </button>
                 <button
                     onClick={handleDone}
                     className="flex items-center gap-2 px-4 py-2 rounded-full text-sm font-bold bg-green-100 text-green-700 hover:bg-green-200 border border-green-200 transition-colors shadow-sm"
                 >
-                    <CheckCircle size={16} /> {t.done}
+                    <CheckCircle size={16} /> {t('done')}
                 </button>
             </div>
         </div>
@@ -3043,10 +3086,10 @@ CRITICAL TASK COMPLETION PROTOCOL:
             <div className="flex flex-col">
               <div className="flex items-center gap-2">
                 <div className="w-2 h-2 rounded-full bg-emerald-500 animate-[pulse_2s_infinite]" />
-                <span className="text-xs font-mono text-emerald-600 tracking-wider">导师在线</span>
+                <span className="text-xs font-mono text-emerald-600 tracking-wider">{t('tutorOnline')}</span>
               </div>
               <span className="text-[10px] text-slate-500">
-                {tutorName || t.aiSystem}
+                {tutorName || t('aiSystem')}
               </span>
             </div>
             <span className="text-[10px] text-slate-500 border border-slate-200 px-1.5 py-0.5 rounded uppercase bg-slate-100">
@@ -3058,9 +3101,9 @@ CRITICAL TASK COMPLETION PROTOCOL:
         {/* TTS Global Toggle + Voice Selector */}
         {voiceServiceAvailable && (
           <div className="px-4 py-2 border-b border-slate-200 bg-white/95 backdrop-blur-sm shrink-0 flex items-center justify-between gap-3 flex-wrap">
-            <span className="text-xs text-slate-500">语音播报</span>
+            <span className="text-xs text-slate-500">{t('voiceBroadcast')}</span>
             <div className="flex items-center gap-2">
-              <label htmlFor="tts-voice-select" className="sr-only">选择语音</label>
+              <label htmlFor="tts-voice-select" className="sr-only">{t('selectVoice')}</label>
               <select
                 id="tts-voice-select"
                 value={selectedVoiceName}
@@ -3070,19 +3113,19 @@ CRITICAL TASK COMPLETION PROTOCOL:
                   if (typeof window !== 'undefined') localStorage.setItem('ttsVoiceName', next);
                 }}
                 className="rounded-md border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-cyan-200 max-w-[180px]"
-                title="选择朗读语音"
+                title={t('selectVoice')}
               >
                 {!ttsVoicesLoaded ? (
-                  <option value={selectedVoiceName}>加载中…</option>
+                  <option value={selectedVoiceName}>{t('loadingVoices')}</option>
                 ) : ttsVoices.length === 0 ? (
-                  <option value={selectedVoiceName}>暂无可用语音</option>
+                  <option value={selectedVoiceName}>{t('noVoices')}</option>
                 ) : (
                   (() => {
                     const hasCurrent = ttsVoices.some((v) => v.name === selectedVoiceName);
                     const options = hasCurrent ? ttsVoices : [{ name: selectedVoiceName }, ...ttsVoices];
                     return options.map((v) => (
                       <option key={v.name} value={v.name}>
-                        {v.name.replace(/^cmn-CN-/, '')}{v.ssmlGender === 'FEMALE' ? ' (女)' : v.ssmlGender === 'MALE' ? ' (男)' : ''}
+                        {v.name.replace(/^cmn-CN-/, '')}{v.ssmlGender === 'FEMALE' ? ` ${t('voiceFemale')}` : v.ssmlGender === 'MALE' ? ` ${t('voiceMale')}` : ''}
                       </option>
                     ));
                   })()
@@ -3101,9 +3144,9 @@ CRITICAL TASK COMPLETION PROTOCOL:
                     ? 'bg-emerald-50 border-emerald-300 text-emerald-700'
                     : 'bg-white border-slate-300 text-slate-600'
                 }`}
-                title={voiceEnabled ? '关闭语音播报' : '开启语音播报'}
+                title={voiceEnabled ? t('voiceTurnOff') : t('voiceTurnOn')}
               >
-                {voiceEnabled ? '已开启' : '已关闭'}
+                {voiceEnabled ? t('voiceOn') : t('voiceOff')}
               </button>
             </div>
           </div>
@@ -3129,7 +3172,7 @@ CRITICAL TASK COMPLETION PROTOCOL:
                 <div className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} items-end gap-2 animate-fade-in-up`}>
                   {msg.role === 'model' && (
                     <div className="w-9 h-9 rounded-full bg-white border border-slate-200 flex items-center justify-center text-xs text-slate-600">
-                      {(tutorName || t.aiSystem).slice(0, 1)}
+                      {(tutorName || t('aiSystem')).slice(0, 1)}
                     </div>
                   )}
                   <div className={`max-w-[78%] rounded-2xl px-3 py-2 text-sm leading-relaxed shadow-sm ${
@@ -3138,7 +3181,7 @@ CRITICAL TASK COMPLETION PROTOCOL:
                       : 'bg-white text-slate-700 rounded-bl-none'
                   }`}>
                     <div className="opacity-60 text-[10px] uppercase font-bold tracking-wider mb-1">
-                      {msg.role === 'user' ? studentName : (tutorName || t.aiSystem)}
+                      {msg.role === 'user' ? studentName : (tutorName || t('aiSystem'))}
                     </div>
                     {msg.role === 'user' ? (
                       <div className="whitespace-pre-wrap">{msg.text}</div>
@@ -3183,7 +3226,7 @@ CRITICAL TASK COMPLETION PROTOCOL:
                         onClick={handleNextTask}
                         className="flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-bold transition-all shadow-lg hover:shadow-xl hover:translate-y-[-2px] active:translate-y-0 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white"
                       >
-                        {t.next} <ArrowRight size={16} />
+                        {t('next')} <ArrowRight size={16} />
                       </button>
                     ) : (
                       <>
@@ -3191,13 +3234,13 @@ CRITICAL TASK COMPLETION PROTOCOL:
                           onClick={handleEndLearning}
                           className="flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-bold transition-all shadow-lg hover:shadow-xl hover:translate-y-[-2px] active:translate-y-0 bg-slate-600 hover:bg-slate-500 text-white"
                         >
-                          直接结束学习
+                          {t('endNow')}
                         </button>
                         <button 
                           onClick={handleFinishLearning}
                           className="flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-bold transition-all shadow-lg hover:shadow-xl hover:translate-y-[-2px] active:translate-y-0 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white"
                         >
-                          学霸能力分析 <ArrowRight size={16} />
+                          {t('scholarAnalysis')} <ArrowRight size={16} />
                         </button>
                       </>
                     )}
@@ -3212,7 +3255,7 @@ CRITICAL TASK COMPLETION PROTOCOL:
                         onClick={handleGuidedAdvance}
                         className="flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-bold transition-all shadow-lg hover:shadow-xl hover:translate-y-[-2px] active:translate-y-0 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white"
                       >
-                        {guidedStep < 5 ? '进入下一步' : '进入下一个任务'} <ArrowRight size={16} />
+                        {guidedStep < 5 ? t('nextStep') : t('nextTask')} <ArrowRight size={16} />
                       </button>
                     ) : (
                       <>
@@ -3220,13 +3263,13 @@ CRITICAL TASK COMPLETION PROTOCOL:
                           onClick={handleEndLearning}
                           className="flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-bold transition-all shadow-lg hover:shadow-xl hover:translate-y-[-2px] active:translate-y-0 bg-slate-600 hover:bg-slate-500 text-white"
                         >
-                          直接结束学习
+                          {t('endNow')}
                         </button>
                         <button 
                           onClick={handleFinishLearning}
                           className="flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-bold transition-all shadow-lg hover:shadow-xl hover:translate-y-[-2px] active:translate-y-0 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white"
                         >
-                          学霸能力分析 <ArrowRight size={16} />
+                          {t('scholarAnalysis')} <ArrowRight size={16} />
                         </button>
                       </>
                     )}
@@ -3238,7 +3281,7 @@ CRITICAL TASK COMPLETION PROTOCOL:
           {isTyping && (
              <div className="flex justify-start">
                <div className="bg-white px-4 py-2 rounded-full text-xs text-slate-500 flex items-center gap-2 border border-slate-200 shadow-sm">
-                 <Loader2 size={12} className="animate-spin text-cyan-600"/> {t.aiProcessing}
+                 <Loader2 size={12} className="animate-spin text-cyan-600"/> {t('aiProcessing')}
                </div>
              </div>
           )}
@@ -3253,7 +3296,7 @@ CRITICAL TASK COMPLETION PROTOCOL:
                  value={chatInput}
                  onChange={(e) => setChatInput(e.target.value)}
                  onKeyDown={(e) => { if(e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendMessage(); }}}
-                 placeholder={t.inputPlaceholder}
+                 placeholder={t('inputPlaceholder')}
                  className="flex-1 bg-white border border-slate-300 rounded-full px-4 py-2 text-sm focus:outline-none focus:border-[#07c160] focus:ring-1 focus:ring-[#07c160]/20 transition-all resize-none h-10 text-slate-800 placeholder-slate-400"
                />
              ) : (
@@ -3282,7 +3325,7 @@ CRITICAL TASK COMPLETION PROTOCOL:
                      : 'bg-white border-slate-300 text-slate-700 hover:bg-slate-50'
                  }`}
                >
-                 {isRecording ? '松开发送' : '按住说话'}
+                 {isRecording ? t('releaseToSend') : t('holdToSpeak')}
                </button>
              )}
              <div className="flex items-center gap-2">
@@ -3293,7 +3336,7 @@ CRITICAL TASK COMPLETION PROTOCOL:
                    }}
                    disabled={isProcessingSpeech || isTyping}
                    className="w-10 h-10 rounded-full border border-slate-300 bg-white text-slate-600 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                   title={inputMode === 'text' ? '切换语音' : '切换键盘'}
+                   title={inputMode === 'text' ? t('switchToVoice') : t('switchToKeyboard')}
                  >
                    {inputMode === 'text' ? (
                      <Mic size={16} className="mx-auto" />
@@ -3309,7 +3352,7 @@ CRITICAL TASK COMPLETION PROTOCOL:
                    disabled={!chatInput.trim() || isTyping}
                    className="h-10 px-4 rounded-full bg-[#07c160] hover:bg-[#06ad56] text-white text-sm disabled:opacity-50 disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed"
                  >
-                   发送
+                   {t('send')}
                  </button>
                )}
              </div>
@@ -3320,19 +3363,19 @@ CRITICAL TASK COMPLETION PROTOCOL:
                {isRecording && (
                  <span className="text-red-600 flex items-center gap-1">
                    <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
-                   正在录音...
+                   {t('recording')}
                  </span>
                )}
                {isProcessingSpeech && (
                  <span className="text-blue-600 flex items-center gap-1">
                    <Loader2 size={12} className="animate-spin" />
-                   正在识别语音...
+                   {t('recognizing')}
                  </span>
                )}
                {speechError && (
                  <span className="text-red-600 flex items-center gap-1">
                    <AlertCircle size={12} />
-                   语音识别错误: {speechError}
+                   {t('speechError')}: {speechError}
                  </span>
                )}
              </div>
@@ -3382,7 +3425,7 @@ CRITICAL TASK COMPLETION PROTOCOL:
       <FullscreenModal
         isOpen={isFullscreenExperiment}
         onClose={() => setIsFullscreenExperiment(false)}
-        title="交互式实验室"
+        title={t('interactiveLab')}
       >
         {assetData && (
           <div className="w-full h-full flex flex-col">
@@ -3397,7 +3440,7 @@ CRITICAL TASK COMPLETION PROTOCOL:
               srcDoc={assetData.trim().startsWith('http') ? undefined : assetData}
               className="w-full flex-1 border-none"
               sandbox="allow-scripts allow-same-origin allow-popups allow-forms" 
-              title="交互式模拟"
+              title={t('interactiveSimulation')}
             />
           </div>
         )}
@@ -3407,7 +3450,7 @@ CRITICAL TASK COMPLETION PROTOCOL:
       <FullscreenModal
         isOpen={isFullscreenMindmap}
         onClose={() => setIsFullscreenMindmap(false)}
-        title="思维导图编辑器"
+        title={t('mindMapEditor')}
       >
         {visualizationData ? (
           <VisualizationEditor

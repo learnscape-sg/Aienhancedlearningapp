@@ -1,0 +1,12 @@
+{
+  "courseIdLabel": "课程 ID",
+  "dataFormatError": "课程数据格式错误",
+  "loading": "正在加载课程...",
+  "courseLoadFailed": "课程加载失败",
+  "invalidCourseId": "课程 ID 无效",
+  "loadFailedCheckLink": "课程加载失败，请检查链接是否正确",
+  "courseNotExistOrExpired": "课程不存在或已过期",
+  "backToHome": "返回首页",
+  "retry": "重试",
+  "retryFailed": "重试失败"
+}

@@ -1,0 +1,8 @@
+{
+  "close": "关闭",
+  "restore": "还原",
+  "restoreTitle": "还原到小窗口 (ESC)",
+  "parseError": "解析错误",
+  "renderError": "渲染思维导图时出错",
+  "syntaxError": "语法错误"
+}

@@ -1,0 +1,12 @@
+{
+  "courseIdLabel": "Course ID",
+  "dataFormatError": "Invalid course data format",
+  "loading": "Loading course...",
+  "courseLoadFailed": "Course load failed",
+  "invalidCourseId": "Invalid course ID",
+  "loadFailedCheckLink": "Course load failed. Please check if the link is correct",
+  "courseNotExistOrExpired": "Course does not exist or has expired",
+  "backToHome": "Back to Home",
+  "retry": "Retry",
+  "retryFailed": "Retry failed"
+}

@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 import { MessageSquare, X, Star, Loader2, CheckCircle, AlertCircle } from 'lucide-react';
-import { submitFeedback } from '@/lib/backendApi';
+import { submitFeedback, trackProductEvent } from '@/lib/backendApi';
+import { supabase } from '@/utils/supabase/client';
 
 type FeedbackType = 'bug' | 'suggestion' | 'other';
 
@@ -45,7 +46,23 @@ export function FeedbackButton() {
     setIsSubmitting(true);
     setSubmitStatus('idle');
     try {
-      await submitFeedback(formData);
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData.session?.access_token;
+      await submitFeedback(formData, token);
+      await trackProductEvent(
+        {
+          eventName: 'feedback_submitted',
+          role: sessionData.session?.user ? 'student' : 'anon',
+          language: undefined,
+          properties: {
+            pagePath: formData.pagePath,
+            pageName: formData.pageName,
+            feedbackType: formData.feedbackType || 'other',
+            rating: formData.rating ?? null,
+          },
+        },
+        token
+      );
       setSubmitStatus('success');
       setFormData({
         pagePath: pathname || '/',

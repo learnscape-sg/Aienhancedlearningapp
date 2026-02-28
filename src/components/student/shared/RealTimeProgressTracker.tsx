@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { TrendingUp, Lightbulb, Target, Zap, Sparkles, CheckCircle2 } from 'lucide-react';
 import type { ChatMessage } from '@/types/backend';
 
@@ -40,6 +41,7 @@ export const RealTimeProgressTracker: React.FC<RealTimeProgressTrackerProps> = (
   improvementCount,
   completedTasksCount,
 }) => {
+  const { t } = useTranslation('progressTracker');
   const [metrics, setMetrics] = useState<RealTimeMetrics>({
     totalQuestions: 0,
     totalEdits: 0,
@@ -101,7 +103,7 @@ export const RealTimeProgressTracker: React.FC<RealTimeProgressTrackerProps> = (
             id: `q-${Date.now()}`,
             type: 'question',
             timestamp: Date.now(),
-            message: '你提出了第一个问题！💡',
+            message: t('firstQuestion'),
             points: 10,
             icon: <Lightbulb className="w-4 h-4" />,
           });
@@ -110,7 +112,7 @@ export const RealTimeProgressTracker: React.FC<RealTimeProgressTrackerProps> = (
             id: `q-${Date.now()}`,
             type: 'question',
             timestamp: Date.now(),
-            message: `你已经提出了 ${questions} 个问题！继续探索！`,
+            message: t('questionsCount', { count: questions }),
             points: 15,
             icon: <Lightbulb className="w-4 h-4" />,
           });
@@ -123,7 +125,7 @@ export const RealTimeProgressTracker: React.FC<RealTimeProgressTrackerProps> = (
             id: `e-${Date.now()}`,
             type: 'edit',
             timestamp: Date.now(),
-            message: '你开始改进你的答案了！✨',
+            message: t('firstEdit'),
             points: 10,
             icon: <Zap className="w-4 h-4" />,
           });
@@ -132,7 +134,7 @@ export const RealTimeProgressTracker: React.FC<RealTimeProgressTrackerProps> = (
             id: `e-${Date.now()}`,
             type: 'edit',
             timestamp: Date.now(),
-            message: `你已经进行了 ${improvementCount} 次改进！精益求精！`,
+            message: t('editsCount', { count: improvementCount }),
             points: 15,
             icon: <Zap className="w-4 h-4" />,
           });
@@ -144,7 +146,7 @@ export const RealTimeProgressTracker: React.FC<RealTimeProgressTrackerProps> = (
           id: `i-${Date.now()}`,
           type: 'insight',
           timestamp: Date.now(),
-          message: '你展现了深度思考！🌟',
+          message: t('deepInsight'),
           points: 20,
           icon: <Sparkles className="w-4 h-4" />,
         });
@@ -155,7 +157,7 @@ export const RealTimeProgressTracker: React.FC<RealTimeProgressTrackerProps> = (
           id: `c-${Date.now()}`,
           type: 'completion',
           timestamp: Date.now(),
-          message: `已完成 ${completedTasksCount}/${totalTasks} 个任务！继续加油！🎯`,
+          message: t('tasksCompleted', { completed: completedTasksCount, total: totalTasks }),
           points: 25,
           icon: <CheckCircle2 className="w-4 h-4" />,
         });
@@ -173,18 +175,18 @@ export const RealTimeProgressTracker: React.FC<RealTimeProgressTrackerProps> = (
         recentMilestones: [...newMilestones, ...prevMetrics.recentMilestones].slice(0, 5),
       };
     });
-  }, [messages, improvementCount, completedTasksCount, totalTasks]);
+  }, [messages, improvementCount, completedTasksCount, totalTasks, t]);
 
   return (
     <div className="bg-gradient-to-b from-cyan-50 to-white p-4 rounded-2xl border border-cyan-100 shadow-lg h-full overflow-y-auto">
       <h3 className="text-cyan-800 font-bold mb-4 flex items-center gap-2 text-sm uppercase">
         <TrendingUp className="w-4 h-4" />
-        实时学习进度
+        {t('title')}
       </h3>
 
       <div className="mb-6">
         <div className="flex justify-between items-center mb-2">
-          <span className="text-xs text-cyan-700 font-medium">任务进度</span>
+          <span className="text-xs text-cyan-700 font-medium">{t('taskProgress')}</span>
           <span className="text-xs text-cyan-600 font-bold">
             {totalTasks > 0 ? Math.round((completedTasksCount / totalTasks) * 100) : 0}%
           </span>
@@ -198,17 +200,17 @@ export const RealTimeProgressTracker: React.FC<RealTimeProgressTrackerProps> = (
           />
         </div>
         <p className="text-xs text-cyan-600 mt-1">
-          任务 {currentTaskIndex + 1} / {totalTasks}
+          {t('taskCount', { current: currentTaskIndex + 1, total: totalTasks })}
         </p>
       </div>
 
       <div className="mb-6 space-y-3">
-        <h4 className="text-xs font-bold text-cyan-800 uppercase">学霸特质实时得分</h4>
+        <h4 className="text-xs font-bold text-cyan-800 uppercase">{t('traitTitle')}</h4>
         {[
-          { name: '自驱力', score: metrics.selfDriveScore, bgColor: 'bg-purple-500' },
-          { name: '专注力', score: metrics.focusScore, bgColor: 'bg-blue-500' },
-          { name: '享受思考', score: metrics.thinkingScore, bgColor: 'bg-green-500' },
-          { name: '痴迷改进', score: metrics.improvementScore, bgColor: 'bg-orange-500' },
+          { name: t('selfDrive'), score: metrics.selfDriveScore, bgColor: 'bg-purple-500' },
+          { name: t('focus'), score: metrics.focusScore, bgColor: 'bg-blue-500' },
+          { name: t('thinking'), score: metrics.thinkingScore, bgColor: 'bg-green-500' },
+          { name: t('improvement'), score: metrics.improvementScore, bgColor: 'bg-orange-500' },
         ].map((trait, idx) => (
           <div key={idx} className="space-y-1">
             <div className="flex justify-between items-center">
@@ -229,28 +231,28 @@ export const RealTimeProgressTracker: React.FC<RealTimeProgressTrackerProps> = (
         <div className="bg-white p-3 rounded-xl border border-cyan-200">
           <div className="flex items-center gap-2 mb-1">
             <Lightbulb className="w-4 h-4 text-cyan-600" />
-            <span className="text-xs text-slate-600">提问数</span>
+            <span className="text-xs text-slate-600">{t('questionCount')}</span>
           </div>
           <p className="text-2xl font-bold text-cyan-700">{metrics.totalQuestions}</p>
         </div>
         <div className="bg-white p-3 rounded-xl border border-cyan-200">
           <div className="flex items-center gap-2 mb-1">
             <Zap className="w-4 h-4 text-cyan-600" />
-            <span className="text-xs text-slate-600">改进次数</span>
+            <span className="text-xs text-slate-600">{t('improvementCount')}</span>
           </div>
           <p className="text-2xl font-bold text-cyan-700">{improvementCount}</p>
         </div>
         <div className="bg-white p-3 rounded-xl border border-cyan-200">
           <div className="flex items-center gap-2 mb-1">
             <Sparkles className="w-4 h-4 text-cyan-600" />
-            <span className="text-xs text-slate-600">深度思考</span>
+            <span className="text-xs text-slate-600">{t('deepThinking')}</span>
           </div>
           <p className="text-2xl font-bold text-cyan-700">{metrics.deepInsights}</p>
         </div>
         <div className="bg-white p-3 rounded-xl border border-cyan-200">
           <div className="flex items-center gap-2 mb-1">
             <Target className="w-4 h-4 text-cyan-600" />
-            <span className="text-xs text-slate-600">完成度</span>
+            <span className="text-xs text-slate-600">{t('completion')}</span>
           </div>
           <p className="text-2xl font-bold text-cyan-700">
             {Math.round((completedTasksCount / totalTasks) * 100)}%
@@ -260,7 +262,7 @@ export const RealTimeProgressTracker: React.FC<RealTimeProgressTrackerProps> = (
 
       {metrics.recentMilestones.length > 0 && (
         <div>
-          <h4 className="text-xs font-bold text-cyan-800 uppercase mb-3">最近成就 ✨</h4>
+          <h4 className="text-xs font-bold text-cyan-800 uppercase mb-3">{t('recentAchievements')}</h4>
           <div className="space-y-2">
             {metrics.recentMilestones.map((milestone) => (
               <div
@@ -271,7 +273,7 @@ export const RealTimeProgressTracker: React.FC<RealTimeProgressTrackerProps> = (
                   <div className="text-cyan-600 mt-0.5">{milestone.icon}</div>
                   <div className="flex-1">
                     <p className="text-xs text-slate-700">{milestone.message}</p>
-                    <p className="text-[10px] text-cyan-600 mt-0.5">+{milestone.points} 分</p>
+                    <p className="text-[10px] text-cyan-600 mt-0.5">{t('points', { count: milestone.points })}</p>
                   </div>
                 </div>
               </div>

@@ -6,6 +6,7 @@ import { Label } from './ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { useAuth } from './AuthContext';
+import { resolveRuntimeExperienceConfig } from '@/lib/entryDetector';
 
 interface LoginPageProps {
   onSuccess: () => void;
@@ -21,6 +22,7 @@ export function LoginPage({ onSuccess }: LoginPageProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const { login, register } = useAuth();
+  const experience = resolveRuntimeExperienceConfig();
 
   const redirectTo = searchParams.get('redirect');
   const handlePostAuth = () => {
@@ -77,13 +79,25 @@ export function LoginPage({ onSuccess }: LoginPageProps) {
             <div className="max-w-lg space-y-8">
               <div className="space-y-6">
                 <h1 className="text-4xl lg:text-5xl font-bold text-gray-900 leading-tight">
-                  为每位学习者<br />
-                  <span className="text-indigo-600">重塑</span><br />
-                  自学体验
+                  {experience.entry.defaultLanguageSpace === 'zh' ? (
+                    <>
+                      为每位学习者<br />
+                      <span className="text-indigo-600">重塑</span><br />
+                      自学体验
+                    </>
+                  ) : (
+                    <>
+                      Reimagine<br />
+                      <span className="text-indigo-600">Self Learning</span><br />
+                      for Every Learner
+                    </>
+                  )}
                 </h1>
                 
                 <p className="text-lg text-gray-700 leading-relaxed">
-                  AI随心学将教材和学习资料转化为引人入胜的多媒体学习体验，为你量身定制。
+                  {experience.entry.defaultLanguageSpace === 'zh'
+                    ? 'AI随心学将教材和学习资料转化为引人入胜的多媒体学习体验，为你量身定制。'
+                    : 'LearnYourWay AI transforms learning materials into engaging, personalized experiences.'}
                 </p>
               </div>
             </div>
@@ -95,8 +109,14 @@ export function LoginPage({ onSuccess }: LoginPageProps) {
           <div className="w-full max-w-md">
             <Card className="w-full shadow-xl border-gray-200">
             <CardHeader className="text-center">
-              <CardTitle className="text-2xl text-[#1a73e8]">欢迎使用</CardTitle>
-              <CardDescription>登录或注册开始您的学习之旅</CardDescription>
+              <CardTitle className="text-2xl text-[#1a73e8]">
+                {experience.entry.defaultLanguageSpace === 'zh' ? '欢迎使用' : `Welcome to ${experience.brand.labels.appName}`}
+              </CardTitle>
+              <CardDescription>
+                {experience.entry.defaultLanguageSpace === 'zh'
+                  ? '登录或注册开始您的学习之旅'
+                  : 'Sign in or create an account to start learning'}
+              </CardDescription>
             </CardHeader>
             <CardContent>
               {error && (

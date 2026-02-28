@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { VisualizationData, VisualizationType } from '@/types/backend';
 import { parseTextToVisualizationData } from './utils/textParser';
 import { AlertCircle, HelpCircle } from 'lucide-react';
@@ -14,6 +15,7 @@ export const SimpleInputMode: React.FC<SimpleInputModeProps> = ({
   initialData,
   onChange
 }) => {
+  const { t } = useTranslation('visualizationEditor');
   const [inputText, setInputText] = useState('');
   const [error, setError] = useState<string | null>(null);
 
@@ -61,7 +63,7 @@ export const SimpleInputMode: React.FC<SimpleInputModeProps> = ({
       const parsedData = parseTextToVisualizationData(text, type);
       onChange(parsedData);
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : '解析错误';
+      const errorMessage = err instanceof Error ? err.message : t('common:parseError');
       setError(errorMessage);
       console.error('Parse error:', err);
     }
@@ -74,15 +76,15 @@ export const SimpleInputMode: React.FC<SimpleInputModeProps> = ({
         {/* 工具栏和帮助 */}
         <div className="p-3 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <span className="text-xs font-medium text-slate-700">文本输入</span>
+            <span className="text-xs font-medium text-slate-700">{t('textInput')}</span>
             <div className="group relative">
               <HelpCircle size={14} className="text-slate-400 cursor-help" />
               <div className="absolute left-0 bottom-full mb-2 w-64 p-2 bg-slate-800 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 pointer-events-none z-10 transition-opacity">
-                <p className="font-bold mb-1">语法示例：</p>
-                <p>• 概念A → 概念B</p>
-                <p>• 概念A → 关系 → 概念B</p>
-                <p>• 概念A [困惑点] → 概念B</p>
-                <p className="mt-1 text-slate-300">每行一个关系，自动解析</p>
+                <p className="font-bold mb-1">{t('syntaxExample')}</p>
+                <p>{t('syntaxLine1')}</p>
+                <p>{t('syntaxLine2')}</p>
+                <p>{t('syntaxLine3')}</p>
+                <p className="mt-1 text-slate-300">{t('syntaxHint')}</p>
               </div>
             </div>
           </div>
@@ -92,7 +94,7 @@ export const SimpleInputMode: React.FC<SimpleInputModeProps> = ({
         <textarea
           value={inputText}
           onChange={(e) => handleInputChange(e.target.value)}
-          placeholder={`输入概念和关系，例如：\n概念A -> 概念B\n概念B -> 关系 -> 概念C\n概念D [困惑点] -> 概念E`}
+          placeholder={t('inputPlaceholder')}
           className="flex-1 w-full p-4 text-sm font-mono text-slate-700 bg-white resize-none focus:outline-none focus:ring-2 focus:ring-cyan-500/20 border-0"
           spellCheck={false}
         />
