@@ -30,6 +30,7 @@ import {
   createCourse,
   saveTask,
   uploadMaterialResource,
+  convertDocumentToHtml,
   trackProductEvent,
   listTeacherTwins,
   type TeacherTwin,
@@ -263,6 +264,7 @@ function buildSystemTask(opts: {
   learningObjective: string;
   selectedVideoItem: VideoSearchItem | null;
   customTextInstruction?: string;
+  convertedHtml?: string;
   keyIdeas: KeyIdea[];
   practiceQuestions: GeneratedQuestion[];
   exitTicketQuestions: GeneratedQuestion[];
@@ -302,6 +304,7 @@ function buildSystemTask(opts: {
       resourceKind: selectedResourceKind,
       resourceMimeType: opts.selectedVideoItem?.mimeType || '',
       customTextInstruction: isTextInstruction ? opts.customTextInstruction : undefined,
+      convertedHtml: opts.convertedHtml || undefined,
     }),
     // video_player should use externalResourceUrl (YouTube URL or media URL),
     // not markdown content.
@@ -662,6 +665,16 @@ export function TeachingResourcesPage() {
     setMaxStepReached((m) => Math.max(m, 6));
 
     try {
+      let convertedHtml: string | undefined;
+      const item = selectedVideoItem;
+      if (item?.resourceKind === 'document') {
+        const mime = (item.mimeType || '').toLowerCase();
+        if (mime === 'text/plain' || mime === 'text/markdown') {
+          const { html } = await convertDocumentToHtml(item.url, item.mimeType);
+          convertedHtml = html || undefined;
+        }
+      }
+
       // 1. Build the SystemTask from local data
       const task = buildSystemTask({
         topic: entryTopic,
@@ -671,6 +684,7 @@ export function TeachingResourcesPage() {
         learningObjective,
         selectedVideoItem,
         customTextInstruction: !selectedVideoItem && videoContent ? videoContent.title : undefined,
+        convertedHtml,
         keyIdeas,
         practiceQuestions,
         exitTicketQuestions,
@@ -1270,7 +1284,7 @@ export function TeachingResourcesPage() {
                   ref={fileInputRef}
                   type="file"
                   className="hidden"
-                  accept="video/*,.pdf,.doc,.docx,.ppt,.pptx,.png,.jpg,.jpeg,.webp,.gif"
+                  accept="video/*,.pdf,.doc,.docx,.ppt,.pptx,.txt,.md,.png,.jpg,.jpeg,.webp,.gif"
                   onChange={(e) => {
                     const file = e.target.files?.[0];
                     if (file) void handleUploadResource(file);

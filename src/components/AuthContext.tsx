@@ -77,6 +77,30 @@ async function loadProfileFromSupabase(
       preferences: prefs,
     };
   }
+
+  // Fallback: if user is in admin_users, treat as admin (allows admin to access teacher portal without profile)
+  const { data: adminRow } = await supabase
+    .from('admin_users')
+    .select('name')
+    .eq('user_id', userId)
+    .eq('active', true)
+    .maybeSingle();
+  if (adminRow) {
+    const defaultTenant = 'tenant_cn_bamboo';
+    return {
+      user: {
+        id: userId,
+        email,
+        name: adminRow.name ?? email.split('@')[0],
+        grade: '',
+        interests: [],
+        role: 'admin' as UserRole,
+        tenantId: defaultTenant,
+      },
+      preferences: {},
+    };
+  }
+
   return null;
 }
 

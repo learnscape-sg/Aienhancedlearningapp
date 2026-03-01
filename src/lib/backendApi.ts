@@ -16,6 +16,7 @@ import type {
   ObjectiveMetrics,
 } from '../types/backend';
 import { appConfig } from '@/config/appConfig';
+import { supabase } from '../utils/supabase/client';
 
 export type ProductEventName =
   | 'teacher_signup_completed'
@@ -67,16 +68,29 @@ function getExperienceHeaders(): Record<string, string> {
   return headers;
 }
 
+async function getRequestHeaders(): Promise<Record<string, string>> {
+  const headers = getExperienceHeaders();
+  try {
+    const { data } = await supabase.auth.getSession();
+    const token = data.session?.access_token;
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+  } catch {
+    // Ignore - proceed without auth
+  }
+  return headers;
+}
+
 async function apiCall<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
   const base = getBaseUrl();
   const url = endpoint.startsWith('http') ? endpoint : `${base}${endpoint}`;
 
   try {
+    const requestHeaders = await getRequestHeaders();
     const response = await fetch(url, {
       ...options,
       headers: {
         'Content-Type': 'application/json',
-        ...getExperienceHeaders(),
+        ...requestHeaders,
         ...options.headers,
       },
     });
@@ -1343,6 +1357,26 @@ export async function getVideoContent(url: string): Promise<VideoContentResult> 
   });
 }
 
+export async function convertDocumentToHtml(
+  url: string,
+  mimeType?: string
+): Promise<{ html: string }> {
+  const body: Record<string, string> = { url: url.trim() };
+  if (mimeType?.trim()) body.mimeType = mimeType.trim();
+  const base = getBaseUrl();
+  const response = await fetch(`${base}/api/materials/convert-to-html`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.error || `Convert failed with status ${response.status}`);
+  }
+  const json = await response.json();
+  return { html: json.data?.html ?? '' };
+}
+
 export async function uploadMaterialResource(file: File): Promise<{
   url: string;
   mimeType: string;
@@ -1579,6 +1613,46 @@ export async function listAdminTenants(
   if (params.q) qs.set('q', params.q);
   if (params.limit != null) qs.set('limit', String(params.limit));
   return apiCall<{ tenants: AdminTenantRow[] }>(`/api/admin/settings/tenants${qs.toString() ? `?${qs}` : ''}`, {
+    method: 'GET',
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+}
+
+export interface BatchCreateAccountsResult {
+  identifier: string;
+  status: 'created' | 'updated' | 'skipped' | 'error';
+  userId?: string;
+  message?: string;
+}
+
+export async function batchCreateAccounts(
+  params: {
+    tenantId: string;
+    role: 'teacher' | 'student' | 'parent';
+    defaultPassword: string;
+    identifiers: string[];
+    classIds?: string[];
+  },
+  accessToken: string
+): Promise<{ summary: { created: number; updated: number; skipped: number; errors: number }; results: BatchCreateAccountsResult[] }> {
+  return apiCall('/api/admin/batch-create-accounts', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${accessToken}` },
+    body: JSON.stringify({
+      tenantId: params.tenantId,
+      role: params.role,
+      defaultPassword: params.defaultPassword,
+      identifiers: params.identifiers,
+      ...(params.classIds?.length ? { classIds: params.classIds } : {}),
+    }),
+  });
+}
+
+export async function listAdminClasses(
+  tenantId: string,
+  accessToken: string
+): Promise<{ classes: Array<{ id: string; teacherId: string; name: string; grade?: string; studentCount?: number }> }> {
+  return apiCall(`/api/admin/classes?tenantId=${encodeURIComponent(tenantId)}`, {
     method: 'GET',
     headers: { Authorization: `Bearer ${accessToken}` },
   });

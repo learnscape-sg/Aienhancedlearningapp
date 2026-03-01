@@ -95,9 +95,9 @@ function AppContent() {
     }
   }, [policy?.contentLanguageDefault?.defaultLanguage, searchParams]);
 
-  // Sync teacher activeSection to URL so tab switch/reload restores correct section
+  // Sync teacher/admin activeSection to URL so tab switch/reload restores correct section
   useEffect(() => {
-    if (user?.role === 'teacher' && TEACHER_SECTIONS.includes(activeSection)) {
+    if ((user?.role === 'teacher' || user?.role === 'admin') && TEACHER_SECTIONS.includes(activeSection)) {
       const current = searchParams.get('section');
       if (current !== activeSection) {
         const params = new URLSearchParams(searchParams);
@@ -115,7 +115,7 @@ function AppContent() {
       if (sectionFromUrl) {
         setActiveSection(sectionFromUrl);
       }
-      if (user.role === 'teacher') {
+      if (user.role === 'teacher' || user.role === 'admin') {
         if (!sectionFromUrl) setActiveSection('overview');
         setAppState('dashboard');
       } else if (user.role === 'parent') {
@@ -180,7 +180,7 @@ function AppContent() {
   const handleSectionChange = (section: string) => {
     setActiveSection(section);
     setAppState('dashboard');
-    if (user?.role === 'teacher' && TEACHER_SECTIONS.includes(section)) {
+    if ((user?.role === 'teacher' || user?.role === 'admin') && TEACHER_SECTIONS.includes(section)) {
       const params = new URLSearchParams(searchParams);
       params.set('section', section);
       if (section === 'courses') {
@@ -456,8 +456,8 @@ function AppContent() {
     'video'
   ].includes(appState);
 
-  // Render teacher platform
-  if (user?.role === 'teacher') {
+  // Render teacher platform (admin sees all tenant data when logged in)
+  if (user?.role === 'teacher' || user?.role === 'admin') {
     return (
       <RoleBasedLayout
         sidebar={

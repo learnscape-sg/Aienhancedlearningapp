@@ -6,6 +6,7 @@ import { AdminPerformancePage } from './AdminPerformancePage';
 import { AdminBusinessPage } from './AdminBusinessPage';
 import { AdminFeedbackPage } from './AdminFeedbackPage';
 import { AdminSettingsPage } from './AdminSettingsPage';
+import { AdminDataPage } from './AdminDataPage';
 
 export function AdminPortal() {
   return (
@@ -17,6 +18,7 @@ export function AdminPortal() {
       <Route path="/business" element={<AdminBusinessPage />} />
       <Route path="/feedback" element={<AdminFeedbackPage />} />
       <Route path="/settings" element={<AdminSettingsPage />} />
+      <Route path="/data" element={<AdminDataPage />} />
       <Route path="*" element={<Navigate to="/admin/login" replace />} />
     </Routes>
   );

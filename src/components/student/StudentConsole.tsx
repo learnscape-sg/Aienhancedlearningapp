@@ -104,6 +104,9 @@ interface GuidedPayload {
   exitTicketItems?: GuidedQuestion[];
   taskDesignJson?: Record<string, unknown> | null;
   customTextInstruction?: string;
+  resourceKind?: 'video' | 'document' | 'text_instruction';
+  resourceMimeType?: string;
+  convertedHtml?: string;
 }
 
 function parseGuidedPayload(payload?: string): GuidedPayload | null {
@@ -156,6 +159,9 @@ function parseGuidedPayload(payload?: string): GuidedPayload | null {
       })(),
       taskDesignJson: td,
       customTextInstruction: typeof json.customTextInstruction === 'string' ? json.customTextInstruction.trim() || undefined : undefined,
+      resourceKind: typeof json.resourceKind === 'string' && ['video', 'document', 'text_instruction'].includes(json.resourceKind) ? json.resourceKind as 'video' | 'document' | 'text_instruction' : undefined,
+      resourceMimeType: typeof json.resourceMimeType === 'string' ? json.resourceMimeType.trim() || undefined : undefined,
+      convertedHtml: typeof json.convertedHtml === 'string' ? json.convertedHtml.trim() || undefined : undefined,
     };
   } catch {
     return null;
@@ -1026,43 +1032,37 @@ const StudentConsole: React.FC<StudentConsoleProps> = ({ plan, onComplete, onApi
 
       // 检查是否已经为当前任务发送过问候消息，避免重复发送
       if (!greetingSentRef.current.has(currentTaskIndex)) {
-        // 基于任务内容生成温暖的开场白
-        const generateWarmGreeting = () => {
-          const taskTitle = currentTask.title || t('newTask');
-          const taskDesc = currentTask.description || '';
-          const scenarioHint = taskDesc.substring(0, 100).replace(/\n/g, ' ').trim();
+        // 基于任务内容生成温暖的开场白（拆成多条消息，避免突兀的长文本框+滚动条）
+        const taskTitle = currentTask.title || t('newTask');
+        const taskDesc = currentTask.description || '';
+        const scenarioHint = taskDesc.substring(0, 100).replace(/\n/g, ' ').trim();
 
-          if (currentTaskIndex === 0) {
-            const first = t('greetingFirst', { name: studentName });
-            const body = scenarioHint ? t('greetingFirstWithHint', { title: taskTitle }) : t('greetingFirstNoHint', { title: taskTitle });
-            const end = t('greetingFirstEnd');
-            return `${first}\n\n${body}\n\n${end}`;
-          } else {
-            const later = t('greetingLater', { name: studentName });
-            const body = t('greetingLaterBody', { title: taskTitle });
-            const end = t('greetingLaterEnd');
-            return `${later}\n\n${body}\n\n${end}`;
-          }
-        };
-        
-        const greeting = generateWarmGreeting();
-        // Generate timestamp only on client side (this is in useEffect, so safe)
+        const greetingParts: string[] = currentTaskIndex === 0
+          ? [
+              t('greetingFirst', { name: studentName }),
+              scenarioHint ? t('greetingFirstWithHint', { title: taskTitle }) : t('greetingFirstNoHint', { title: taskTitle }),
+              t('greetingFirstEnd'),
+            ]
+          : [
+              t('greetingLater', { name: studentName }),
+              t('greetingLaterBody', { title: taskTitle }),
+              t('greetingLaterEnd'),
+            ];
+
         const timestamp = Date.now();
-        setMessages(prev => [...prev, { role: 'model', text: greeting, timestamp }]);
+        setMessages(prev => [...prev, ...greetingParts.map((text) => ({ role: 'model' as const, text, timestamp }))]);
         greetingSentRef.current.add(currentTaskIndex);
-        
-        // 自动播放开场白语音（仅第一个任务且满足条件时）
-        // 注意：浏览器会阻止首次用户交互前的 audio.play()，所以未解锁时先缓存，交互后再播放
+
+        const greetingFull = greetingParts.join('\n\n');
         if (currentTaskIndex === 0 && autoPlayVoice && voiceEnabled && voiceServiceAvailable) {
           if (hasUserInteracted) {
-            // 延迟一下确保消息已渲染
             setTimeout(() => {
-              playVoice(greeting).catch(err => {
+              playVoice(greetingFull).catch(err => {
                 console.warn('Auto-play greeting voice failed:', err);
               });
             }, 500);
           } else {
-            pendingAutoSpeakRef.current = greeting;
+            pendingAutoSpeakRef.current = greetingFull;
           }
         }
       }
@@ -2524,6 +2524,25 @@ CRITICAL: Output language must be 简体中文 only.
                           <MathTextPreview text={guidedPayload.customTextInstruction.trim()} />
                         </p>
                       </div>
+                    ) : guidedPayload?.resourceKind === 'document' && guidedPayload?.convertedHtml?.trim() ? (
+                      <div
+                        className="p-6 bg-white text-slate-800 prose prose-sm max-w-none min-h-[120px] overflow-y-auto"
+                        dangerouslySetInnerHTML={{ __html: guidedPayload.convertedHtml }}
+                      />
+                    ) : guidedPayload?.resourceKind === 'document' && source ? (
+                      (() => {
+                        const mimeType = (guidedPayload?.resourceMimeType || '').toLowerCase();
+                        const isOffice = mimeType.includes('document') || mimeType.includes('wordprocessing') || mimeType.includes('presentation') || mimeType.includes('powerpoint');
+                        const embedUrl = isOffice ? `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(source)}` : source;
+                        return (
+                          <iframe
+                            src={embedUrl}
+                            title={t('instructionalVideo')}
+                            className="w-full min-h-[60vh] border-0"
+                            allowFullScreen
+                          />
+                        );
+                      })()
                     ) : useYoutube ? (
                       <iframe
                         src={`https://www.youtube.com/embed/${youtubeId}`}
@@ -3207,12 +3226,16 @@ CRITICAL: Output language must be 简体中文 only.
                              <div className="flex items-center gap-2 p-3 bg-slate-900 text-cyan-400 border-b border-slate-800">
                                  <Video size={18}/>
                                 <span className="font-bold text-xs uppercase tracking-wider">
-                                  {guidedPayload?.customTextInstruction ? '学习指引' : t('instructionalVideo')}
+                                  {guidedPayload?.customTextInstruction ? '学习指引' : guidedPayload?.resourceKind === 'document' ? '学习资料' : t('instructionalVideo')}
                                 </span>
                              </div>
                             {(() => {
                                 const source = (currentTask.externalResourceUrl || (typeof assetData === 'string' ? assetData : '')) || '';
                                 const textInstruction = guidedPayload?.customTextInstruction?.trim();
+                                const resourceKind = guidedPayload?.resourceKind;
+                                const convertedHtml = guidedPayload?.convertedHtml?.trim();
+                                const mimeType = (guidedPayload?.resourceMimeType || '').toLowerCase();
+
                                 if (textInstruction && !source && !currentTask.externalResourceId) {
                                   return (
                                     <div className="p-6 bg-slate-100 text-slate-800 min-h-[200px]">
@@ -3222,6 +3245,31 @@ CRITICAL: Output language must be 简体中文 only.
                                     </div>
                                   );
                                 }
+
+                                if (resourceKind === 'document' && convertedHtml) {
+                                  return (
+                                    <div
+                                      className="p-6 bg-white text-slate-800 prose prose-sm max-w-none min-h-[200px] overflow-y-auto custom-scrollbar"
+                                      dangerouslySetInnerHTML={{ __html: convertedHtml }}
+                                    />
+                                  );
+                                }
+
+                                if (resourceKind === 'document' && source) {
+                                  const isOffice = mimeType.includes('document') || mimeType.includes('wordprocessing') || mimeType.includes('presentation') || mimeType.includes('powerpoint');
+                                  const embedUrl = isOffice
+                                    ? `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(source)}`
+                                    : source;
+                                  return (
+                                    <iframe
+                                      src={embedUrl}
+                                      title={t('instructionalVideo')}
+                                      className="w-full min-h-[60vh] border-0"
+                                      allowFullScreen
+                                    />
+                                  );
+                                }
+
                                 const platform = currentTask.videoPlatform;
                                 const explicitId = currentTask.externalResourceId?.trim();
                                 const youtubeId = (platform === 'youtube' && explicitId) ? explicitId : (platform !== 'bilibili' ? extractYouTubeVideoId(source) : null);
@@ -3251,6 +3299,21 @@ CRITICAL: Output language must be 简体中文 only.
                                     />
                                   );
                                 }
+                                if (source) {
+                                  return (
+                                    <video
+                                      controls
+                                      autoPlay
+                                      loop
+                                      muted
+                                      className="w-full aspect-video"
+                                      src={source}
+                                    >
+                                      {t('browserNoVideo')}
+                                    </video>
+                                  );
+                                }
+
                                 return (
                                   <video
                                     controls

@@ -7,6 +7,7 @@ const TABS = [
   { to: '/admin/performance', label: 'Performance' },
   { to: '/admin/business', label: 'Business' },
   { to: '/admin/feedback', label: 'Feedback' },
+  { to: '/admin/data', label: '数据管理' },
   { to: '/admin/settings', label: 'Settings' },
 ];
 
