@@ -18,7 +18,9 @@ import {
   MessageCircle, 
   ArrowRight, 
   ArrowLeft,
+  Check,
   CheckCircle,
+  X,
   Loader2,
   Image as ImageIcon,
   Type,
@@ -90,6 +92,7 @@ interface GuidedQuestion {
   question: string;
   options?: string[];
   correctAnswer?: string;
+  questionType?: 'multiple_choice' | 'short_answer' | 'true_false';
 }
 
 interface GuidedPayload {
@@ -136,11 +139,19 @@ function parseGuidedPayload(payload?: string): GuidedPayload | null {
             ? ((raw as { items: unknown[] }).items as Array<Record<string, unknown>>)
             : [];
         return items
-          .map((item) => ({
-            question: String((item?.question ?? item?.q) || '').trim(),
-            correctAnswer: (item?.answer ?? item?.a) != null ? String(item.answer ?? item.a) : undefined,
-            options: Array.isArray(item?.options) ? (item.options as string[]) : undefined,
-          }))
+          .map((item) => {
+            const rawType = (item?.question_type ?? item?.questionType) as string | undefined;
+            const questionType =
+              rawType === 'multiple_choice' || rawType === 'short_answer' || rawType === 'true_false'
+                ? rawType
+                : undefined;
+            return {
+              question: String((item?.question ?? item?.q) || '').trim(),
+              correctAnswer: (item?.answer ?? item?.a) != null ? String(item.answer ?? item.a) : undefined,
+              options: Array.isArray(item?.options) ? (item.options as string[]) : undefined,
+              questionType,
+            };
+          })
           .filter((item) => item.question.length > 0) as GuidedQuestion[];
       })(),
       taskDesignJson: td,
@@ -377,6 +388,9 @@ const StudentConsole: React.FC<StudentConsoleProps> = ({ plan, onComplete, onApi
   const [practiceCurrentIndex, setPracticeCurrentIndex] = useState(0);
   const practiceCanvasRef = useRef<SignatureCanvas>(null);
   const [showPracticeSolutions, setShowPracticeSolutions] = useState<Record<number, boolean>>({});
+  const [stuckClicksPerPracticeQuestion, setStuckClicksPerPracticeQuestion] = useState<Record<number, number>>({});
+  const [stuckClicksForKeyIdeas, setStuckClicksForKeyIdeas] = useState(0);
+  const [showKeyIdeaBlanks, setShowKeyIdeaBlanks] = useState(false);
   const [exitTicketAnswer, setExitTicketAnswer] = useState('');
   const [exitTicketAnswers, setExitTicketAnswers] = useState<Record<number, string>>({});
   const [showExitTicketAnswer, setShowExitTicketAnswer] = useState(false);
@@ -603,6 +617,11 @@ const StudentConsole: React.FC<StudentConsoleProps> = ({ plan, onComplete, onApi
       setPracticeCurrentIndex(0);
     }
   }, [guidedStep]);
+
+  useEffect(() => {
+    setStuckClicksForKeyIdeas(0);
+    setShowKeyIdeaBlanks(false);
+  }, [currentTaskIndex]);
 
   // 切换题目时清空手写画布（避免误存到上一题）
   useEffect(() => {
@@ -1426,14 +1445,109 @@ ${isMathOrScience
     }
   };
 
+  const getStuckHintDetailedContext = (): string => {
+    if (!isGuidedVideoFlow) return '';
+    if (guidedStep === 3 && guidedKeyIdeas.length > 0) {
+      const lines: string[] = [
+        contentLanguage === 'en'
+          ? 'KEY IDEAS FILLING - Current items with student answers vs reference keywords:'
+          : '关键要点填空 - 当前题目、学生已填内容、参考答案（供渐进式提示使用）：',
+      ];
+      guidedKeyIdeas.forEach((idea, idx) => {
+        const parts = idea.text.split('__KEY__');
+        const blankCount = Math.max(0, parts.length - 1);
+        const refKeywords = idea.blanks || [];
+        const studentFills =
+          blankCount > 0
+            ? Array.from({ length: blankCount }).map((_, bi) => keywordAnswers[`blank-${idx}-${bi}`] || '')
+            : [keywordAnswers[`idea-${idx}`] || ''];
+        const missing = studentFills.map((v, i) => (v.trim() ? '' : `[空${i + 1}]`)).filter(Boolean);
+        lines.push(
+          `[${idx + 1}] 题干: ${idea.text.replace(/__KEY__/g, '___')} | 学生已填: ${JSON.stringify(studentFills)} | 缺失: ${missing.join(' ') || '无'} | 参考答案: ${JSON.stringify(refKeywords)}`
+        );
+      });
+      lines.push(
+        contentLanguage === 'en'
+          ? `Stuck clicks so far: ${stuckClicksForKeyIdeas}. Give hint #${stuckClicksForKeyIdeas + 1} - start vague, increase specificity with each click.`
+          : `已点击「我卡住了」${stuckClicksForKeyIdeas} 次。给出第 ${stuckClicksForKeyIdeas + 1} 次提示 - 循序渐进，每次点击时信息量逐渐增强。`
+      );
+      return lines.join('\n');
+    }
+    if (guidedStep === 4 && guidedPractice.length > 0) {
+      const idx = practiceCurrentIndex;
+      const q = guidedPractice[idx];
+      const parsed = extractQuestionStemAndOptions(q.question || '', q.options);
+      const stuckCount = stuckClicksPerPracticeQuestion[idx] ?? 0;
+      const isTF = q.questionType === 'true_false' || (!parsed.options?.length && /^(true|false)$/i.test((q.correctAnswer || '').trim()));
+      const studentAns = isTF
+        ? typeof practiceChoiceAnswers[idx] === 'number'
+          ? (contentLanguage === 'en' ? ['True', 'False'] : ['对', '错'])[practiceChoiceAnswers[idx]]
+          : ''
+        : parsed.options?.length
+          ? typeof practiceChoiceAnswers[idx] === 'number'
+            ? parsed.options[practiceChoiceAnswers[idx]]
+            : ''
+          : practiceTextAnswers[idx] || (practiceImageAnswers[idx] ? '[手写]' : '');
+      const refAns = q.correctAnswer || '';
+      const lines = [
+        contentLanguage === 'en'
+          ? 'PRACTICE QUESTION - Current question, student answer, reference answer:'
+          : '练习题目 - 当前题目、学生答案、参考答案（供渐进式提示使用）：',
+        `题目: ${parsed.stem}`,
+        `学生答案: ${studentAns || '(未答)'}`,
+        `参考答案: ${refAns}`,
+        contentLanguage === 'en'
+          ? `Stuck clicks on this question: ${stuckCount}. Give hint #${stuckCount + 1} - start vague, increase specificity with each click.`
+          : `本题已点击「我卡住了」${stuckCount} 次。给出第 ${stuckCount + 1} 次提示 - 循序渐进，每次点击时信息量逐渐增强。`,
+      ];
+      return lines.join('\n');
+    }
+    return '';
+  };
+
   const handleStuck = () => {
+    let answerJustRevealed = false;
+    if (isGuidedVideoFlow && guidedStep === 3 && guidedKeyIdeas.length > 0) {
+      const next = stuckClicksForKeyIdeas + 1;
+      setStuckClicksForKeyIdeas(next);
+      if (next >= 5) {
+        setShowKeyIdeaBlanks(true);
+        answerJustRevealed = true;
+      }
+    }
+    if (isGuidedVideoFlow && guidedStep === 4 && guidedPractice.length > 0) {
+      const idx = practiceCurrentIndex;
+      const next = (stuckClicksPerPracticeQuestion[idx] ?? 0) + 1;
+      setStuckClicksPerPracticeQuestion((prev) => ({ ...prev, [idx]: next }));
+      if (next >= 5) {
+        setShowPracticeSolutions((prev) => ({ ...prev, [idx]: true }));
+        answerJustRevealed = true;
+      }
+    }
     const context = getTaskContext();
     const guidedCtx = isGuidedVideoFlow
       ? `\nGuided step ${guidedStep}/5: ${[t('guidedStep1'),t('guidedStep2'),t('guidedStep3'),t('guidedStep4'),t('guidedStep5')][guidedStep - 1] || ''}\n${getGuidedStepProgress()}`
       : '';
+    const detailedCtx = getStuckHintDetailedContext();
+    const answerRevealedNote = answerJustRevealed
+      ? (contentLanguage === 'en'
+          ? "\n\nIMPORTANT: The student has clicked 'I'm Stuck' 5 times on this item. The reference answer has been revealed on screen. In your response, you MUST briefly acknowledge this (e.g. 'I see the reference answer is now visible') and encourage them to try with the hint."
+          : '\n\n重要：学生已在本条上点击「我卡住了」5 次，参考答案已展示在屏幕上。你必须在回复中简要说明这一点（例如「参考答案已经显示出来了」），并鼓励他们借助提示再试一试。')
+      : '';
+    const progressiveInstruction =
+      contentLanguage === 'en'
+        ? `\n\nPROGRESSIVE HINT STRATEGY (MUST follow):
+- Base your hint on the CURRENT item and what the student has MISSED (compare student answer vs reference).
+- Hint intensity: 1st click = very vague (e.g. direction/category); 2nd = a bit more specific; 3rd-4th = narrow down (e.g. first letter, word count); 5th = if answer revealed, encourage trying.
+- Each hint must be concrete and actionable - avoid generic advice like "think carefully".`
+        : `\n\n渐进式提示策略（必须遵循）：
+- 提示必须基于当前题目、以及学生缺失的信息（对比学生答案与参考答案）。
+- 提示强度：第1次=极简方向；第2次=稍具体；第3-4次=逐步收窄（如首字、字数）；第5次=若已展示答案，鼓励尝试。
+- 每次提示须具体可操作，避免空泛建议。`;
     handleSendMessage(
-        t('stuckHint'), 
+        t('stuckHint'),
         `Student clicked 'I'm Stuck'. Context: ${context}${guidedCtx}
+${detailedCtx ? `\n${detailedCtx}` : ''}${answerRevealedNote}${progressiveInstruction}
 
 CRITICAL: Give hints STEP BY STEP, not all at once.
 - Give ONLY ONE hint/guidance point in this response (2-3 sentences, max 100 chars)
@@ -1738,13 +1852,24 @@ CRITICAL: Output language must be 简体中文 only.
       const totalQ = guidedPractice.length;
       const answered = guidedPractice.filter((q, idx) => {
         const parsed = extractQuestionStemAndOptions(q.question || '', q.options);
+        const isTrueFalse =
+          q.questionType === 'true_false' ||
+          (!parsed.options?.length && /^(true|false)$/i.test((q.correctAnswer || '').trim()));
+        if (isTrueFalse) return typeof practiceChoiceAnswers[idx] === 'number';
         if (parsed.options.length > 0) return typeof practiceChoiceAnswers[idx] === 'number';
         return (practiceTextAnswers[idx] || '').trim().length > 0 || !!practiceImageAnswers[idx];
       }).length;
       let imageSeq = 0;
+      const tfLabels = contentLanguage === 'en' ? ['True', 'False'] : ['对', '错'];
       const answers = guidedPractice.map((q, idx) => {
         const parsed = extractQuestionStemAndOptions(q.question || '', q.options);
         const correctAns = q.correctAnswer ? `参考答案：${q.correctAnswer}` : '';
+        const isTrueFalse =
+          q.questionType === 'true_false' ||
+          (!parsed.options?.length && /^(true|false)$/i.test((q.correctAnswer || '').trim()));
+        if (isTrueFalse && typeof practiceChoiceAnswers[idx] === 'number') {
+          return `Q${idx + 1}: ${tfLabels[practiceChoiceAnswers[idx]]} ${correctAns}`;
+        }
         if (parsed.options.length > 0 && typeof practiceChoiceAnswers[idx] === 'number') {
           return `Q${idx + 1}: ${String.fromCharCode(65 + practiceChoiceAnswers[idx])}. ${parsed.options[practiceChoiceAnswers[idx]] || ''} ${correctAns}`;
         }
@@ -2485,7 +2610,7 @@ CRITICAL: Output language must be 简体中文 only.
                               </div>
                             );
                           })()}
-                          {idea.blanks && idea.blanks.length > 0 && (
+                          {idea.blanks && idea.blanks.length > 0 && showKeyIdeaBlanks && (
                             <div className="text-xs text-slate-500 mt-3 flex gap-1 items-start">
                               <span>参考关键词：</span>
                               <MathTextPreview text={idea.blanks.join('、')} className="text-xs text-slate-500 [&_p]:mb-0 inline" />
@@ -2512,6 +2637,10 @@ CRITICAL: Output language must be 简体中文 only.
                     const parsed = extractQuestionStemAndOptions(q.question || '', q.options);
                     const inputMode = practiceInputMode[idx] || 'text';
                     const hasImageAnswer = !!practiceImageAnswers[idx];
+                    const isTrueFalse =
+                      q.questionType === 'true_false' ||
+                      (!parsed.options?.length && /^(true|false)$/i.test((q.correctAnswer || '').trim()));
+                    const trueFalseLabels = contentLanguage === 'en' ? ['True', 'False'] : ['对', '错'];
                     return (
                       <div className="space-y-4">
                         <div className="rounded-lg border border-slate-200 p-4 bg-slate-50/60">
@@ -2519,7 +2648,30 @@ CRITICAL: Output language must be 简体中文 only.
                             <span>{idx + 1}.</span>
                             <MathTextPreview text={parsed.stem} className="text-sm font-semibold text-slate-800 [&_p]:mb-0" />
                           </div>
-                          {parsed.options.length > 0 ? (
+                          {isTrueFalse ? (
+                            <div className="flex gap-4 mt-3" role="radiogroup" aria-label={contentLanguage === 'en' ? 'True or False' : '对或错'}>
+                              {[0, 1].map((choiceIdx) => {
+                                const selected = practiceChoiceAnswers[idx] === choiceIdx;
+                                const label = trueFalseLabels[choiceIdx];
+                                const Icon = choiceIdx === 0 ? Check : X;
+                                return (
+                                  <button
+                                    key={choiceIdx}
+                                    type="button"
+                                    role="radio"
+                                    aria-checked={selected}
+                                    onClick={() => setPracticeChoiceAnswers((prev) => ({ ...prev, [idx]: choiceIdx }))}
+                                    className={`flex-1 min-h-[48px] flex items-center justify-center gap-2 rounded-lg border-2 px-4 py-3 text-base font-medium transition-all ${
+                                      selected ? 'bg-cyan-50 border-cyan-400 text-cyan-800' : 'bg-white border-slate-300 text-slate-700 hover:bg-slate-50'
+                                    }`}
+                                  >
+                                    <Icon size={20} />
+                                    {label}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          ) : parsed.options.length > 0 ? (
                             <div className="space-y-2">
                               {parsed.options.map((option, optionIdx) => (
                                 <button
@@ -2659,7 +2811,7 @@ CRITICAL: Output language must be 简体中文 only.
                               )}
                             </>
                           )}
-                          {q.correctAnswer && (
+                          {q.correctAnswer && (stuckClicksPerPracticeQuestion[idx] ?? 0) >= 5 && (
                             <div className="mt-3">
                               <button
                                 type="button"

@@ -229,6 +229,11 @@ function parseTaskDesignQuestion(item: Record<string, unknown>): GeneratedQuesti
   const answer = (item?.answer ?? item?.a) as string | undefined;
   const options = Array.isArray(item?.options) ? (item.options as string[]) : undefined;
   const rubric = (item?.rubric ?? item?.hint) as string | undefined;
+  const rawType = (item?.question_type ?? item?.questionType) as string | undefined;
+  const questionType =
+    rawType === 'multiple_choice' || rawType === 'short_answer' || rawType === 'true_false'
+      ? rawType
+      : undefined;
 
   let correctIndex: number | undefined;
   if (options?.length && answer != null) {
@@ -245,6 +250,7 @@ function parseTaskDesignQuestion(item: Record<string, unknown>): GeneratedQuesti
     correctIndex: correctIndex !== undefined ? correctIndex : undefined,
     correctAnswer: answer != null ? String(answer).trim() : undefined,
     explanation: rubric != null ? String(rubric).trim() : undefined,
+    questionType,
   };
 }
 
@@ -1512,7 +1518,7 @@ export function TeachingResourcesPage() {
                     <div className="flex items-center gap-2 mb-4">
                       <span className="text-sm text-gray-600">{idx + 1}.</span>
                       <span className="text-xs font-medium uppercase tracking-wide text-gray-500">
-                        {q.options?.length ? '选择题' : '简答题'}
+                        {q.questionType === 'true_false' || (!q.options?.length && /^(true|false)$/i.test((q.correctAnswer || '').trim())) ? '是非题' : q.options?.length ? '选择题' : '简答题'}
                       </span>
                       {q.options?.length ? (
                         <RefreshCw className="h-4 w-4 shrink-0 text-gray-400" />
@@ -1585,16 +1591,40 @@ export function TeachingResourcesPage() {
                         <div className="rounded-lg bg-green-50 p-3 text-sm space-y-2">
                           <div>
                             <span className="font-medium text-green-800">参考答案：</span>
-                            <Textarea
-                              className="mt-1 min-h-[50px] border-green-200 bg-white"
-                              value={q.correctAnswer || ''}
-                              onChange={(e) => {
-                                const next = [...practiceQuestions];
-                                next[idx] = { ...next[idx], correctAnswer: e.target.value };
-                                setPracticeQuestions(next);
-                              }}
-                              placeholder="参考答案"
-                            />
+                            {(q.questionType === 'true_false' || (!q.options?.length && /^(true|false)$/i.test((q.correctAnswer || '').trim()))) ? (
+                              <div className="flex gap-2 mt-2">
+                                {['True', 'False'].map((val) => {
+                                  const isSelected = (q.correctAnswer || '').trim().toLowerCase() === val.toLowerCase();
+                                  return (
+                                    <button
+                                      key={val}
+                                      type="button"
+                                      onClick={() => {
+                                        const next = [...practiceQuestions];
+                                        next[idx] = { ...next[idx], correctAnswer: val };
+                                        setPracticeQuestions(next);
+                                      }}
+                                      className={`px-4 py-2 rounded-lg border-2 text-sm font-medium transition-colors ${
+                                        isSelected ? 'bg-green-200 border-green-600 text-green-900' : 'bg-white border-green-200 text-green-800 hover:bg-green-50'
+                                      }`}
+                                    >
+                                      {val === 'True' ? '对 (True)' : '错 (False)'}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            ) : (
+                              <Textarea
+                                className="mt-1 min-h-[50px] border-green-200 bg-white"
+                                value={q.correctAnswer || ''}
+                                onChange={(e) => {
+                                  const next = [...practiceQuestions];
+                                  next[idx] = { ...next[idx], correctAnswer: e.target.value };
+                                  setPracticeQuestions(next);
+                                }}
+                                placeholder="参考答案"
+                              />
+                            )}
                           </div>
                           <div>
                             <span className="font-medium text-green-800">解析：</span>
@@ -1625,7 +1655,45 @@ export function TeachingResourcesPage() {
                         >
                           <MathTextPreview text={q.question} className="font-medium text-gray-900 [&_p]:mb-0" />
                         </div>
-                        {q.options?.length ? (
+                        {(q.questionType === 'true_false' || (!q.options?.length && /^(true|false)$/i.test((q.correctAnswer || '').trim()))) ? (
+                          <div className="flex gap-3 mb-4" role="radiogroup" aria-label="对或错">
+                            {[
+                              { v: 0, label: '对', correctVal: 'True' },
+                              { v: 1, label: '错', correctVal: 'False' },
+                            ].map(({ v, label, correctVal }) => {
+                              const selected = userSelections[idx] === v;
+                              const revealed = !!showAnswers[idx];
+                              const isCorrect = (q.correctAnswer || '').trim().toLowerCase() === correctVal.toLowerCase();
+                              const isWrong = revealed && selected && !isCorrect;
+                              const showCorrect = revealed && isCorrect;
+                              const showWrong = revealed && selected && isWrong;
+                              return (
+                                <button
+                                  key={v}
+                                  type="button"
+                                  role="radio"
+                                  aria-checked={selected}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setUserSelections((prev) => {
+                                      const next = { ...prev };
+                                      if (prev[idx] === v) delete next[idx];
+                                      else next[idx] = v;
+                                      return next;
+                                    });
+                                  }}
+                                  className={`flex items-center gap-2 px-4 py-2 rounded-lg border-2 text-sm font-medium transition-colors ${
+                                    showCorrect ? 'bg-green-500 text-white border-green-600' : ''
+                                  } ${showWrong ? 'bg-red-400 text-white border-red-500' : ''} ${
+                                    !revealed || (!showCorrect && !showWrong) ? 'border-gray-300 bg-gray-100 text-gray-700' : ''
+                                  }`}
+                                >
+                                  {label}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        ) : q.options?.length ? (
                           <div className="space-y-2 mb-4" role="radiogroup" aria-label={`第 ${idx + 1} 题选项`}>
                             {q.options.map((opt, j) => {
                               const selected = userSelections[idx] === j;

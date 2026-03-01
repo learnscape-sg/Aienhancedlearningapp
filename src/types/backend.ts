@@ -109,6 +109,8 @@ export interface GeneratedQuestion {
   correctIndex?: number;
   correctAnswer?: string;
   explanation?: string;
+  /** multiple_choice | short_answer | true_false */
+  questionType?: 'multiple_choice' | 'short_answer' | 'true_false';
 }
 
 /** Key idea for guided notes (fill-in-the-blank). */
