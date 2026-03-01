@@ -11,6 +11,7 @@ import {
 import { sendChatMessage, generateTaskAsset, generateExitTicket, getSpeechVoices, trackProductEvent } from '@/lib/backendApi';
 import { upsertStudentCourseProgress } from '@/lib/studentProgressApi';
 import { useAuth } from '../AuthContext';
+import { FontSizeSelector } from '../shared/FontSizeSelector';
 import { supabase } from '@/utils/supabase/client';
 import { 
   BookOpen, 
@@ -49,6 +50,7 @@ import {
   Volume2,
   VolumeX,
   Upload,
+  Camera,
   Pencil
 } from 'lucide-react';
 import SignatureCanvas from 'react-signature-canvas';
@@ -63,7 +65,6 @@ import { RealTimeProgressTracker } from './shared/RealTimeProgressTracker';
 import { VisualizationEditor } from './shared/VisualizationEditor';
 import { AnimatedAvatar, type AvatarState } from './shared/AnimatedAvatar';
 import { FullscreenModal } from './shared/FullscreenModal';
-import { LanguageSwitcher } from '../shared/LanguageSwitcher';
 import { useSpeechRecognition } from '@/hooks/useSpeechRecognition';
 import { useTextToSpeech } from '@/hooks/useTextToSpeech';
 import { visualizationDataToMermaid, mermaidToVisualizationData } from './shared/VisualizationEditor/utils/mermaidConverter';
@@ -76,10 +77,8 @@ interface StudentConsoleProps {
   plan: SystemTaskPlan;
   onComplete: (log: string, finalMindMap?: string) => void;
   onApiKeyError?: () => void;
-  /** Content language (from URL ?lang= or course meta). Used for API calls and TTS/STT. */
+  /** Content language (from tenant/market/space + policy or URL ?lang=). Used for API calls and TTS/STT. */
   contentLanguage?: 'zh' | 'en';
-  /** Called when user switches language; updates URL ?lang= */
-  onLanguageChange?: (lang: 'zh' | 'en') => void;
 }
 
 interface GuidedKeyIdea {
@@ -99,7 +98,9 @@ interface GuidedPayload {
   keyIdeas?: GuidedKeyIdea[];
   practiceQuestions?: GuidedQuestion[];
   exitTicket?: GuidedQuestion | null;
+  exitTicketItems?: GuidedQuestion[];
   taskDesignJson?: Record<string, unknown> | null;
+  customTextInstruction?: string;
 }
 
 function parseGuidedPayload(payload?: string): GuidedPayload | null {
@@ -107,23 +108,57 @@ function parseGuidedPayload(payload?: string): GuidedPayload | null {
   try {
     const json = JSON.parse(payload) as Record<string, unknown>;
     const td = (json.taskDesignJson as Record<string, unknown>) ?? null;
-    const why = td?.why_it_matters as { meaning_anchor?: string; advance_organizer?: string } | undefined;
+    const whyRaw = td?.why_it_matters;
+    const whyItMatters = (() => {
+      if (typeof whyRaw === 'string' && whyRaw.trim()) {
+        return { meaning_anchor: whyRaw.trim(), advance_organizer: '' };
+      }
+      const why = whyRaw as { meaning_anchor?: string; advance_organizer?: string } | undefined;
+      return why && (why.meaning_anchor || why.advance_organizer) ? why : undefined;
+    })();
     return {
       learningObjective: typeof json.learningObjective === 'string' ? json.learningObjective : undefined,
-      whyItMatters: why && (why.meaning_anchor || why.advance_organizer) ? why : undefined,
+      whyItMatters,
       keyIdeas: Array.isArray(json.keyIdeas) ? json.keyIdeas as GuidedKeyIdea[] : [],
       practiceQuestions: Array.isArray(json.practiceQuestions) ? json.practiceQuestions as GuidedQuestion[] : [],
       exitTicket: (json.exitTicket as GuidedQuestion | null) ?? null,
+      exitTicketItems: (() => {
+        // Prefer exitTicketItems from payload (TeachingResourcesPage passes array)
+        const fromPayload = json.exitTicketItems;
+        if (Array.isArray(fromPayload) && fromPayload.length > 0) {
+          return fromPayload as GuidedQuestion[];
+        }
+        // Else parse from taskDesignJson.exit_ticket (direct array or { items: [...] })
+        const raw = td?.exit_ticket;
+        const items = Array.isArray(raw)
+          ? (raw as Array<Record<string, unknown>>)
+          : Array.isArray((raw as { items?: unknown[] })?.items)
+            ? ((raw as { items: unknown[] }).items as Array<Record<string, unknown>>)
+            : [];
+        return items
+          .map((item) => ({
+            question: String((item?.question ?? item?.q) || '').trim(),
+            correctAnswer: (item?.answer ?? item?.a) != null ? String(item.answer ?? item.a) : undefined,
+            options: Array.isArray(item?.options) ? (item.options as string[]) : undefined,
+          }))
+          .filter((item) => item.question.length > 0) as GuidedQuestion[];
+      })(),
       taskDesignJson: td,
+      customTextInstruction: typeof json.customTextInstruction === 'string' ? json.customTextInstruction.trim() || undefined : undefined,
     };
   } catch {
     return null;
   }
 }
 
+/** Strip leading "A. ", "B. " etc. from option text to avoid double prefix in UI */
+function normalizeOptionText(text: string): string {
+  return text.replace(/^[A-D][\.\)\u3001\s]+/i, '').trim();
+}
+
 function extractQuestionStemAndOptions(question: string, options?: string[]): { stem: string; options: string[] } {
   if (options && options.length > 0) {
-    return { stem: question, options };
+    return { stem: question, options: options.map(normalizeOptionText) };
   }
   const lines = question
     .split('\n')
@@ -166,6 +201,25 @@ function extractYouTubeVideoId(url: string): string | null {
   return null;
 }
 
+/** Extract Bilibili bvid from bilibili.com/b23.tv URLs. Used for China market embed. */
+function extractBilibiliBvid(url: string): string | null {
+  if (!url?.trim()) return null;
+  const s = url.trim();
+  const bvMatch = s.match(/\b(BV[0-9A-Za-z]+)\b/i);
+  if (bvMatch) return bvMatch[1];
+  try {
+    const parsed = new URL(url);
+    const host = parsed.hostname.toLowerCase();
+    if (!host.includes('bilibili.com') && !host.includes('b23.tv')) return null;
+    const q = parsed.searchParams.get('bvid');
+    if (q) return q;
+    const pathMatch = parsed.pathname.match(/(?:\/video\/|\/)(BV[0-9A-Za-z]+)/i);
+    return pathMatch?.[1] ?? null;
+  } catch {
+    return null;
+  }
+}
+
 // Text Editor Preview Component for writing space
 const TextEditorPreview = ({ content, onEditClick }: { content: string; onEditClick: () => void }) => {
   const { t } = useTranslation('studentConsole');
@@ -204,7 +258,7 @@ const TextEditorPreview = ({ content, onEditClick }: { content: string; onEditCl
   );
 };
 
-const StudentConsole: React.FC<StudentConsoleProps> = ({ plan, onComplete, onApiKeyError, contentLanguage = 'zh', onLanguageChange }) => {
+const StudentConsole: React.FC<StudentConsoleProps> = ({ plan, onComplete, onApiKeyError, contentLanguage = 'zh' }) => {
   const { user } = useAuth();
   const params = useParams();
   const { t } = useTranslation('studentConsole');
@@ -225,6 +279,22 @@ const StudentConsole: React.FC<StudentConsoleProps> = ({ plan, onComplete, onApi
     },
     [courseId, user?.id]
   );
+
+  // --- State (currentTaskIndex must be before emitEvent which uses it) ---
+  const [currentTaskIndex, setCurrentTaskIndex] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('currentTaskIndex');
+      if (saved !== null) {
+        const index = parseInt(saved, 10);
+        // 确保索引在有效范围内
+        if (!isNaN(index) && index >= 0 && index < plan.tasks.length) {
+          return index;
+        }
+      }
+    }
+    return 0;
+  });
+
   const emitEvent = useCallback(
     async (
       eventName: 'step_entered' | 'step_completed' | 'stuck_clicked' | 'course_completed',
@@ -247,21 +317,6 @@ const StudentConsole: React.FC<StudentConsoleProps> = ({ plan, onComplete, onApi
     [contentLanguage, courseId, currentTaskIndex, plan.tasks, user?.id]
   );
 
-  // --- State ---
-  // 从 localStorage 恢复当前任务索引，刷新后保持状态
-  const [currentTaskIndex, setCurrentTaskIndex] = useState(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('currentTaskIndex');
-      if (saved !== null) {
-        const index = parseInt(saved, 10);
-        // 确保索引在有效范围内
-        if (!isNaN(index) && index >= 0 && index < plan.tasks.length) {
-          return index;
-        }
-      }
-    }
-    return 0;
-  });
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [chatInput, setChatInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
@@ -323,6 +378,7 @@ const StudentConsole: React.FC<StudentConsoleProps> = ({ plan, onComplete, onApi
   const practiceCanvasRef = useRef<SignatureCanvas>(null);
   const [showPracticeSolutions, setShowPracticeSolutions] = useState<Record<number, boolean>>({});
   const [exitTicketAnswer, setExitTicketAnswer] = useState('');
+  const [exitTicketAnswers, setExitTicketAnswers] = useState<Record<number, string>>({});
   const [showExitTicketAnswer, setShowExitTicketAnswer] = useState(false);
 
   // Edit Count Tracking (for progress tracker)
@@ -513,6 +569,8 @@ const StudentConsole: React.FC<StudentConsoleProps> = ({ plan, onComplete, onApi
   // 跟踪已发送问候消息的任务索引，避免重复发送
   const greetingSentRef = useRef<Set<number>>(new Set());
   const guidedDoneInFlight = useRef(false); // 防止引导流 handleDone 双击重复请求
+  // 进入步骤 5 时的消息数量，用于判断 [STEP_PASS] 是否来自步骤 5 的 AI 判定
+  const messagesCountAtStep5EntryRef = useRef<number>(0);
   const currentTask = plan.tasks[currentTaskIndex] ?? plan.tasks[0];
   
   // Derived View Type
@@ -524,6 +582,19 @@ const StudentConsole: React.FC<StudentConsoleProps> = ({ plan, onComplete, onApi
   const guidedKeyIdeas = guidedPayload?.keyIdeas || [];
   const guidedPractice = guidedPayload?.practiceQuestions || [];
   const guidedExitTicket = guidedPayload?.exitTicket || null;
+  const guidedExitTickets: GuidedQuestion[] = useMemo(() => {
+    const items = guidedPayload?.exitTicketItems || [];
+    if (items.length > 0) return items;
+    return guidedExitTicket ? [guidedExitTicket] : [];
+  }, [guidedPayload?.exitTicketItems, guidedExitTicket]);
+  const allExitTicketsCompleted = useMemo(() => {
+    if (guidedStep !== 5) return true;
+    if (guidedExitTickets.length === 0) return exitTicketAnswer.trim().length > 0;
+    return guidedExitTickets.every((_, idx) => {
+      const answer = (exitTicketAnswers[idx] ?? (idx === 0 ? exitTicketAnswer : '')).trim();
+      return answer.length > 0;
+    });
+  }, [guidedStep, guidedExitTickets, exitTicketAnswers, exitTicketAnswer]);
   const isGuidedVideoFlow = viewType === 'video_player' && !!guidedPayload?.learningObjective;
 
   // 进入「我能练一练」时重置为第一题
@@ -622,6 +693,7 @@ const StudentConsole: React.FC<StudentConsoleProps> = ({ plan, onComplete, onApi
     setPracticeChoiceAnswers({});
     setShowPracticeSolutions({});
     setExitTicketAnswer('');
+    setExitTicketAnswers({});
     setShowExitTicketAnswer(false);
   }, [currentTaskIndex]);
 
@@ -1387,13 +1459,36 @@ CRITICAL: Give hints STEP BY STEP, not all at once.
 
     // ──── 引导流模式：按步骤验证 ────
     if (isGuidedVideoFlow) {
+      if (guidedStep === 5 && !allExitTicketsCompleted) {
+        const message = contentLanguage === 'en'
+          ? 'Please complete all exit ticket questions before finishing this step.'
+          : '请先完成出门条全部题目，再点击“我做完了”。';
+        window.alert(message);
+        return;
+      }
       guidedDoneInFlight.current = true;
       const stepTitles = [t('guidedStep1'), t('guidedStep2'), t('guidedStep3'), t('guidedStep4'), t('guidedStep5')];
       const currentStepTitle = stepTitles[guidedStep - 1] || `步骤${guidedStep}`;
       const stepProgress = getGuidedStepProgress();
 
-      // 步骤 1/2 轻量放行
+      // 步骤 1/2：使用预定义回复，跳过 AI 调用，省时省成本
       const isLightStep = guidedStep <= 2;
+      if (isLightStep) {
+        const presetKey = guidedStep === 1 ? 'guidedStep1PresetReplies' : 'guidedStep2PresetReplies';
+        const replies = t(presetKey, { returnObjects: true }) as string[] | undefined;
+        const presetText = Array.isArray(replies) && replies.length > 0
+          ? replies[Math.floor(Math.random() * replies.length)]
+          : (contentLanguage === 'zh' ? '很好！点击下方按钮进入下一步。' : 'Great! Click the button below to continue.');
+        const timestamp = Date.now();
+        const userMsg: ChatMessage = { role: 'user', text: t('guidedDoneStep', { step: currentStepTitle }), timestamp };
+        const modelMsg: ChatMessage = { role: 'model', text: `${presetText} [STEP_PASS]`, timestamp };
+        setMessages((prev) => [...prev, userMsg, modelMsg]);
+        guidedDoneInFlight.current = false;
+        setTimeout(() => {
+          if (chatContainerRef.current) chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
+        }, 50);
+        return;
+      }
 
       // Step 4「我能练一练」：收集手写答案图片，按题目顺序
       const practiceImages: string[] =
@@ -1613,7 +1708,7 @@ CRITICAL: Output language must be 简体中文 only.
     const currentStepTitle = stepTitles[guidedStep - 1] || `步骤${guidedStep}`;
 
     if (guidedStep === 1) return `当前步骤「${currentStepTitle}」：学生已阅读学习目标。`;
-    if (guidedStep === 2) return `当前步骤「${currentStepTitle}」：学生已观看视频。`;
+    if (guidedStep === 2) return `当前步骤「${currentStepTitle}」：学生已完成自主学习。`;
     if (guidedStep === 3) {
       const totalBlanks = guidedKeyIdeas.reduce((acc, idea) => {
         const blankCount = Math.max(0, idea.text.split('__KEY__').length - 1);
@@ -1666,7 +1761,11 @@ CRITICAL: Output language must be 简体中文 only.
       return `当前步骤「${currentStepTitle}」：完成 ${answered}/${totalQ}。题目与答案：${answers.join('；')}${imageInstruction}`;
     }
     if (guidedStep === 5) {
-      return `当前步骤「${currentStepTitle}」：学生出门条回答：${exitTicketAnswer || '(空)'}`;
+      const answers = guidedExitTickets.map((item, idx) => ({
+        question: item.question,
+        answer: (exitTicketAnswers[idx] ?? (idx === 0 ? exitTicketAnswer : '')).trim() || '(空)',
+      }));
+      return `当前步骤「${currentStepTitle}」：学生出门条回答：${JSON.stringify(answers)}`;
     }
     return `当前步骤「${currentStepTitle}」：学生已完成。`;
   };
@@ -1676,6 +1775,9 @@ CRITICAL: Output language must be 简体中文 only.
     if (guidedStep < 5) {
       const next = guidedStep + 1;
       setMaxStepReached(prev => Math.max(prev, next));
+      if (next === 5) {
+        messagesCountAtStep5EntryRef.current = messages.length;
+      }
       setGuidedStep(next);
     } else if (currentTaskIndex < plan.tasks.length - 1) {
       // 非最后任务 → 进入下一个任务
@@ -2225,7 +2327,12 @@ CRITICAL: Output language must be 简体中文 only.
     // Guided flow for teacher-generated JSON (video + worksheet)
     if (isGuidedVideoFlow) {
       const source = currentTask.externalResourceUrl || (typeof assetData === 'string' ? assetData : '') || '';
-      const youtubeId = extractYouTubeVideoId(source);
+      const platform = currentTask.videoPlatform;
+      const explicitId = currentTask.externalResourceId?.trim();
+      const youtubeId = (platform === 'youtube' && explicitId) ? explicitId : (platform !== 'bilibili' ? extractYouTubeVideoId(source) : null);
+      const bilibiliBvid = (platform === 'bilibili' && explicitId) ? explicitId : (platform !== 'youtube' ? extractBilibiliBvid(source) : null);
+      const useYoutube = (platform === 'youtube' && youtubeId) || (!platform && youtubeId);
+      const useBilibili = (platform === 'bilibili' && bilibiliBvid) || (!platform && bilibiliBvid && !youtubeId);
       const stepTitles = [t('guidedStep1'), t('guidedStep2'), t('guidedStep3'), t('guidedStep4'), t('guidedStep5')];
 
       return (
@@ -2267,13 +2374,16 @@ CRITICAL: Output language must be 简体中文 only.
                   <div className="text-slate-700 leading-relaxed space-y-4">
                       <p>
                       <strong>{t('learningObjective')}：</strong>
-                      {guidedPayload?.learningObjective || currentTask.outputGoal || t('learnObjectivePlaceholder')}
+                      <MathTextPreview
+                        text={guidedPayload?.learningObjective || currentTask.outputGoal || t('learnObjectivePlaceholder')}
+                        className="inline [&_p]:inline [&_p]:mb-0"
+                      />
                     </p>
                     {guidedPayload?.whyItMatters?.meaning_anchor && (
-                      <p><strong>{t('whyLearnThis')}</strong> {guidedPayload.whyItMatters.meaning_anchor}</p>
+                      <p><strong>{t('whyLearnThis')}</strong> <MathTextPreview text={guidedPayload.whyItMatters.meaning_anchor} className="inline [&_p]:inline [&_p]:mb-0" /></p>
                     )}
                     {guidedPayload?.whyItMatters?.advance_organizer && (
-                      <p><strong>{t('whatToLearn')}</strong> {guidedPayload.whyItMatters.advance_organizer}</p>
+                      <p><strong>{t('whatToLearn')}</strong> <MathTextPreview text={guidedPayload.whyItMatters.advance_organizer} className="inline [&_p]:inline [&_p]:mb-0" /></p>
                     )}
                   </div>
                 </div>
@@ -2283,12 +2393,27 @@ CRITICAL: Output language must be 简体中文 only.
                 <div className="bg-white rounded-xl border border-slate-200 p-4">
                   <h3 className="text-lg font-bold text-slate-800 mb-3 px-2">{t('guidedStep2')}</h3>
                   <div className="rounded-lg overflow-hidden bg-black/80">
-                    {youtubeId ? (
+                    {guidedPayload?.customTextInstruction?.trim() && !source ? (
+                      <div className="p-6 bg-slate-100 text-slate-800 min-h-[120px]">
+                        <p className="text-base leading-relaxed whitespace-pre-wrap">
+                          <MathTextPreview text={guidedPayload.customTextInstruction.trim()} />
+                        </p>
+                      </div>
+                    ) : useYoutube ? (
                       <iframe
                         src={`https://www.youtube.com/embed/${youtubeId}`}
                         title={t('instructionalVideo')}
                         className="w-full aspect-video"
                         allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                        allowFullScreen
+                      />
+                    ) : useBilibili ? (
+                      <iframe
+                        src={`https://player.bilibili.com/player.html?bvid=${bilibiliBvid}&p=1&danmaku=0`}
+                        title={t('instructionalVideo')}
+                        className="w-full aspect-video"
+                        scrolling="no"
+                        frameBorder="0"
                         allowFullScreen
                       />
                     ) : source ? (
@@ -2433,7 +2558,7 @@ CRITICAL: Output language must be 简体中文 only.
                                     inputMode === 'upload' ? 'bg-cyan-100 text-cyan-800 border border-cyan-300' : 'bg-white text-slate-600 border border-slate-300 hover:bg-slate-50'
                                   }`}
                                 >
-                                  <Upload size={14} /> 上传手写
+                                  <Camera size={14} /> 拍照上传
                                 </button>
                                 <button
                                   type="button"
@@ -2456,8 +2581,8 @@ CRITICAL: Output language must be 简体中文 only.
                               {inputMode === 'upload' && (
                                 <div className="space-y-2">
                                   <label className="flex flex-col items-center justify-center w-full min-h-[120px] border-2 border-dashed border-slate-300 rounded-lg cursor-pointer hover:bg-slate-50 transition-colors">
-                                    <Upload className="w-8 h-8 text-slate-400 mb-2" />
-                                    <span className="text-sm text-slate-600">{t('uploadHandwrittenAnswer')}</span>
+                                    <Camera className="w-8 h-8 text-slate-400 mb-2" />
+                                    <span className="text-sm text-slate-600">{t('takePhotoUpload')}</span>
                                     <input
                                       type="file"
                                       accept="image/*"
@@ -2579,14 +2704,23 @@ CRITICAL: Output language must be 简体中文 only.
               {guidedStep === 5 && (
                 <div className="bg-white rounded-xl border border-slate-200 p-6">
                   <h3 className="text-lg font-bold text-slate-800 mb-4">{t('guidedStep5')}</h3>
-                  <MathTextPreview text={guidedExitTicket?.question || '请用1-2句话总结本节课你最重要的收获。'} className="text-sm text-slate-800 mb-3 [&_p]:mb-0" />
-                  <textarea
-                    value={exitTicketAnswer}
-                    onChange={(e) => setExitTicketAnswer(e.target.value)}
-                    placeholder={t('enterYourReviewAnswer')}
-                    className="w-full min-h-[110px] rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-200 resize-y"
-                  />
-                  {guidedExitTicket?.correctAnswer && (
+                  {(guidedExitTickets.length > 0 ? guidedExitTickets : [{ question: '请用1-2句话总结本节课你最重要的收获。' }]).map((ticket, idx) => (
+                    <div key={`exit-ticket-${idx}`} className="mb-4 last:mb-0">
+                      <p className="text-xs text-slate-500 mb-1">题目 {idx + 1}</p>
+                      <MathTextPreview text={ticket.question} className="text-sm text-slate-800 mb-2 [&_p]:mb-0" />
+                      <textarea
+                        value={exitTicketAnswers[idx] ?? (idx === 0 ? exitTicketAnswer : '')}
+                        onChange={(e) => {
+                          const value = e.target.value;
+                          setExitTicketAnswers((prev) => ({ ...prev, [idx]: value }));
+                          if (idx === 0) setExitTicketAnswer(value);
+                        }}
+                        placeholder={t('enterYourReviewAnswer')}
+                        className="w-full min-h-[96px] rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-200 resize-y"
+                      />
+                    </div>
+                  ))}
+                  {guidedExitTickets.some((item) => item.correctAnswer) && (
                     <div className="mt-3">
                       <button
                         type="button"
@@ -2596,9 +2730,13 @@ CRITICAL: Output language must be 简体中文 only.
                         {showExitTicketAnswer ? t('hideReferenceAnswer') : t('viewReferenceAnswer')}
                       </button>
                       {showExitTicketAnswer && (
-                        <div className="text-xs text-emerald-700 mt-2 flex gap-1 items-start">
-                          <span>参考答案：</span>
-                          <MathTextPreview text={guidedExitTicket.correctAnswer} className="text-xs text-emerald-700 [&_p]:mb-0 inline" />
+                        <div className="text-xs text-emerald-700 mt-2 space-y-2">
+                          {guidedExitTickets.map((item, idx) => item.correctAnswer ? (
+                            <div key={`exit-answer-${idx}`} className="flex gap-1 items-start">
+                              <span>参考答案{idx + 1}：</span>
+                              <MathTextPreview text={item.correctAnswer} className="text-xs text-emerald-700 [&_p]:mb-0 inline" />
+                            </div>
+                          ) : null)}
                         </div>
                       )}
                     </div>
@@ -2880,7 +3018,7 @@ CRITICAL: Output language must be 简体中文 only.
 
     // 5. GENERIC MEDIA / WEB / STATIC ASSETS
     return (
-        <div className="w-full h-full flex flex-col items-center justify-center relative group p-6 bg-slate-50/50">
+        <div className="w-full min-h-[calc(100vh-10rem)] flex flex-col items-center justify-start relative group p-6 bg-slate-50/50">
              {isAssetLoading ? (
                  <div className="flex flex-col items-center gap-2">
                      <Loader2 size={32} className="animate-spin text-cyan-600"/>
@@ -2889,7 +3027,7 @@ CRITICAL: Output language must be 简体中文 only.
              ) : assetData ? (
                 <>
                     {viewType === 'image_gallery' && (
-                       <div className="flex flex-col rounded-xl overflow-hidden shadow-2xl border border-slate-200 max-h-full bg-white">
+                       <div className="flex-1 flex flex-col min-h-0 rounded-xl overflow-hidden shadow-2xl border border-slate-200 bg-white w-full max-w-4xl">
                            {currentTask.description && (
                              <div className="shrink-0 p-4 bg-slate-50 border-b border-slate-200">
                                <p className="text-sm text-slate-600 leading-relaxed">
@@ -2897,7 +3035,7 @@ CRITICAL: Output language must be 简体中文 only.
                                </p>
                              </div>
                            )}
-                           <div className="relative flex-1 flex items-center justify-center bg-black/5 min-h-[200px]">
+                           <div className="relative flex-1 min-h-[120px] flex items-center justify-center bg-black/5">
                                <img src={assetData} alt="AI Generated" className="max-w-full max-h-[70vh] object-contain" />
                            </div>
                            <div className="bg-white/90 backdrop-blur-sm p-2 text-[10px] text-slate-500 px-4 border-t border-slate-100">
@@ -2916,18 +3054,47 @@ CRITICAL: Output language must be 简体中文 only.
                              )}
                              <div className="flex items-center gap-2 p-3 bg-slate-900 text-cyan-400 border-b border-slate-800">
                                  <Video size={18}/>
-                                <span className="font-bold text-xs uppercase tracking-wider">{t('instructionalVideo')}</span>
+                                <span className="font-bold text-xs uppercase tracking-wider">
+                                  {guidedPayload?.customTextInstruction ? '学习指引' : t('instructionalVideo')}
+                                </span>
                              </div>
                             {(() => {
-                                const source = typeof assetData === 'string' ? assetData : '';
-                                const youtubeId = extractYouTubeVideoId(source);
-                                if (youtubeId) {
+                                const source = (currentTask.externalResourceUrl || (typeof assetData === 'string' ? assetData : '')) || '';
+                                const textInstruction = guidedPayload?.customTextInstruction?.trim();
+                                if (textInstruction && !source && !currentTask.externalResourceId) {
+                                  return (
+                                    <div className="p-6 bg-slate-100 text-slate-800 min-h-[200px]">
+                                      <p className="text-base leading-relaxed whitespace-pre-wrap">
+                                        <MathTextPreview text={textInstruction} />
+                                      </p>
+                                    </div>
+                                  );
+                                }
+                                const platform = currentTask.videoPlatform;
+                                const explicitId = currentTask.externalResourceId?.trim();
+                                const youtubeId = (platform === 'youtube' && explicitId) ? explicitId : (platform !== 'bilibili' ? extractYouTubeVideoId(source) : null);
+                                const bilibiliBvid = (platform === 'bilibili' && explicitId) ? explicitId : (platform !== 'youtube' ? extractBilibiliBvid(source) : null);
+                                const useYoutube = (platform === 'youtube' && youtubeId) || (!platform && youtubeId);
+                                const useBilibili = (platform === 'bilibili' && bilibiliBvid) || (!platform && bilibiliBvid && !youtubeId);
+                                if (useYoutube) {
                                   return (
                                     <iframe
                                       src={`https://www.youtube.com/embed/${youtubeId}`}
                                       title={t('instructionalVideo')}
                                       className="w-full aspect-video"
                                       allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                                      allowFullScreen
+                                    />
+                                  );
+                                }
+                                if (useBilibili) {
+                                  return (
+                                    <iframe
+                                      src={`https://player.bilibili.com/player.html?bvid=${bilibiliBvid}&p=1&danmaku=0`}
+                                      title={t('instructionalVideo')}
+                                      className="w-full aspect-video"
+                                      scrolling="no"
+                                      frameBorder="0"
                                       allowFullScreen
                                     />
                                   );
@@ -2961,7 +3128,7 @@ CRITICAL: Output language must be 简体中文 only.
   return (
     <div 
       ref={containerRef} 
-      className="flex w-full bg-slate-50 text-slate-800 overflow-hidden font-sans selection:bg-cyan-200"
+      className="flex w-full bg-slate-50 text-slate-800 overflow-hidden font-sans selection:bg-cyan-200 student-console"
       style={{ minHeight: '100vh', height: '100vh' }}
     >
       
@@ -2991,6 +3158,7 @@ CRITICAL: Output language must be 简体中文 only.
                     </span>
                 </div>
                 <div className="flex items-center gap-4 shrink-0 ml-4">
+                    <FontSizeSelector />
                     {/* Progress Dots - 可点击跳转 */}
                     <div className="flex gap-1.5 shrink-0">
                         {plan.tasks.map((_, idx) => (
@@ -3008,17 +3176,12 @@ CRITICAL: Output language must be 简体中文 only.
                             />
                         ))}
                     </div>
-                    {onLanguageChange && (
-                        <div className="shrink-0">
-                            <LanguageSwitcher onLanguageChange={onLanguageChange} />
-                        </div>
-                    )}
                 </div>
             </div>
         </div>
 
         {/* Workspace Content */}
-        <div className="flex-1 overflow-y-auto overflow-x-hidden relative bg-slate-50/10 min-h-0 custom-scrollbar">
+        <div className="student-console-content flex-1 overflow-y-auto overflow-x-hidden relative bg-slate-50/10 min-h-0 custom-scrollbar">
             {renderLeftWorkspace()}
         </div>
 
@@ -3155,7 +3318,7 @@ CRITICAL: Output language must be 简体中文 only.
         {/* Chat Area */}
         <div 
           ref={chatContainerRef}
-          className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar scroll-smooth min-h-0 bg-[#f7f7f7]"
+          className="student-console-chat flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar scroll-smooth min-h-0 bg-[#f7f7f7]"
         >
           {messages.map((msg, idx) => {
             const isCompletionMsg = msg.role === 'model' && isTaskCompletionMessage(msg.text);
@@ -3257,7 +3420,13 @@ CRITICAL: Output language must be 简体中文 only.
                       >
                         {guidedStep < 5 ? t('nextStep') : t('nextTask')} <ArrowRight size={16} />
                       </button>
-                    ) : (
+                    ) : (guidedStep === 5 && messages.length <= messagesCountAtStep5EntryRef.current) ? (
+                      <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                        {contentLanguage === 'en'
+                          ? 'Please complete all exit ticket questions and click "I\'m Done" for AI to evaluate. The completion buttons will appear after AI approval.'
+                          : '请完成出门条题目后点击「我做完了」，AI 判定合理后才会显示「结束学习」和「能力分析」按钮。'}
+                      </div>
+                    ) : allExitTicketsCompleted && (guidedStep < 5 || messages.length > messagesCountAtStep5EntryRef.current) ? (
                       <>
                         <button 
                           onClick={handleEndLearning}
@@ -3272,6 +3441,10 @@ CRITICAL: Output language must be 简体中文 only.
                           {t('scholarAnalysis')} <ArrowRight size={16} />
                         </button>
                       </>
+                    ) : (
+                      <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                        请先完成出门条全部题目，完成后才会显示“结束/评估”按钮。
+                      </div>
                     )}
                   </div>
                 )}

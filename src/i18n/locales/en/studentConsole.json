@@ -6,7 +6,7 @@
   "inputPlaceholder": "Enter your answer...",
   "aiProcessing": "AI tutor is thinking...",
   "operator": "Student",
-  "aiSystem": "AI Tutor",
+  "aiSystem": "AI Learning Coach",
   "missionObjective": "Mission Objective",
   "systemInstructions": "Instructions",
   "mindMapTip": "Edit the code above; preview updates below in real time",
@@ -33,13 +33,16 @@
   "hintClickDone": "When done, click \"I'm done\"; when stuck, click \"I'm stuck\"",
   "nextStep": "Next Step",
   "nextTask": "Next Task",
-  "tutorOnline": "Tutor Online",
+  "tutorOnline": "Coach Online",
   "voiceBroadcast": "Voice",
   "voiceOn": "On",
   "voiceOff": "Off",
   "voiceTurnOn": "Turn on voice",
   "voiceTurnOff": "Turn off voice",
   "selectVoice": "Select voice",
+  "fontSizeSmall": "S",
+  "fontSizeMedium": "M",
+  "fontSizeLarge": "L",
   "loadingVoices": "Loading…",
   "noVoices": "No voices available",
   "voiceFemale": "(F)",
@@ -51,7 +54,7 @@
   "recognizing": "Recognizing...",
   "speechError": "Speech recognition error",
   "guidedStep1": "I can define the goal",
-  "guidedStep2": "I can understand the video",
+  "guidedStep2": "I can learn independently",
   "guidedStep3": "I can summarize key points",
   "guidedStep4": "I can practice",
   "guidedStep5": "I can complete the review",
@@ -96,5 +99,16 @@
   "viewReferenceAnswer": "View reference answer",
   "hideReferenceAnswer": "Hide reference answer",
   "handwrittenAnswer": "Handwritten answer",
-  "uploadHandwrittenAnswer": "Click to upload handwritten answer image"
+  "uploadHandwrittenAnswer": "Click to upload handwritten answer image",
+  "takePhotoUpload": "Take photo to upload",
+  "guidedStep1PresetReplies": [
+    "Great! You've clarified your learning goal. Click the button below to continue.",
+    "Goal confirmed. Keep it up! Click the button below to continue.",
+    "Clear objective, nice work! Click the button below to continue."
+  ],
+  "guidedStep2PresetReplies": [
+    "Well done! Independent learning completed. Click the button below to continue.",
+    "Great job on the independent study! Click the button below to continue.",
+    "You've finished independent learning. Click the button below to continue."
+  ]
 }

@@ -59,6 +59,10 @@ export interface SystemTask {
   contentPayload?: string;
   generatedAssetContent?: string;
   externalResourceUrl?: string;
+  /** Video platform for video_player tasks; used to choose embed (YouTube vs Bilibili). */
+  videoPlatform?: 'youtube' | 'bilibili';
+  /** Video ID (YouTube v param or Bilibili bvid). When set with videoPlatform, used directly for embed—no URL parsing. */
+  externalResourceId?: string;
   assetPrompt: string;
   description: string;
   outputGoal: string;

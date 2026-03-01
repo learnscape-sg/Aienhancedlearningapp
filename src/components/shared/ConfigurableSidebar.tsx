@@ -1,6 +1,7 @@
 import React from 'react';
 import { Globe, GraduationCap, LogOut } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { FontSizeSelector } from './FontSizeSelector';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import type { NavigationItem } from '@/config/navigationConfig';
 import type { LanguageSpace } from '@/config/entryConfig';
@@ -73,6 +74,10 @@ export function ConfigurableSidebar({
           </span>
           <span>{languageSpace === 'zh' ? 'EN' : '中'}</span>
         </Button>
+        <div className="mt-2 flex items-center gap-2">
+          <span className="text-xs text-muted-foreground shrink-0">{languageSpace === 'zh' ? '字体' : 'Font'}</span>
+          <FontSizeSelector />
+        </div>
       </div>
 
       <nav className="flex-1 px-4 py-4 space-y-2">

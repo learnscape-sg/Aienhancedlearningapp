@@ -22,6 +22,7 @@ import {
   Eye,
   RefreshCw,
   ExternalLink,
+  FileText,
 } from 'lucide-react';
 import {
   searchVideos,
@@ -30,8 +31,8 @@ import {
   saveTask,
   uploadMaterialResource,
   trackProductEvent,
-  listTeacherDigitalTwins,
-  type TeacherDigitalTwin,
+  listTeacherTwins,
+  type TeacherTwin,
 } from '../lib/backendApi';
 import { useAuth } from './AuthContext';
 import { useTasks } from './TasksContext';
@@ -42,9 +43,12 @@ import {
 } from '../hooks/useTeacherPreferences';
 import { downloadMarkdownAsPdf } from '../lib/markdownToPdf';
 import { Tabs, TabsList, TabsTrigger } from './ui/tabs';
+import { Textarea } from './ui/textarea';
 import { TypingText } from './ui/typing-text';
 import { resolveRuntimeExperienceConfig } from '@/lib/entryDetector';
 import { useRuntimePolicy } from '@/hooks/useRuntimePolicy';
+import { MathTextPreview } from './student/shared/MathTextPreview';
+import { SUBJECT_OPTIONS, CUSTOM_SUBJECT_OPTION, splitSubjectValue } from '../lib/subjects';
 import type {
   VideoSearchItem,
   VideoContentResult,
@@ -56,7 +60,7 @@ import type {
 
 const STEPS = [
   { id: 1, key: 'objective', label: '学习目标', icon: Target },
-  { id: 2, key: 'video', label: '视频选择', icon: Video },
+  { id: 2, key: 'video', label: '素材选择', icon: Video },
   { id: 3, key: 'keyIdeas', label: '关键要点', icon: ListOrdered },
   { id: 4, key: 'practice', label: '练习题目', icon: FileQuestion },
   { id: 5, key: 'exitTicket', label: '离场券', icon: Ticket },
@@ -127,7 +131,7 @@ function getVideoEmbedUrl(item: VideoSearchItem): string | null {
     return `https://www.youtube.com/embed/${item.id}`;
   }
   if (platform === 'bilibili') {
-    return `https://player.bilibili.com/player.html?bvid=${item.id}&page=1`;
+    return `https://player.bilibili.com/player.html?bvid=${item.id}&p=1&danmaku=0`;
   }
   return null;
 }
@@ -191,19 +195,11 @@ function Stepper({
 function KeyIdeaBlock({ idea }: { idea: KeyIdea }) {
   const parts = idea.text.split('__KEY__');
   const blanks = idea.blanks || [];
+  const rendered = parts
+    .map((part, i) => `${part}${i < parts.length - 1 ? `【${blanks[i] ?? '______'}】` : ''}`)
+    .join('');
   return (
-    <p className="text-sm">
-      {parts.map((part, i) => (
-        <span key={i}>
-          {part}
-          {i < parts.length - 1 && (
-            <span className="inline-block bg-green-100 border-2 border-green-600 px-2 py-0.5 rounded-md font-medium text-foreground mx-0.5">
-              {blanks[i] ?? '______'}
-            </span>
-          )}
-        </span>
-      ))}
-    </p>
+    <MathTextPreview text={rendered} className="text-sm [&_p]:mb-0" />
   );
 }
 
@@ -218,6 +214,40 @@ function parseKeyPointToKeyIdea(raw: string): KeyIdea {
   return { text, blanks };
 }
 
+/** Convert KeyIdea back to raw string (for editing) */
+function keyIdeaToRaw(idea: KeyIdea): string {
+  const parts = idea.text.split('__KEY__');
+  return parts
+    .map((p, i) => p + (i < (idea.blanks?.length ?? 0) ? `**${idea.blanks![i]}**` : ''))
+    .join('');
+}
+
+/** Parse task-design practice/exit_ticket item (question/answer or q/a) into GeneratedQuestion */
+function parseTaskDesignQuestion(item: Record<string, unknown>): GeneratedQuestion | null {
+  const question = (item?.question ?? item?.q) as string | undefined;
+  if (!question?.trim()) return null;
+  const answer = (item?.answer ?? item?.a) as string | undefined;
+  const options = Array.isArray(item?.options) ? (item.options as string[]) : undefined;
+  const rubric = (item?.rubric ?? item?.hint) as string | undefined;
+
+  let correctIndex: number | undefined;
+  if (options?.length && answer != null) {
+    const ansStr = String(answer).trim().toUpperCase();
+    const letter = ansStr.length >= 1 ? ansStr.charAt(0) : '';
+    if (letter >= 'A' && letter <= 'D') {
+      correctIndex = letter.charCodeAt(0) - 'A'.charCodeAt(0);
+    }
+  }
+
+  return {
+    question: question.trim(),
+    options,
+    correctIndex: correctIndex !== undefined ? correctIndex : undefined,
+    correctAnswer: answer != null ? String(answer).trim() : undefined,
+    explanation: rubric != null ? String(rubric).trim() : undefined,
+  };
+}
+
 /** Build a single SystemTask from the collected task-design data */
 function buildSystemTask(opts: {
   topic: string;
@@ -226,20 +256,27 @@ function buildSystemTask(opts: {
   difficulty: string;
   learningObjective: string;
   selectedVideoItem: VideoSearchItem | null;
+  customTextInstruction?: string;
   keyIdeas: KeyIdea[];
   practiceQuestions: GeneratedQuestion[];
-  exitTicketQuestion: GeneratedQuestion | null;
+  exitTicketQuestions: GeneratedQuestion[];
   taskDesignJson: Record<string, unknown> | null;
   taskDesignMarkdown: string | null;
   twinId?: string;
 }): SystemTask {
-  const selectedResourceKind = opts.selectedVideoItem?.resourceKind || 'video';
-  const resourceLabel = selectedResourceKind === 'document' ? '学习资料' : '视频';
-  const resourceActionText = selectedResourceKind === 'document' ? '阅读资料' : '观看视频';
-  const videoUrl = opts.selectedVideoItem?.url
-    ?? (opts.selectedVideoItem?.id
-      ? `https://www.youtube.com/watch?v=${opts.selectedVideoItem.id}`
-      : '');
+  const isTextInstruction = !!opts.customTextInstruction?.trim() && !opts.selectedVideoItem;
+  const selectedResourceKind = isTextInstruction ? 'text_instruction' : (opts.selectedVideoItem?.resourceKind || 'video');
+  const resourceLabel = isTextInstruction ? '学习指引' : selectedResourceKind === 'document' ? '学习资料' : '视频';
+  const resourceActionText = isTextInstruction ? '完成指引' : selectedResourceKind === 'document' ? '阅读资料' : '观看视频';
+  const platform = opts.selectedVideoItem ? normalizePlatform(opts.selectedVideoItem) : null;
+  const videoUrl = (() => {
+    const url = opts.selectedVideoItem?.url?.trim();
+    if (url) return url;
+    const id = opts.selectedVideoItem?.id;
+    if (!id) return '';
+    if (platform === 'bilibili') return `https://www.bilibili.com/video/${id}`;
+    return `https://www.youtube.com/watch?v=${id}`;
+  })();
 
   return {
     id: `task-${Date.now()}`,
@@ -247,24 +284,28 @@ function buildSystemTask(opts: {
     viewType: 'video_player',
     assetType: 'video_gen',
     externalResourceUrl: videoUrl,
+    videoPlatform: platform === 'youtube' || platform === 'bilibili' ? platform : undefined,
+    externalResourceId: opts.selectedVideoItem?.id && (platform === 'youtube' || platform === 'bilibili') ? opts.selectedVideoItem.id : undefined,
     contentPayload: JSON.stringify({
       learningObjective: opts.learningObjective,
       keyIdeas: opts.keyIdeas,
       practiceQuestions: opts.practiceQuestions,
-      exitTicket: opts.exitTicketQuestion,
+      exitTicketItems: opts.exitTicketQuestions,
       taskDesignJson: opts.taskDesignJson,
+      taskDesignMarkdown: opts.taskDesignMarkdown,
       resourceKind: selectedResourceKind,
       resourceMimeType: opts.selectedVideoItem?.mimeType || '',
+      customTextInstruction: isTextInstruction ? opts.customTextInstruction : undefined,
     }),
     // video_player should use externalResourceUrl (YouTube URL or media URL),
     // not markdown content.
     generatedAssetContent: '',
     description: [
       `学习目标：${opts.learningObjective}`,
-      opts.selectedVideoItem ? `${resourceLabel}：${opts.selectedVideoItem.title}` : '',
+      opts.selectedVideoItem ? `${resourceLabel}：${opts.selectedVideoItem.title}` : (isTextInstruction ? `学习指引：${opts.customTextInstruction}` : ''),
       `关键要点：${opts.keyIdeas.length} 条`,
       `练习题目：${opts.practiceQuestions.length} 题`,
-      opts.exitTicketQuestion ? `离场券：1 题` : '',
+      opts.exitTicketQuestions.length > 0 ? `离场券：${opts.exitTicketQuestions.length} 题` : '',
     ].filter(Boolean).join('\n'),
     assetPrompt: '',
     outputGoal: opts.learningObjective,
@@ -285,14 +326,10 @@ function buildSystemTask(opts: {
     evaluationCriteria: [
       `关键要点：能正确填写 ${opts.keyIdeas.length} 条要点中的核心术语`,
       `练习题目：正确率达到 80% 以上`,
-      opts.exitTicketQuestion ? `离场券：能正确回答离场券问题` : '',
+      opts.exitTicketQuestions.length > 0 ? `离场券：能正确回答离场券问题` : '',
     ].filter(Boolean).join('\n'),
   };
 }
-
-const SUBJECT_OPTIONS = [
-  '语文', '数学', '英语', '物理', '化学', '生物', '历史', '地理', '政治', '其他',
-];
 
 const DIFFICULTY_OPTIONS = ['基础', '提升', '挑战'] as const;
 
@@ -307,12 +344,13 @@ export function TeachingResourcesPage() {
   const { policy } = useRuntimePolicy();
   const experience = resolveRuntimeExperienceConfig();
   const { refreshTasks } = useTasks();
-  const [availableTwins, setAvailableTwins] = useState<TeacherDigitalTwin[]>([]);
+  const [availableTwins, setAvailableTwins] = useState<Array<Pick<TeacherTwin, 'id' | 'name'> & { isOwner: boolean }>>([]);
   const [selectedTwinId, setSelectedTwinId] = useState<string>('');
   const [step, setStep] = useState(0);
   const [maxStepReached, setMaxStepReached] = useState(0);
   const [taskType, setTaskType] = useState<'mastery' | 'guided' | 'autonomous'>('mastery');
   const [entrySubject, setEntrySubject] = useState('物理');
+  const [entryCustomSubject, setEntryCustomSubject] = useState('');
   const [entryTopic, setEntryTopic] = useState('牛顿第一定律');
   const [entryGrade, setEntryGrade] = useState('高一');
   const [entryLanguage, setEntryLanguage] = useState<'zh' | 'en'>('zh');
@@ -323,9 +361,12 @@ export function TeachingResourcesPage() {
   const [videoContent, setVideoContent] = useState<VideoContentResult | null>(null);
   const [selectedVideoItem, setSelectedVideoItem] = useState<VideoSearchItem | null>(null);
   const [keyIdeas, setKeyIdeas] = useState<KeyIdea[]>([]);
+  const [editingKeyIdeaIndex, setEditingKeyIdeaIndex] = useState<number | null>(null);
   const [practiceQuestions, setPracticeQuestions] = useState<GeneratedQuestion[]>([]);
-  const [exitTicketQuestion, setExitTicketQuestion] = useState<GeneratedQuestion | null>(null);
-  const [showExitAnswer, setShowExitAnswer] = useState(false);
+  const [editingPracticeIndex, setEditingPracticeIndex] = useState<number | null>(null);
+  const [exitTicketQuestions, setExitTicketQuestions] = useState<GeneratedQuestion[]>([]);
+  const [editingExitTicketIndex, setEditingExitTicketIndex] = useState<number | null>(null);
+  const [showExitAnswers, setShowExitAnswers] = useState<Record<number, boolean>>({});
   const [showAnswers, setShowAnswers] = useState<Record<number, boolean>>({});
   const [userSelections, setUserSelections] = useState<Record<number, number>>({});
 
@@ -333,10 +374,12 @@ export function TeachingResourcesPage() {
   const [searchResults, setSearchResults] = useState<VideoSearchItem[]>([]);
   const [customVideoItems, setCustomVideoItems] = useState<VideoSearchItem[]>([]);
   const [pasteUrl, setPasteUrl] = useState('');
+  const [customTextInstruction, setCustomTextInstruction] = useState('');
   const [loading, setLoading] = useState(false);
   const [uploadingResource, setUploadingResource] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [objectiveLoading, setObjectiveLoading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const generateTaskDesignPromiseRef = useRef<Promise<{ objective: string; json?: Record<string, unknown>; markdown?: string }> | null>(null);
   const taskDesignJsonRef = useRef<Record<string, unknown> | null>(null);
   const taskDesignMarkdownRef = useRef<string | null>(null);
@@ -365,8 +408,17 @@ export function TeachingResourcesPage() {
 
   useEffect(() => {
     if (!user?.id) return;
-    listTeacherDigitalTwins(user.id, { includeShared: true })
-      .then((res) => setAvailableTwins(res.twins ?? []))
+    listTeacherTwins(user.id)
+      .then((res) =>
+        setAvailableTwins(
+          (res.twins ?? []).map((twin) => ({
+            id: twin.id,
+            name: twin.name,
+            // teacher_twin list is owner-scoped in current API.
+            isOwner: true,
+          }))
+        )
+      )
       .catch((err) => console.error('Failed to load digital twins:', err));
   }, [user?.id]);
 
@@ -377,19 +429,25 @@ export function TeachingResourcesPage() {
     const prefs = getTeacherPreferencesFromProfile(preferences);
     if (prefs.defaultGrade && GRADE_OPTIONS.some((g) => g === prefs.defaultGrade)) setEntryGrade(prefs.defaultGrade);
     const subjectDisplay = prefSubjectIdToDisplay(prefs.defaultSubject);
-    if (subjectDisplay && SUBJECT_OPTIONS.includes(subjectDisplay)) setEntrySubject(subjectDisplay);
+    if (subjectDisplay && SUBJECT_OPTIONS.includes(subjectDisplay)) {
+      setEntrySubject(subjectDisplay);
+    } else if (subjectDisplay) {
+      setEntrySubject(CUSTOM_SUBJECT_OPTION);
+      setEntryCustomSubject(subjectDisplay);
+    }
   }, [preferences?.defaultGrade, preferences?.defaultSubject]);
 
   const completedSteps = new Set<number>();
   if (learningObjective.trim()) completedSteps.add(1);
-  if (videoContent) completedSteps.add(2);
+  if (videoContent || customTextInstruction.trim()) completedSteps.add(2);
   if (keyIdeas.length > 0) completedSteps.add(3);
   if (practiceQuestions.length > 0) completedSteps.add(4);
-  if (exitTicketQuestion) completedSteps.add(5);
+  if (exitTicketQuestions.length > 0) completedSteps.add(5);
 
   const handleStartTaskDesign = () => {
+    const effectiveSubject = (entrySubject === CUSTOM_SUBJECT_OPTION ? entryCustomSubject : entrySubject).trim();
     const topic = entryTopic.trim();
-    if (!topic) return;
+    if (!topic || !effectiveSubject) return;
     setTaskDesignReady(false);
     setRestReady(false);
     void trackProductEvent({
@@ -397,10 +455,10 @@ export function TeachingResourcesPage() {
       role: 'teacher',
       teacherId: user?.id,
       language: entryLanguage,
-      properties: { source: 'TeachingResourcesPage', subject: entrySubject, grade: entryGrade, topic },
+      properties: { source: 'TeachingResourcesPage', subject: effectiveSubject, grade: entryGrade, topic },
     }).catch(() => undefined);
     const promise = generateTaskDesign({
-      subject: entrySubject,
+      subject: effectiveSubject,
       topic,
       grade: entryGrade,
       duration: entryDuration.trim() || '15',
@@ -506,6 +564,15 @@ export function TeachingResourcesPage() {
   const handleSelectVideo = (item: VideoSearchItem) => {
     setSelectedVideoItem(item);
     setVideoContent({ title: item.title });
+    setCustomTextInstruction('');
+    setError(null);
+  };
+
+  const handleUseTextInstruction = () => {
+    const text = customTextInstruction.trim();
+    if (!text) return;
+    setSelectedVideoItem(null);
+    setVideoContent({ title: text });
     setError(null);
   };
 
@@ -525,6 +592,7 @@ export function TeachingResourcesPage() {
       setCustomVideoItems((prev) => [item, ...prev]);
       setSelectedVideoItem(item);
       setVideoContent({ title: uploaded.name });
+      setCustomTextInstruction('');
     } catch (e) {
       setError(e instanceof Error ? e.message : '上传失败，请改用粘贴视频链接');
     } finally {
@@ -540,38 +608,37 @@ export function TeachingResourcesPage() {
     setMaxStepReached((m) => Math.max(m, 3));
   };
 
-  // 进入 Step 4 时从 json.practice 填充练习题目
+  // 进入 Step 4 时从 json.practice 填充练习题目（依赖 restReady，Phase 2 完成后会重新执行）
+  // 兼容 task.json 格式：guided_practice/independent_practice 或 we_do/you_do，字段 question/answer 或 q/a
   useEffect(() => {
-    if (step !== 4 || practiceQuestions.length > 0) return;
+    if (step !== 4 || practiceQuestions.length > 0 || !restReady) return;
     const json = taskDesignJsonRef.current;
-    const practice = json?.practice as {
-      guided_practice?: { q: string; a: string }[];
-      independent_practice?: { q: string; a: string }[];
-      we_do?: { q: string; a: string }[];
-      you_do?: { q: string; a: string }[];
-    } | undefined;
+    const practice = json?.practice as Record<string, unknown> | undefined;
     if (!practice) return;
+    const guided = (Array.isArray(practice.guided_practice) ? practice.guided_practice : practice.we_do) as Record<string, unknown>[] | undefined;
+    const independent = (Array.isArray(practice.independent_practice) ? practice.independent_practice : practice.you_do) as Record<string, unknown>[] | undefined;
     const list: GeneratedQuestion[] = [];
-    const guided = practice.guided_practice || practice.we_do || [];
-    const independent = practice.independent_practice || practice.you_do || [];
-    guided.forEach((item) => {
-      if (item?.q) list.push({ question: item.q, correctAnswer: item.a });
-    });
-    independent.forEach((item) => {
-      if (item?.q) list.push({ question: item.q, correctAnswer: item.a });
+    [...(guided || []), ...(independent || [])].forEach((item) => {
+      const parsed = parseTaskDesignQuestion(item);
+      if (parsed) list.push(parsed);
     });
     if (list.length > 0) setPracticeQuestions(list);
-  }, [step, practiceQuestions.length]);
+  }, [step, practiceQuestions.length, restReady]);
 
-  // 进入 Step 5 时从 json.exit_ticket 填充离场券
+  // 进入 Step 5 时从 json.exit_ticket 填充离场券（依赖 restReady，Phase 2 完成后会重新执行）
+  // 兼容 task.json 格式：exit_ticket 为直接数组，或 { items: [...] }；字段 question/answer 或 q/a
   useEffect(() => {
-    if (step !== 5 || exitTicketQuestion) return;
+    if (step !== 5 || exitTicketQuestions.length > 0 || !restReady) return;
     const json = taskDesignJsonRef.current;
-    const exitTicket = json?.exit_ticket as { items?: { q: string; a: string }[] } | undefined;
-    const items = exitTicket?.items || [];
-    const first = items[0];
-    if (first?.q) setExitTicketQuestion({ question: first.q, correctAnswer: first.a });
-  }, [step, exitTicketQuestion]);
+    const rawTicket = json?.exit_ticket;
+    const items = Array.isArray(rawTicket) ? rawTicket : (Array.isArray((rawTicket as Record<string, unknown>)?.items) ? (rawTicket as { items: unknown[] }).items : []) as Record<string, unknown>[];
+    const list: GeneratedQuestion[] = [];
+    items.forEach((item) => {
+      const parsed = parseTaskDesignQuestion(item);
+      if (parsed) list.push(parsed);
+    });
+    if (list.length > 0) setExitTicketQuestions(list);
+  }, [step, exitTicketQuestions.length, restReady]);
 
   // 阶段二完成且当前在 Step 3 时，从 ref 填充 keyIdeas
   useEffect(() => {
@@ -592,14 +659,15 @@ export function TeachingResourcesPage() {
       // 1. Build the SystemTask from local data
       const task = buildSystemTask({
         topic: entryTopic,
-        subject: entrySubject,
+        subject: (entrySubject === CUSTOM_SUBJECT_OPTION ? entryCustomSubject : entrySubject).trim(),
         grade: entryGrade,
         difficulty: entryDifficulty,
         learningObjective,
         selectedVideoItem,
+        customTextInstruction: !selectedVideoItem && videoContent ? videoContent.title : undefined,
         keyIdeas,
         practiceQuestions,
-        exitTicketQuestion,
+        exitTicketQuestions,
         taskDesignJson: taskDesignJsonRef.current,
         taskDesignMarkdown: taskDesignMarkdownRef.current,
         twinId: selectedTwinId || undefined,
@@ -607,8 +675,11 @@ export function TeachingResourcesPage() {
       setGeneratedTask(task);
 
       // 2. Save task to tasks table, then create course from taskIds
+      const subjectMeta = splitSubjectValue((entrySubject === CUSTOM_SUBJECT_OPTION ? entryCustomSubject : entrySubject).trim());
       const { taskId } = await saveTask(task, user?.id, {
-        subject: entrySubject,
+        subject: subjectMeta.subject,
+        subjectCustom: subjectMeta.subjectCustom,
+        subjectIsCustom: subjectMeta.subjectIsCustom,
         grade: entryGrade,
         topic: entryTopic,
         taskType,
@@ -624,7 +695,12 @@ export function TeachingResourcesPage() {
         taskId,
         properties: { source: 'TeachingResourcesPage', taskType },
       }).catch(() => undefined);
-      const result = await createCourse({ taskIds: [taskId] }, user?.id, { language: entryLanguage });
+      const result = await createCourse({ taskIds: [taskId] }, user?.id, {
+        language: entryLanguage,
+        subject: subjectMeta.subject,
+        subjectCustom: subjectMeta.subjectCustom,
+        subjectIsCustom: subjectMeta.subjectIsCustom,
+      });
       void trackProductEvent({
         eventName: 'course_create_succeeded',
         role: 'teacher',
@@ -664,6 +740,21 @@ export function TeachingResourcesPage() {
     }
   };
 
+  const handleExportTaskMarkdown = () => {
+    const markdown = taskDesignMarkdownRef.current;
+    if (!markdown?.trim()) {
+      window.alert('暂无可导出的任务文档');
+      return;
+    }
+    const blob = new Blob([markdown], { type: 'text/markdown;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `学习任务-${entryTopic || '未命名'}-${Date.now()}.md`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   const handleExportFull = async () => {
     const markdown = taskDesignMarkdownRef.current;
     let content: string;
@@ -675,7 +766,7 @@ export function TeachingResourcesPage() {
       lines.push(learningObjective);
       lines.push('');
       if (videoContent?.title) {
-        lines.push('# 教学视频');
+        lines.push('# 教学素材');
         lines.push(videoContent.title);
         lines.push('');
       }
@@ -697,11 +788,12 @@ export function TeachingResourcesPage() {
         });
         lines.push('');
       }
-      if (exitTicketQuestion) {
+      if (exitTicketQuestions.length > 0) {
         lines.push('# 离场券');
-        lines.push(exitTicketQuestion.question);
-        if (exitTicketQuestion.correctAnswer)
-          lines.push(`参考答案：${exitTicketQuestion.correctAnswer}`);
+        exitTicketQuestions.forEach((q, idx) => {
+          lines.push(`${idx + 1}. ${q.question}`);
+          if (q.correctAnswer) lines.push(`   参考答案：${q.correctAnswer}`);
+        });
       }
       content = lines.join('\n');
     }
@@ -778,7 +870,7 @@ export function TeachingResourcesPage() {
                   placeholder="输入任何主题，如：牛顿第三定律"
                   value={entryTopic}
                   onChange={(e) => setEntryTopic(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && entryTopic.trim() && handleStartTaskDesign()}
+                  onKeyDown={(e) => e.key === 'Enter' && entryTopic.trim() && (entrySubject === CUSTOM_SUBJECT_OPTION ? entryCustomSubject.trim() : entrySubject.trim()) && handleStartTaskDesign()}
                   className="h-11 text-base"
                 />
               </div>
@@ -798,6 +890,19 @@ export function TeachingResourcesPage() {
                     ))}
                   </select>
                 </div>
+                {entrySubject === CUSTOM_SUBJECT_OPTION && (
+                  <div>
+                    <label className="text-sm font-medium text-muted-foreground block mb-1">
+                      自定义学科
+                    </label>
+                    <Input
+                      placeholder="请输入学科名称"
+                      value={entryCustomSubject}
+                      onChange={(e) => setEntryCustomSubject(e.target.value)}
+                      className="h-11"
+                    />
+                  </div>
+                )}
                 <div>
                   <label className="text-sm font-medium text-muted-foreground block mb-1">
                     年级
@@ -887,7 +992,7 @@ export function TeachingResourcesPage() {
                 size="lg"
                 className="w-full h-12 mt-2"
                 onClick={handleStartTaskDesign}
-                disabled={!entryTopic.trim()}
+                disabled={!entryTopic.trim() || !(entrySubject === CUSTOM_SUBJECT_OPTION ? entryCustomSubject.trim() : entrySubject.trim())}
               >
                 <Sparkles className="w-5 h-5 mr-2" />
                 开始任务设计
@@ -913,7 +1018,7 @@ export function TeachingResourcesPage() {
                   <TypingText
                     text={`有效的课程，始于清晰、可评估的学习目标。
 
-本系统采用独创的「掌握型任务」设计原则：每个目标都力求具体、可操作，便于后续选择视频、设计关键要点和练习题目，形成完整闭环。
+本系统采用独创的「掌握型任务」设计原则：每个目标都力求具体、可操作，便于后续选择学习素材、设计关键要点和练习题目，形成完整闭环。
 
 我们会根据您填写的课程主题、学科、年级和难度，综合推荐一个学习目标。生成过程通常需要十到三十秒，请您耐心等待。`}
                     speed={35}
@@ -924,7 +1029,11 @@ export function TeachingResourcesPage() {
                       <Button
                         size="lg"
                         onClick={handleStartPlanning}
-                        disabled={!entryTopic.trim() || objectiveLoading}
+                        disabled={
+                          !entryTopic.trim()
+                          || !(entrySubject === CUSTOM_SUBJECT_OPTION ? entryCustomSubject.trim() : entrySubject.trim())
+                          || objectiveLoading
+                        }
                       >
                         {objectiveLoading ? (
                           <Loader2 className="w-5 h-5 animate-spin mr-2" />
@@ -952,9 +1061,9 @@ export function TeachingResourcesPage() {
                 <p className="text-sm text-muted-foreground mb-4">
                   我们为您的任务推荐了以下学习目标，您也可以直接编辑，进行优化。
                 </p>
-                <textarea
+                <Textarea
                   className="w-full min-h-[100px] rounded-md border border-input bg-background px-3 py-2 text-sm"
-                  placeholder="例如：我可以解释牛顿第三定律，并举例说明作用力与反作用力。"
+                  placeholder="例如：我可以解释牛顿第三定律，并举例说明作用力与反作用力。数学公式用 $...$ 表示，如 $F=ma$"
                   value={learningObjective}
                   onChange={(e) => setLearningObjective(e.target.value)}
                 />
@@ -966,10 +1075,17 @@ export function TeachingResourcesPage() {
                   <Button
                     onClick={() => {
                       if (!learningObjective.trim()) return;
-                      setStep(2);
-                      setMaxStepReached(2);
-                      generateTaskDesign({
-                        subject: entrySubject,
+                      const effectiveSubject = (entrySubject === CUSTOM_SUBJECT_OPTION ? entryCustomSubject : entrySubject).trim();
+                      setError(null);
+                      setKeyIdeas([]);
+                      setEditingKeyIdeaIndex(null);
+                      setPracticeQuestions([]);
+                      setEditingPracticeIndex(null);
+                      setExitTicketQuestions([]);
+                      setRestReady(false);
+                      // 启动 task.json 生成（Phase 2），后台运行，用户选择素材时并行
+                      const promise = generateTaskDesign({
+                        subject: effectiveSubject,
                         topic: entryTopic.trim(),
                         grade: entryGrade,
                         duration: entryDuration.trim() || '15',
@@ -977,17 +1093,20 @@ export function TeachingResourcesPage() {
                         prerequisites: entryPrerequisites || undefined,
                         objective: learningObjective.trim(),
                         language: entryLanguage,
-                      })
+                      });
+                      promise
                         .then((res) => {
                           taskDesignJsonRef.current = res.json ?? null;
                           taskDesignMarkdownRef.current = res.markdown ?? null;
                           setRestReady(true);
                         })
                         .catch((e) => setError(e instanceof Error ? e.message : '生成任务内容失败'));
+                      setStep(2);
+                      setMaxStepReached(2);
                     }}
                     disabled={!learningObjective.trim()}
                   >
-                    选择教学视频 <ChevronRight className="w-4 h-4 ml-1" />
+                    选择教学素材 <ChevronRight className="w-4 h-4 ml-1" />
                   </Button>
                 </div>
               </CardContent>
@@ -1009,7 +1128,7 @@ export function TeachingResourcesPage() {
               <Card className="flex-1 min-w-0 border border-gray-200 shadow-sm overflow-hidden">
                 <CardContent className="p-6">
                   <TypingText
-                    text={`当前市场策略：${marketLabel}，默认视频来源为 ${preferredPlatformLabel}。
+                    text={`当前默认视频来源为 ${preferredPlatformLabel}。
 
 您可以使用推荐搜索，也可以直接粘贴视频链接，或上传视频/文档资料作为学习输入。`}
                     speed={35}
@@ -1035,7 +1154,7 @@ export function TeachingResourcesPage() {
                       }}
                     >
                       <ChevronRight className="w-5 h-5 mr-2" />
-                      选择教学视频
+                      选择教学素材
                     </Button>
                   </div>
                 </CardContent>
@@ -1046,9 +1165,9 @@ export function TeachingResourcesPage() {
         /* 编辑页 - 横跨整个页面 */
         <div className="space-y-6 w-full">
           <div>
-            <h2 className="text-lg font-semibold mb-1">教学视频</h2>
+            <h2 className="text-lg font-semibold mb-1">教学素材</h2>
             <p className="text-sm text-muted-foreground mb-4">
-              {`当前默认来源：${preferredPlatformLabel}。您可查看推荐视频，或粘贴链接/上传资料。`}
+              {`当前默认来源：${preferredPlatformLabel}。您可查看推荐视频，粘贴自定义视频链接， 或者直接上传资料。您也可以在下面的文本框输入学习指引，引导学生通过洋葱app 或者课本学习。`}
             </p>
             <div className="mb-4">
               <Input
@@ -1137,10 +1256,38 @@ export function TeachingResourcesPage() {
                   <p className="text-sm font-medium text-muted-foreground">添加自定义视频</p>
                 </CardContent>
               </Card>
+              <Card
+                className="overflow-hidden border-2 border-dashed hover:border-primary/50 transition-colors cursor-pointer flex flex-col items-center justify-center min-h-[200px]"
+                onClick={() => !uploadingResource && fileInputRef.current?.click()}
+              >
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  className="hidden"
+                  accept="video/*,.pdf,.doc,.docx,.ppt,.pptx,.png,.jpg,.jpeg,.webp,.gif"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) void handleUploadResource(file);
+                    e.currentTarget.value = '';
+                  }}
+                />
+                <CardContent className="p-6 flex flex-col items-center justify-center flex-1 w-full">
+                  <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center mb-2">
+                    {uploadingResource ? (
+                      <Loader2 className="w-7 h-7 text-muted-foreground animate-spin" />
+                    ) : (
+                      <Upload className="w-7 h-7 text-muted-foreground" />
+                    )}
+                  </div>
+                  <p className="text-sm font-medium text-muted-foreground">
+                    {uploadingResource ? '正在上传…' : '上传资料'}
+                  </p>
+                </CardContent>
+              </Card>
           </div>
           )}
 
-          <div className="flex gap-2 pt-2">
+          <div className="flex flex-wrap gap-2 pt-2">
             <Input
               id="paste-url-input"
               placeholder="Paste YouTube / Bilibili URL"
@@ -1153,27 +1300,40 @@ export function TeachingResourcesPage() {
               <LinkIcon className="w-4 h-4 mr-1" />
               获取
             </Button>
-            <label className="inline-flex items-center">
-              <input
-                type="file"
-                className="hidden"
-                accept="video/*,.pdf,.doc,.docx,.ppt,.pptx,.png,.jpg,.jpeg,.webp,.gif"
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (file) void handleUploadResource(file);
-                  e.currentTarget.value = '';
-                }}
-              />
-              <span className="inline-flex h-10 items-center rounded-md border border-input bg-background px-3 text-sm cursor-pointer hover:bg-accent">
-                {uploadingResource ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Upload className="w-4 h-4 mr-1" />}
-                上传资料
-              </span>
-            </label>
+          </div>
+
+          <div className="mt-4 space-y-2">
+            <p className="text-sm font-medium text-muted-foreground">或输入学习指引（无视频/文档时）</p>
+            <Textarea
+              placeholder={'请打开洋葱APP学习（指定某单元某课），完成后进入下一步\n或者\n请学习课本内容（指定课本内容），完成后进入下一步'}
+              value={customTextInstruction}
+              onChange={(e) => setCustomTextInstruction(e.target.value)}
+              className="min-h-[80px] resize-y max-w-2xl"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  handleUseTextInstruction();
+                }
+              }}
+            />
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleUseTextInstruction}
+              disabled={!customTextInstruction.trim()}
+            >
+              <FileText className="w-4 h-4 mr-1" />
+              使用此指引
+            </Button>
           </div>
 
           {videoContent && (
             <p className="text-sm text-green-700">
-              已选视频：《{videoContent.title}》— 可点击下方按钮查看关键要点。
+              {selectedVideoItem ? (
+                <>已选素材：《{videoContent.title}》— 可点击下方按钮查看关键要点。</>
+              ) : (
+                <>已选学习指引：{videoContent.title}</>
+              )}
             </p>
           )}
 
@@ -1211,7 +1371,7 @@ export function TeachingResourcesPage() {
               <Card className="flex-1 min-w-0 border border-gray-200 shadow-sm overflow-hidden">
                 <CardContent className="p-6">
                   <TypingText
-                    text={`学生观看视频时应记录关键要点。
+                    text={`学生阅读或者观看素材时应记录关键要点。
 
 我们正在为您准备引导式笔记。`}
                     speed={35}
@@ -1235,7 +1395,7 @@ export function TeachingResourcesPage() {
               <CardContent className="p-6">
                 <h2 className="text-lg font-semibold mb-2">关键要点</h2>
                 <p className="text-sm text-muted-foreground mb-4">
-                  学生观看视频时可填写高亮术语。您可直接编辑下方内容。
+                  学生阅读或观看学习素材时可填写高亮关键词。点击文本框进入编辑模式。
                 </p>
                 {!restReady ? (
                   <div className="flex items-center gap-2 text-sm text-muted-foreground py-8">
@@ -1245,8 +1405,44 @@ export function TeachingResourcesPage() {
                 ) : keyIdeas.length > 0 ? (
                   <ol className="list-decimal list-inside space-y-3 text-sm mb-4">
                     {keyIdeas.map((idea, idx) => (
-                      <li key={idx}>
-                        <KeyIdeaBlock idea={idea} />
+                      <li key={idx} className="flex flex-col gap-2">
+                        <div className="flex gap-2">
+                          <span className="shrink-0 pt-2">{idx + 1}.</span>
+                          {editingKeyIdeaIndex === idx ? (
+                            <div className="flex-1 flex flex-col gap-2">
+                              <Textarea
+                                className="min-h-[60px] text-sm"
+                                value={keyIdeaToRaw(idea)}
+                                onChange={(e) => {
+                                  const next = [...keyIdeas];
+                                  next[idx] = parseKeyPointToKeyIdea(e.target.value);
+                                  setKeyIdeas(next);
+                                }}
+                                onBlur={() => setEditingKeyIdeaIndex(null)}
+                                autoFocus
+                                placeholder="用 **关键词** 包裹填空词，公式用 $...$，如：根据 $F=ma$，**力**等于质量乘以加速度"
+                              />
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="w-fit"
+                                onClick={() => setEditingKeyIdeaIndex(null)}
+                              >
+                                完成编辑
+                              </Button>
+                            </div>
+                          ) : (
+                            <div
+                              role="button"
+                              tabIndex={0}
+                              onClick={() => setEditingKeyIdeaIndex(idx)}
+                              onKeyDown={(e) => e.key === 'Enter' && setEditingKeyIdeaIndex(idx)}
+                              className="flex-1 min-h-[44px] px-3 py-2 rounded-md border border-transparent hover:border-slate-200 hover:bg-slate-50/80 cursor-text transition-colors text-left"
+                            >
+                              <KeyIdeaBlock idea={idea} />
+                            </div>
+                          )}
+                        </div>
                       </li>
                     ))}
                   </ol>
@@ -1304,7 +1500,7 @@ export function TeachingResourcesPage() {
               <CardContent className="p-6">
                 <h2 className="text-xl font-semibold mb-1">练习题目</h2>
                 <p className="text-sm text-muted-foreground mb-6">
-                  您可直接编辑下列题目，或点击「显示答案」查看参考答案。
+                  点击题目进入编辑模式，或点击「显示答案」查看参考答案。
                 </p>
             {practiceQuestions.length > 0 && (
               <div className="space-y-5 mb-6">
@@ -1322,79 +1518,167 @@ export function TeachingResourcesPage() {
                         <RefreshCw className="h-4 w-4 shrink-0 text-gray-400" />
                       ) : null}
                     </div>
-                    <p className="font-medium text-gray-900 mb-4">{q.question}</p>
-                    {q.options?.length ? (
-                      <div className="space-y-2 mb-4" role="radiogroup" aria-label={`第 ${idx + 1} 题选项`}>
-                        {q.options.map((opt, j) => {
-                          const selected = userSelections[idx] === j;
-                          const revealed = !!showAnswers[idx];
-                          const isCorrect = q.correctIndex === j;
-                          const isWrong = revealed && selected && !isCorrect;
-                          const showCorrect = revealed && isCorrect;
-                          const showWrong = revealed && selected && isWrong;
-                          return (
-                            <button
-                              key={j}
-                              type="button"
-                              role="radio"
-                              aria-checked={selected}
-                              aria-label={`选项 ${String.fromCharCode(65 + j)}: ${opt}`}
-                              onClick={() =>
-                                setUserSelections((prev) => {
-                                  const next = { ...prev };
-                                  if (prev[idx] === j) delete next[idx];
-                                  else next[idx] = j;
-                                  return next;
-                                })
-                              }
-                              className={`
-                                w-full flex items-center gap-3 rounded-lg px-3 py-2.5 text-left
-                                transition-colors cursor-pointer border-2
-                                hover:border-gray-400 hover:bg-gray-50
-                                focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-amber-400
-                                ${selected && !revealed ? 'border-amber-500 bg-amber-50/80' : 'border-transparent bg-gray-100'}
-                                ${showCorrect ? 'border-green-500 bg-green-50' : ''}
-                                ${showWrong ? 'border-red-400 bg-red-50' : ''}
-                              `}
-                            >
-                              <span
-                                className={`
-                                  flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-medium
-                                  ${showCorrect ? 'bg-green-500 text-white' : ''}
-                                  ${showWrong ? 'bg-red-400 text-white' : ''}
-                                  ${!revealed || (!showCorrect && !showWrong) ? 'bg-gray-500 text-white' : ''}
-                                `}
-                              >
-                                {String.fromCharCode(65 + j)}
-                              </span>
-                              <span className={showCorrect ? 'font-medium text-green-800' : showWrong ? 'text-red-800' : 'text-gray-800'}>
-                                {opt}
-                                {showCorrect && ' ✓'}
-                              </span>
-                            </button>
-                          );
-                        })}
+                    {editingPracticeIndex === idx ? (
+                      <div className="space-y-4">
+                        <Textarea
+                          className="font-medium text-gray-900 min-h-[60px]"
+                          value={q.question}
+                          onChange={(e) => {
+                            const next = [...practiceQuestions];
+                            next[idx] = { ...next[idx], question: e.target.value };
+                            setPracticeQuestions(next);
+                          }}
+                          placeholder="题目内容，公式用 $...$ 表示"
+                          autoFocus
+                        />
+                        {q.options?.length ? (
+                          <div className="space-y-2" role="radiogroup" aria-label={`第 ${idx + 1} 题选项`}>
+                            {q.options.map((opt, j) => {
+                              const selected = userSelections[idx] === j;
+                              const revealed = !!showAnswers[idx];
+                              const isCorrect = q.correctIndex === j;
+                              const isWrong = revealed && selected && !isCorrect;
+                              const showCorrect = revealed && isCorrect;
+                              const showWrong = revealed && selected && isWrong;
+                              return (
+                                <div key={j} className="flex items-center gap-3">
+                                  <button
+                                    type="button"
+                                    role="radio"
+                                    aria-checked={selected}
+                                    onClick={() =>
+                                      setUserSelections((prev) => {
+                                        const next = { ...prev };
+                                        if (prev[idx] === j) delete next[idx];
+                                        else next[idx] = j;
+                                        return next;
+                                      })
+                                    }
+                                    className={`
+                                      flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-medium
+                                      ${showCorrect ? 'bg-green-500 text-white' : ''}
+                                      ${showWrong ? 'bg-red-400 text-white' : ''}
+                                      ${!revealed || (!showCorrect && !showWrong) ? 'bg-gray-500 text-white' : ''}
+                                    `}
+                                  >
+                                    {String.fromCharCode(65 + j)}
+                                  </button>
+                                  <Input
+                                    className={`flex-1 ${
+                                      showCorrect ? 'border-green-500 bg-green-50' : ''
+                                    } ${showWrong ? 'border-red-400 bg-red-50' : ''}`}
+                                    value={opt}
+                                    onChange={(e) => {
+                                      const next = [...practiceQuestions];
+                                      const opts = [...(next[idx].options || [])];
+                                      opts[j] = e.target.value;
+                                      next[idx] = { ...next[idx], options: opts };
+                                      setPracticeQuestions(next);
+                                    }}
+                                    placeholder={`选项 ${String.fromCharCode(65 + j)}`}
+                                  />
+                                </div>
+                              );
+                            })}
+                          </div>
+                        ) : null}
+                        <div className="rounded-lg bg-green-50 p-3 text-sm space-y-2">
+                          <div>
+                            <span className="font-medium text-green-800">参考答案：</span>
+                            <Textarea
+                              className="mt-1 min-h-[50px] border-green-200 bg-white"
+                              value={q.correctAnswer || ''}
+                              onChange={(e) => {
+                                const next = [...practiceQuestions];
+                                next[idx] = { ...next[idx], correctAnswer: e.target.value };
+                                setPracticeQuestions(next);
+                              }}
+                              placeholder="参考答案"
+                            />
+                          </div>
+                          <div>
+                            <span className="font-medium text-green-800">解析：</span>
+                            <Textarea
+                              className="mt-1 min-h-[50px] border-green-200 bg-white"
+                              value={q.explanation || ''}
+                              onChange={(e) => {
+                                const next = [...practiceQuestions];
+                                next[idx] = { ...next[idx], explanation: e.target.value };
+                                setPracticeQuestions(next);
+                              }}
+                              placeholder="解析说明"
+                            />
+                          </div>
+                        </div>
+                        <Button size="sm" variant="outline" className="w-fit" onClick={() => setEditingPracticeIndex(null)}>
+                          完成编辑
+                        </Button>
                       </div>
-                    ) : null}
-                    <button
-                      type="button"
-                      className="flex items-center gap-1.5 text-sm text-gray-900 hover:text-gray-700"
-                      onClick={() =>
-                        setShowAnswers((prev) => ({ ...prev, [idx]: !prev[idx] }))
-                      }
-                    >
-                      <Eye className="h-4 w-4" />
-                      {showAnswers[idx] ? '隐藏答案' : '显示答案'}
-                    </button>
-                    {showAnswers[idx] && (q.correctAnswer || q.explanation) && (
-                      <div className="mt-3 rounded-lg bg-green-50 p-3 text-sm">
-                        {q.correctAnswer && (
-                          <p className="font-medium text-green-800">参考答案：{q.correctAnswer}</p>
+                    ) : (
+                      <>
+                        <div
+                          role="button"
+                          tabIndex={0}
+                          onClick={() => setEditingPracticeIndex(idx)}
+                          onKeyDown={(e) => e.key === 'Enter' && setEditingPracticeIndex(idx)}
+                          className="min-h-[44px] px-3 py-2 rounded-md border border-transparent hover:border-slate-200 hover:bg-slate-50/80 cursor-text transition-colors text-left mb-4"
+                        >
+                          <MathTextPreview text={q.question} className="font-medium text-gray-900 [&_p]:mb-0" />
+                        </div>
+                        {q.options?.length ? (
+                          <div className="space-y-2 mb-4" role="radiogroup" aria-label={`第 ${idx + 1} 题选项`}>
+                            {q.options.map((opt, j) => {
+                              const selected = userSelections[idx] === j;
+                              const revealed = !!showAnswers[idx];
+                              const isCorrect = q.correctIndex === j;
+                              const isWrong = revealed && selected && !isCorrect;
+                              const showCorrect = revealed && isCorrect;
+                              const showWrong = revealed && selected && isWrong;
+                              return (
+                                <div key={j} className="flex items-center gap-3">
+                                  <button
+                                    type="button"
+                                    role="radio"
+                                    aria-checked={selected}
+                                    onClick={(e) => { e.stopPropagation(); setUserSelections((prev) => { const next = { ...prev }; if (prev[idx] === j) delete next[idx]; else next[idx] = j; return next; }); }}
+                                    className={`
+                                      flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-medium
+                                      ${showCorrect ? 'bg-green-500 text-white' : ''}
+                                      ${showWrong ? 'bg-red-400 text-white' : ''}
+                                      ${!revealed || (!showCorrect && !showWrong) ? 'bg-gray-500 text-white' : ''}
+                                    `}
+                                  >
+                                    {String.fromCharCode(65 + j)}
+                                  </button>
+                                  <MathTextPreview text={opt} className="flex-1 [&_p]:mb-0" />
+                                </div>
+                              );
+                            })}
+                          </div>
+                        ) : null}
+                        <button
+                          type="button"
+                          className="flex items-center gap-1.5 text-sm text-gray-900 hover:text-gray-700"
+                          onClick={(e) => { e.stopPropagation(); setShowAnswers((prev) => ({ ...prev, [idx]: !prev[idx] })); }}
+                        >
+                          <Eye className="h-4 w-4" />
+                          {showAnswers[idx] ? '隐藏答案' : '显示答案'}
+                        </button>
+                        {showAnswers[idx] && (
+                          <div className="mt-3 rounded-lg bg-green-50 p-3 text-sm space-y-2">
+                            <div>
+                              <span className="font-medium text-green-800">参考答案：</span>
+                              <MathTextPreview text={q.correctAnswer || ''} className="mt-1 [&_p]:mb-0" />
+                            </div>
+                            {q.explanation && (
+                              <div>
+                                <span className="font-medium text-green-800">解析：</span>
+                                <MathTextPreview text={q.explanation} className="mt-1 [&_p]:mb-0" />
+                              </div>
+                            )}
+                          </div>
                         )}
-                        {q.explanation && (
-                          <p className="mt-1 text-green-700/90">解析：{q.explanation}</p>
-                        )}
-                      </div>
+                      </>
                     )}
                   </div>
                 ))}
@@ -1450,24 +1734,72 @@ export function TeachingResourcesPage() {
               <CardContent className="p-6">
                 <h2 className="text-lg font-semibold mb-2">离场券</h2>
                 <p className="text-sm text-muted-foreground mb-4">
-                  课程结束时用一道题检验学习效果。可编辑。
+                  课程结束时用题目检验学习效果。点击题目进入编辑模式。
                 </p>
-                {exitTicketQuestion && (
-                  <div className="space-y-2 mb-4">
-                    <p className="font-medium">{exitTicketQuestion.question}</p>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-auto py-0 text-xs"
-                      onClick={() => setShowExitAnswer((a) => !a)}
-                    >
-                      {showExitAnswer ? '隐藏答案' : '显示答案'}
-                    </Button>
-                    {showExitAnswer && exitTicketQuestion.correctAnswer && (
-                      <p className="text-sm text-muted-foreground">
-                        参考答案：{exitTicketQuestion.correctAnswer}
-                      </p>
-                    )}
+                {exitTicketQuestions.length > 0 && (
+                  <div className="space-y-4 mb-4">
+                    {exitTicketQuestions.map((q, idx) => (
+                      <div key={idx} className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+                        <label className="font-medium text-gray-900 block mb-2">{idx + 1}. 题目</label>
+                        {editingExitTicketIndex === idx ? (
+                          <div className="space-y-3">
+                            <Textarea
+                              className="mb-2 min-h-[60px]"
+                              value={q.question}
+                              onChange={(e) => {
+                                const next = [...exitTicketQuestions];
+                                next[idx] = { ...next[idx], question: e.target.value };
+                                setExitTicketQuestions(next);
+                              }}
+                              placeholder="题目内容，公式用 $...$ 表示"
+                              autoFocus
+                            />
+                            <div>
+                              <label className="text-sm font-medium text-gray-700">参考答案</label>
+                              <Textarea
+                                className="mt-1 min-h-[50px]"
+                                value={q.correctAnswer || ''}
+                                onChange={(e) => {
+                                  const next = [...exitTicketQuestions];
+                                  next[idx] = { ...next[idx], correctAnswer: e.target.value };
+                                  setExitTicketQuestions(next);
+                                }}
+                                placeholder="参考答案"
+                              />
+                            </div>
+                            <Button size="sm" variant="outline" className="w-fit" onClick={() => setEditingExitTicketIndex(null)}>
+                              完成编辑
+                            </Button>
+                          </div>
+                        ) : (
+                          <>
+                            <div
+                              role="button"
+                              tabIndex={0}
+                              onClick={() => setEditingExitTicketIndex(idx)}
+                              onKeyDown={(e) => e.key === 'Enter' && setEditingExitTicketIndex(idx)}
+                              className="min-h-[44px] px-3 py-2 rounded-md border border-transparent hover:border-slate-200 hover:bg-slate-50/80 cursor-text transition-colors text-left mb-2"
+                            >
+                              <MathTextPreview text={q.question} className="font-medium text-gray-900 [&_p]:mb-0" />
+                            </div>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-auto py-0 text-xs"
+                              onClick={(e) => { e.stopPropagation(); setShowExitAnswers((prev) => ({ ...prev, [idx]: !prev[idx] })); }}
+                            >
+                              {showExitAnswers[idx] ? '隐藏答案' : '显示答案'}
+                            </Button>
+                            {showExitAnswers[idx] && (
+                              <div className="mt-2">
+                                <label className="text-sm font-medium text-gray-700">参考答案</label>
+                                <MathTextPreview text={q.correctAnswer || ''} className="mt-1 [&_p]:mb-0" />
+                              </div>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    ))}
                   </div>
                 )}
                 <div className="flex justify-end gap-2 mt-4">
@@ -1558,7 +1890,9 @@ export function TeachingResourcesPage() {
                   <li>• 视频：{selectedVideoItem?.title ?? '无'}</li>
                   <li>• 关键要点：{keyIdeas.length} 条</li>
                   <li>• 练习题目：{practiceQuestions.length} 题</li>
-                  {exitTicketQuestion && <li>• 离场券：1 题</li>}
+                  {exitTicketQuestions.length > 0 && (
+                    <li>• 离场券：{exitTicketQuestions.length} 题</li>
+                  )}
                 </ul>
                 <div className="flex justify-end gap-2">
                   <Button variant="outline" onClick={() => setStep(5)}>
@@ -1567,7 +1901,11 @@ export function TeachingResourcesPage() {
                   </Button>
                   <Button variant="outline" onClick={handleExportTask} disabled={pdfExporting}>
                     {pdfExporting ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Download className="w-4 h-4 mr-1" />}
-                    导出任务文档
+                    导出任务文档(PDF)
+                  </Button>
+                  <Button variant="outline" onClick={handleExportTaskMarkdown}>
+                    <Download className="w-4 h-4 mr-1" />
+                    导出任务文档(MD)
                   </Button>
                   <Button
                     onClick={() => {

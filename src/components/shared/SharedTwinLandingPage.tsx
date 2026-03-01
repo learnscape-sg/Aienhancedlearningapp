@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { BookOpen, Loader2, AlertCircle } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
-import { resolveDigitalTwinShareToken } from '@/lib/backendApi';
+import { resolveTeacherTwinShareToken } from '@/lib/backendApi';
 
 export function SharedTwinLandingPage() {
   const { token } = useParams<{ token: string }>();
@@ -24,7 +24,7 @@ export function SharedTwinLandingPage() {
       setLoading(false);
       return;
     }
-    resolveDigitalTwinShareToken(token)
+    resolveTeacherTwinShareToken(token)
       .then((data) => setInfo(data))
       .catch((err) => setError(err instanceof Error ? err.message : '链接无效或已过期'))
       .finally(() => setLoading(false));

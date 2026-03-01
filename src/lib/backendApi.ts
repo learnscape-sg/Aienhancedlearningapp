@@ -184,11 +184,28 @@ export async function generateTaskAsset(
 export async function createCourse(
   input: SystemTaskPlan | { taskIds: string[] },
   teacherId?: string,
-  meta?: { subject?: string; topic?: string; grade?: string; language?: 'zh' | 'en' }
+  meta?: {
+    subject?: string;
+    subjectCustom?: string;
+    subjectIsCustom?: boolean;
+    topic?: string;
+    grade?: string;
+    language?: 'zh' | 'en';
+  }
 ): Promise<{ courseId: string; url: string }> {
   const base = Array.isArray((input as { taskIds?: string[] }).taskIds)
     ? { taskIds: (input as { taskIds: string[] }).taskIds, ...(meta?.language && { language: meta.language }) }
-    : { plan: input as SystemTaskPlan, ...(meta && { subject: meta.subject, topic: meta.topic, grade: meta.grade, language: meta.language }) };
+    : {
+        plan: input as SystemTaskPlan,
+        ...(meta && {
+          subject: meta.subject,
+          subjectCustom: meta.subjectCustom,
+          subjectIsCustom: meta.subjectIsCustom,
+          topic: meta.topic,
+          grade: meta.grade,
+          language: meta.language,
+        }),
+      };
   const body = teacherId != null ? { ...base, teacherId } : base;
   return apiCall<{ courseId: string; url: string }>('/api/courses', {
     method: 'POST',
@@ -202,6 +219,8 @@ export async function saveTask(
   teacherId?: string,
   meta?: {
     subject?: string;
+    subjectCustom?: string;
+    subjectIsCustom?: boolean;
     grade?: string;
     topic?: string;
     taskType?: string;
@@ -233,6 +252,9 @@ export async function listTeacherTasks(
   tasks: {
     taskId: string;
     subject?: string;
+    subjectRaw?: string;
+    subjectCustom?: string;
+    subjectIsCustom?: boolean;
     grade?: string;
     topic?: string;
     taskType?: string;
@@ -241,6 +263,8 @@ export async function listTeacherTasks(
     prerequisites?: string;
     isPublic?: boolean;
     publishedAt?: string;
+    scheduledPublishAt?: string;
+    publishStatus?: 'draft' | 'scheduled' | 'published' | 'cancelled';
     deletedAt?: string;
     canRestore?: boolean;
     createdAt?: string;
@@ -264,11 +288,17 @@ export async function deleteTask(taskId: string, teacherId: string): Promise<voi
 export async function updateTaskVisibility(
   taskId: string,
   teacherId: string,
-  action: 'publish' | 'unpublish'
-): Promise<{ success: boolean; isPublic: boolean }> {
+  action: 'publish' | 'unpublish' | 'schedule',
+  scheduledPublishAt?: string
+): Promise<{
+  success: boolean;
+  isPublic?: boolean;
+  publishStatus?: 'draft' | 'scheduled' | 'published' | 'cancelled';
+  scheduledPublishAt?: string;
+}> {
   return apiCall('/api/tasks', {
     method: 'PATCH',
-    body: JSON.stringify({ id: taskId, teacherId, action }),
+    body: JSON.stringify({ id: taskId, teacherId, action, ...(scheduledPublishAt ? { scheduledPublishAt } : {}) }),
   });
 }
 
@@ -465,6 +495,9 @@ export interface TeacherCourseItem {
   visibilityStatus?: 'private' | 'public';
   shareStatus?: 'none' | 'shared';
   status: 'published' | 'draft';
+  publishStatus?: 'draft' | 'scheduled' | 'published' | 'cancelled';
+  scheduledPublishAt?: string | null;
+  publishedAt?: string | null;
   assignmentCount: number;
   students: number;
   completion: number;
@@ -513,11 +546,17 @@ export async function deleteCourse(courseId: string, teacherId: string): Promise
 export async function updateCourseVisibility(
   courseId: string,
   teacherId: string,
-  action: 'publish' | 'unpublish'
-): Promise<{ success: boolean; visibility: 'private' | 'public' }> {
+  action: 'publish' | 'unpublish' | 'schedule',
+  scheduledPublishAt?: string
+): Promise<{
+  success: boolean;
+  visibility?: 'private' | 'public';
+  publishStatus?: 'draft' | 'scheduled' | 'published' | 'cancelled';
+  scheduledPublishAt?: string;
+}> {
   return apiCall('/api/courses', {
     method: 'PATCH',
-    body: JSON.stringify({ id: courseId, teacherId, action }),
+    body: JSON.stringify({ id: courseId, teacherId, action, ...(scheduledPublishAt ? { scheduledPublishAt } : {}) }),
   });
 }
 
@@ -755,8 +794,24 @@ export async function resolveDigitalTwinShareToken(
   teachingStyle: string;
   ownerTeacherId: string;
 }> {
+  // Compatibility wrapper: shared twin landing now resolves via teacher-twin API.
+  return resolveTeacherTwinShareToken(shareToken);
+}
+
+export async function resolveTeacherTwinShareToken(
+  shareToken: string
+): Promise<{
+  twinId: string;
+  name: string;
+  avatar?: string;
+  persona: string;
+  teachingStyle: string;
+  ownerTeacherId: string;
+}> {
+  // teacher_twin resolve keeps legacy landing payload stable.
+  // Field mapping order is implemented server-side in /api/teacher-twins/resolve.
   return apiCall(
-    `/api/digital-twins/resolve?shareToken=${encodeURIComponent(shareToken)}`,
+    `/api/teacher-twins/resolve?shareToken=${encodeURIComponent(shareToken)}`,
     { method: 'GET' }
   );
 }

@@ -6,7 +6,7 @@
   "inputPlaceholder": "请输入你的回答...",
   "aiProcessing": "AI 导师思考中...",
   "operator": "学生",
-  "aiSystem": "AI 导师",
+  "aiSystem": "AI 学习教练",
   "missionObjective": "任务目标",
   "systemInstructions": "操作指南",
   "mindMapTip": "编辑上方代码，下方实时生成",
@@ -33,13 +33,16 @@
   "hintClickDone": "完成后请点击 \"我做完了\" ，遇到困难请点击 \"我卡住了\"",
   "nextStep": "进入下一步",
   "nextTask": "进入下一个任务",
-  "tutorOnline": "导师在线",
+  "tutorOnline": "教练在线",
   "voiceBroadcast": "语音播报",
   "voiceOn": "已开启",
   "voiceOff": "已关闭",
   "voiceTurnOn": "开启语音播报",
   "voiceTurnOff": "关闭语音播报",
   "selectVoice": "选择语音",
+  "fontSizeSmall": "小",
+  "fontSizeMedium": "中",
+  "fontSizeLarge": "大",
   "loadingVoices": "加载中…",
   "noVoices": "暂无可用语音",
   "voiceFemale": "(女)",
@@ -51,7 +54,7 @@
   "recognizing": "正在识别语音...",
   "speechError": "语音识别错误",
   "guidedStep1": "我能明确目标",
-  "guidedStep2": "我能看懂视频",
+  "guidedStep2": "我能自主学习",
   "guidedStep3": "我能总结要点",
   "guidedStep4": "我能练一练",
   "guidedStep5": "我能完成复盘",
@@ -96,5 +99,16 @@
   "viewReferenceAnswer": "查看参考答案",
   "hideReferenceAnswer": "隐藏参考答案",
   "handwrittenAnswer": "手写答案",
-  "uploadHandwrittenAnswer": "点击上传手写答案图片"
+  "uploadHandwrittenAnswer": "点击上传手写答案图片",
+  "takePhotoUpload": "拍照上传",
+  "guidedStep1PresetReplies": [
+    "很好！你已经明确了学习目标，点击下方按钮进入下一步吧。",
+    "学习目标已确认，继续加油！点击下方按钮进入下一步。",
+    "目标明确，思路清晰，很棒！点击下方按钮进入下一步。"
+  ],
+  "guidedStep2PresetReplies": [
+    "太棒了！自主学习完成得不错，继续加油！点击下方按钮进入下一步。",
+    "自主学习做得很好，继续保持！点击下方按钮进入下一步。",
+    "你已经完成自主学习，很棒！点击下方按钮进入下一步。"
+  ]
 }

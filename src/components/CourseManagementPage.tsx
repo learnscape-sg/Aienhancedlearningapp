@@ -27,6 +27,7 @@ import {
   listTeacherTasks,
   restoreTask,
   listTeacherCoursesWithStats,
+  updateCourseVisibility,
   listSharedCourses,
   deleteCourse,
   restoreCourse,
@@ -120,6 +121,8 @@ export function CourseManagementPage({ initialCourseTab }: { initialCourseTab?: 
   const [selectedClasses, setSelectedClasses] = useState<string[]>([]);
   const [assignedClasses, setAssignedClasses] = useState<Array<{ id: string; name: string; grade?: string; studentCount: number }>>([]);
   const [assigning, setAssigning] = useState(false);
+  const [publishMode, setPublishMode] = useState<'now' | 'schedule'>('now');
+  const [scheduledPublishAt, setScheduledPublishAt] = useState('');
   const [classes, setClasses] = useState<Class[]>([]);
   const [classesLoading, setClassesLoading] = useState(false);
 
@@ -256,6 +259,8 @@ export function CourseManagementPage({ initialCourseTab }: { initialCourseTab?: 
     if (!taskIds.length) return;
     setSelectedTaskIdsForAssign(taskIds);
     setSelectedClasses([]);
+    setPublishMode('now');
+    setScheduledPublishAt('');
     setTaskAssignDialogOpen(true);
   };
 
@@ -308,6 +313,12 @@ export function CourseManagementPage({ initialCourseTab }: { initialCourseTab?: 
     try {
       const created = await createCourse({ taskIds: selectedTaskIdsForAssign }, user.id);
       const result = await assignCourseToClasses(created.courseId, selectedClasses, user.id);
+      if (publishMode === 'schedule') {
+        if (!scheduledPublishAt) throw new Error('请选择定时发布时间');
+        await updateCourseVisibility(created.courseId, user.id, 'schedule', new Date(scheduledPublishAt).toISOString());
+      } else {
+        await updateCourseVisibility(created.courseId, user.id, 'publish');
+      }
       const message =
         result.skippedCount && result.skippedCount > 0
           ? `成功分配 ${result.assignedCount} 个班级，${result.skippedCount} 个班级已分配过`
@@ -329,6 +340,8 @@ export function CourseManagementPage({ initialCourseTab }: { initialCourseTab?: 
     if (!user?.id) return;
     setSelectedCourse(course);
     setSelectedClasses([]);
+    setPublishMode('now');
+    setScheduledPublishAt('');
     setCourseAssignDialogOpen(true);
     try {
       const { classes: assigned } = await getCourseAssignments(course.id, user.id);
@@ -360,6 +373,12 @@ export function CourseManagementPage({ initialCourseTab }: { initialCourseTab?: 
     setAssigning(true);
     try {
       const result = await assignCourseToClasses(selectedCourse.id, selectedClasses, user.id);
+      if (publishMode === 'schedule') {
+        if (!scheduledPublishAt) throw new Error('请选择定时发布时间');
+        await updateCourseVisibility(selectedCourse.id, user.id, 'schedule', new Date(scheduledPublishAt).toISOString());
+      } else {
+        await updateCourseVisibility(selectedCourse.id, user.id, 'publish');
+      }
       const classNames = classes.filter((c) => selectedClasses.includes(c.id)).map((c) => c.name).join('、');
       const message =
         result.skippedCount && result.skippedCount > 0
@@ -826,6 +845,26 @@ export function CourseManagementPage({ initialCourseTab }: { initialCourseTab?: 
               </div>
             </CardHeader>
             <CardContent className="p-6 space-y-4 overflow-y-auto">
+              <div className="space-y-2 border rounded-lg p-3 bg-muted/30">
+                <p className="text-sm font-medium">发布方式</p>
+                <div className="flex items-center gap-4 text-sm">
+                  <label className="flex items-center gap-1">
+                    <input type="radio" checked={publishMode === 'now'} onChange={() => setPublishMode('now')} />
+                    立即发送
+                  </label>
+                  <label className="flex items-center gap-1">
+                    <input type="radio" checked={publishMode === 'schedule'} onChange={() => setPublishMode('schedule')} />
+                    定时发送
+                  </label>
+                </div>
+                {publishMode === 'schedule' && (
+                  <Input
+                    type="datetime-local"
+                    value={scheduledPublishAt}
+                    onChange={(e) => setScheduledPublishAt(e.target.value)}
+                  />
+                )}
+              </div>
               <p className="text-sm font-medium mb-2">选择要分配的班级（可多选）</p>
               {classesLoading ? (
                 <div className="flex justify-center py-6">
@@ -861,7 +900,10 @@ export function CourseManagementPage({ initialCourseTab }: { initialCourseTab?: 
             </CardContent>
             <div className="border-t p-4 flex justify-end gap-3 bg-gray-50">
               <Button variant="outline" onClick={() => setTaskAssignDialogOpen(false)}>取消</Button>
-              <Button onClick={handleTaskConfirmAssign} disabled={selectedClasses.length === 0 || assigning}>
+              <Button
+                onClick={handleTaskConfirmAssign}
+                disabled={selectedClasses.length === 0 || assigning || (publishMode === 'schedule' && !scheduledPublishAt)}
+              >
                 {assigning ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <UserPlus className="w-4 h-4 mr-2" />}
                 确认分配
               </Button>
@@ -886,6 +928,26 @@ export function CourseManagementPage({ initialCourseTab }: { initialCourseTab?: 
               </div>
             </CardHeader>
             <CardContent className="p-6 space-y-4 overflow-y-auto">
+              <div className="space-y-2 border rounded-lg p-3 bg-muted/30">
+                <p className="text-sm font-medium">发布方式</p>
+                <div className="flex items-center gap-4 text-sm">
+                  <label className="flex items-center gap-1">
+                    <input type="radio" checked={publishMode === 'now'} onChange={() => setPublishMode('now')} />
+                    立即发送
+                  </label>
+                  <label className="flex items-center gap-1">
+                    <input type="radio" checked={publishMode === 'schedule'} onChange={() => setPublishMode('schedule')} />
+                    定时发送
+                  </label>
+                </div>
+                {publishMode === 'schedule' && (
+                  <Input
+                    type="datetime-local"
+                    value={scheduledPublishAt}
+                    onChange={(e) => setScheduledPublishAt(e.target.value)}
+                  />
+                )}
+              </div>
               <div>
                 <p className="text-sm font-medium mb-2">已分配班级（可移除）</p>
                 {assignedClasses.length === 0 ? (
@@ -948,7 +1010,10 @@ export function CourseManagementPage({ initialCourseTab }: { initialCourseTab?: 
             </CardContent>
             <div className="border-t p-4 flex justify-end gap-3 bg-gray-50">
               <Button variant="outline" onClick={() => setCourseAssignDialogOpen(false)}>取消</Button>
-              <Button onClick={handleCourseConfirmAssign} disabled={selectedClasses.length === 0 || assigning}>
+              <Button
+                onClick={handleCourseConfirmAssign}
+                disabled={selectedClasses.length === 0 || assigning || (publishMode === 'schedule' && !scheduledPublishAt)}
+              >
                 {assigning ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <UserPlus className="w-4 h-4 mr-2" />}
                 确认分配
               </Button>

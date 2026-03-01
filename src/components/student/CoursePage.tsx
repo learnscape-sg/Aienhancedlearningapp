@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { getCourse, trackProductEvent } from '@/lib/backendApi';
@@ -6,23 +6,33 @@ import { supabase } from '@/utils/supabase/client';
 import type { SystemTaskPlan } from '@/types/backend';
 import { Loader2, AlertCircle } from 'lucide-react';
 import StudentConsole from './StudentConsole';
+import { useRuntimePolicy } from '@/hooks/useRuntimePolicy';
 
 export function CoursePage() {
   const params = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { t, i18n } = useTranslation('coursePage');
+  const { policy } = useRuntimePolicy();
   const courseId = params.id ?? '';
   const [plan, setPlan] = useState<SystemTaskPlan | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
+  const contentLanguage: 'zh' | 'en' = useMemo(() => {
     const langFromUrl = searchParams.get('lang');
-    if (langFromUrl && (langFromUrl === 'zh' || langFromUrl === 'en')) {
-      i18n.changeLanguage(langFromUrl);
-    }
-  }, [searchParams, i18n]);
+    if (langFromUrl === 'zh' || langFromUrl === 'en') return langFromUrl;
+    const policyDefault = policy?.contentLanguageDefault?.defaultLanguage;
+    if (policyDefault === 'zh' || policyDefault === 'en') return policyDefault;
+    const host = typeof window !== 'undefined' ? window.location.hostname.toLowerCase() : '';
+    if (host.startsWith('sg.') || host.includes('.sg.')) return 'en';
+    if (host.startsWith('cn.') || host.includes('.cn.')) return 'zh';
+    return 'zh';
+  }, [searchParams, policy?.contentLanguageDefault?.defaultLanguage]);
+
+  useEffect(() => {
+    i18n.changeLanguage(contentLanguage);
+  }, [i18n, contentLanguage]);
 
   useEffect(() => {
     const loadCourse = async () => {
@@ -45,7 +55,7 @@ export function CoursePage() {
           {
             eventName: 'course_opened',
             role: 'student',
-            language: (searchParams.get('lang') as 'zh' | 'en') || undefined,
+            language: contentLanguage,
             courseId,
             properties: { source: 'CoursePage' },
           },
@@ -67,27 +77,6 @@ export function CoursePage() {
 
   const handleApiKeyError = () => {
     console.warn('API Key Error');
-  };
-
-  const handleLanguageChange = (lang: 'zh' | 'en') => {
-    const next = new URLSearchParams(searchParams);
-    next.set('lang', lang);
-    setSearchParams(next, { replace: true });
-    void supabase.auth
-      .getSession()
-      .then(({ data: sessionData }) =>
-        trackProductEvent(
-          {
-            eventName: 'language_switched',
-            role: 'student',
-            language: lang,
-            courseId,
-            properties: { source: 'CoursePage' },
-          },
-          sessionData.session?.access_token
-        )
-      )
-      .catch(() => undefined);
   };
 
   if (loading) {
@@ -148,23 +137,12 @@ export function CoursePage() {
     );
   }
 
-  const langFromUrl = searchParams.get('lang');
-  const contentLanguage: 'zh' | 'en' =
-    langFromUrl === 'en'
-      ? 'en'
-      : langFromUrl === 'zh'
-        ? 'zh'
-        : i18n.resolvedLanguage?.startsWith('en') || i18n.language?.startsWith('en')
-          ? 'en'
-          : 'zh';
-
   return (
     <StudentConsole
       plan={plan}
       onComplete={handleComplete}
       onApiKeyError={handleApiKeyError}
       contentLanguage={contentLanguage}
-      onLanguageChange={handleLanguageChange}
     />
   );
 }

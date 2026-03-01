@@ -219,3 +219,15 @@ html {
 .animate-float {
   animation: float 3s ease-in-out infinite;
 }
+
+/* 全站字体大小：小/中/大 */
+html[data-font-size="s"] {
+  font-size: 14px;
+}
+html[data-font-size="m"],
+html:not([data-font-size]) {
+  font-size: 16px;
+}
+html[data-font-size="l"] {
+  font-size: 18px;
+}

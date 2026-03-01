@@ -52,6 +52,7 @@ import type {
 } from '../types/backend';
 import { saveCourseMetaToSupabase } from '../lib/coursesRepository';
 import { downloadMarkdownAsPdf } from '../lib/markdownToPdf';
+import { SUBJECT_OPTIONS, CUSTOM_SUBJECT_OPTION, splitSubjectValue } from '../lib/subjects';
 
 type Step = 'form' | 'generating' | 'preview' | 'created';
 
@@ -64,13 +65,12 @@ interface AICourseDesignPageProps {
   onNextStep?: (data: { plan: SystemTaskPlan; courseId?: string; courseUrl?: string }) => void;
 }
 
-const AI_COURSE_SUBJECTS = ['数学', '物理', '化学', '生物', '语文', '英语', '历史', '地理'];
-
 export function AICourseDesignPage({ onNextStep }: AICourseDesignPageProps) {
   const { user, preferences } = useAuth();
   const { addPublishedCourse } = usePublishedCourses();
   const [step, setStep] = useState<Step>('form');
   const [subject, setSubject] = useState('');
+  const [customSubject, setCustomSubject] = useState('');
   const [grade, setGrade] = useState('');
   const [topic, setTopic] = useState('');
   const [textbook, setTextbook] = useState('');
@@ -103,12 +103,18 @@ export function AICourseDesignPage({ onNextStep }: AICourseDesignPageProps) {
     if (prefs.defaultGrade && GRADE_OPTIONS.some((g) => g === prefs.defaultGrade)) setGrade(prefs.defaultGrade);
     if (prefs.defaultSubject) {
       const subjectDisplay = prefSubjectIdToDisplay(prefs.defaultSubject);
-      if (subjectDisplay && AI_COURSE_SUBJECTS.includes(subjectDisplay)) setSubject(subjectDisplay);
+      if (subjectDisplay && SUBJECT_OPTIONS.includes(subjectDisplay)) {
+        setSubject(subjectDisplay);
+      } else if (subjectDisplay) {
+        setSubject(CUSTOM_SUBJECT_OPTION);
+        setCustomSubject(subjectDisplay);
+      }
     }
   }, [preferences?.defaultGrade, preferences?.defaultSubject]);
 
   const runGeneration = async () => {
-    if (!subject.trim() || !grade.trim() || !topic.trim()) {
+    const effectiveSubject = (subject === CUSTOM_SUBJECT_OPTION ? customSubject : subject).trim();
+    if (!effectiveSubject || !grade.trim() || !topic.trim()) {
       setGenError('请填写学科、年级和课题');
       return;
     }
@@ -125,13 +131,13 @@ export function AICourseDesignPage({ onNextStep }: AICourseDesignPageProps) {
       role: 'teacher',
       teacherId: user?.id,
       language,
-      properties: { source: 'AICourseDesignPage', subject: subject.trim(), grade: grade.trim(), topic: topic.trim() },
+      properties: { source: 'AICourseDesignPage', subject: effectiveSubject, grade: grade.trim(), topic: topic.trim() },
     }).catch(() => undefined);
 
     try {
       setGenStep('curriculum');
       const curriculumResult = await generateCurriculumDesign(
-        subject.trim(),
+        effectiveSubject,
         grade.trim(),
         topic.trim(),
         textbookVal,
@@ -142,7 +148,7 @@ export function AICourseDesignPage({ onNextStep }: AICourseDesignPageProps) {
 
       setGenStep('documents');
       const documentsResult = await generateTaskDocuments(
-        subject.trim(),
+        effectiveSubject,
         topic.trim(),
         curriculumResult,
         contextVal,
@@ -153,7 +159,7 @@ export function AICourseDesignPage({ onNextStep }: AICourseDesignPageProps) {
       setGenStep('tasks');
       const planResult = await generateSystemTaskPlan(
         documentsResult.studentTaskSheet,
-        subject.trim(),
+        effectiveSubject,
         grade.trim(),
         contextVal,
         language
@@ -208,9 +214,10 @@ export function AICourseDesignPage({ onNextStep }: AICourseDesignPageProps) {
     setGenStep('curriculum');
     const textbookVal = textbook.trim() || '统编版';
     const contextVal = context.trim();
+    const effectiveSubject = (subject === CUSTOM_SUBJECT_OPTION ? customSubject : subject).trim();
     try {
       const curriculumResult = await generateCurriculumDesign(
-        subject.trim(),
+        effectiveSubject,
         grade.trim(),
         topic.trim(),
         textbookVal,
@@ -220,7 +227,7 @@ export function AICourseDesignPage({ onNextStep }: AICourseDesignPageProps) {
       setCurriculum(curriculumResult);
       setGenStep('documents');
       const documentsResult = await generateTaskDocuments(
-        subject.trim(),
+        effectiveSubject,
         topic.trim(),
         curriculumResult,
         contextVal,
@@ -230,7 +237,7 @@ export function AICourseDesignPage({ onNextStep }: AICourseDesignPageProps) {
       setGenStep('tasks');
       const planResult = await generateSystemTaskPlan(
         documentsResult.studentTaskSheet,
-        subject.trim(),
+        effectiveSubject,
         grade.trim(),
         contextVal,
         language
@@ -312,10 +319,19 @@ export function AICourseDesignPage({ onNextStep }: AICourseDesignPageProps) {
 
   const handleCreateCourse = async () => {
     if (!plan) return;
+    const effectiveSubject = (subject === CUSTOM_SUBJECT_OPTION ? customSubject : subject).trim();
+    const subjectMeta = splitSubjectValue(effectiveSubject);
     setCreateLoading(true);
     setCreateError(null);
     try {
-      const result = await createCourse(plan, user?.id, { subject, topic, grade, language });
+      const result = await createCourse(plan, user?.id, {
+        subject: subjectMeta.subject,
+        subjectCustom: subjectMeta.subjectCustom,
+        subjectIsCustom: subjectMeta.subjectIsCustom,
+        topic,
+        grade,
+        language,
+      });
       void trackProductEvent({
         eventName: 'course_create_succeeded',
         role: 'teacher',
@@ -393,14 +409,18 @@ export function AICourseDesignPage({ onNextStep }: AICourseDesignPageProps) {
           <CardContent className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="space-y-2">
-                <Label htmlFor="subject">学科</Label>
-                <Input
-                  id="subject"
-                  placeholder="如：物理"
+                <Label htmlFor="subject-select">学科</Label>
+                <select
+                  id="subject-select"
                   value={subject}
                   onChange={(e) => setSubject(e.target.value)}
-                  className="h-12"
-                />
+                  className="w-full h-12 px-3 py-2 border border-input rounded-md bg-input-background"
+                >
+                  <option value="">请选择</option>
+                  {SUBJECT_OPTIONS.map((s) => (
+                    <option key={s} value={s}>{s}</option>
+                  ))}
+                </select>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="grade">年级</Label>
@@ -419,6 +439,18 @@ export function AICourseDesignPage({ onNextStep }: AICourseDesignPageProps) {
                 </select>
               </div>
             </div>
+            {subject === CUSTOM_SUBJECT_OPTION && (
+              <div className="space-y-2">
+                <Label htmlFor="custom-subject">自定义学科</Label>
+                <Input
+                  id="custom-subject"
+                  placeholder="请输入学科名称"
+                  value={customSubject}
+                  onChange={(e) => setCustomSubject(e.target.value)}
+                  className="h-12"
+                />
+              </div>
+            )}
             <div className="space-y-2">
               <Label htmlFor="topic">课题</Label>
               <Input
