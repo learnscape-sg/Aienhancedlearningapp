@@ -1658,6 +1658,97 @@ export async function listAdminClasses(
   });
 }
 
+export async function createAdminClass(
+  tenantId: string,
+  name: string,
+  grade: string | undefined,
+  accessToken: string
+): Promise<{ id: string; teacherId: string; name: string; grade?: string; createdAt?: string }> {
+  return apiCall('/api/admin/classes', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${accessToken}` },
+    body: JSON.stringify({
+      tenantId,
+      name,
+      ...(grade?.trim() ? { grade: grade.trim() } : {}),
+    }),
+  });
+}
+
+export async function lookupAdminClasses(
+  tenantId: string,
+  query: string,
+  accessToken: string
+): Promise<{ classes: Array<{ id: string; teacherId: string; name: string; grade?: string; studentCount?: number }> }> {
+  const qs = new URLSearchParams();
+  qs.set('tenantId', tenantId);
+  qs.set('q', query);
+  return apiCall(`/api/admin/classes/lookup?${qs.toString()}`, {
+    method: 'GET',
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+}
+
+export interface AdminImportRowResult {
+  rowNumber: number;
+  identifier?: string;
+  name?: string;
+  className?: string;
+  status: 'created' | 'updated' | 'skipped' | 'error';
+  userId?: string;
+  message?: string;
+}
+
+export async function importAdminAccountsByFile(
+  params: {
+    file: File;
+    tenantId: string;
+    role: 'student' | 'teacher';
+    defaultPassword: string;
+    fileType: 'student_sheet' | 'teacher_sheet';
+  },
+  accessToken: string
+): Promise<{
+  summary: { total: number; created: number; updated: number; skipped: number; errors: number };
+  rows: AdminImportRowResult[];
+}> {
+  const base = getBaseUrl();
+  const url = `${base}/api/admin/import-accounts`;
+  const requestHeaders = await getRequestHeaders();
+  const form = new FormData();
+  form.append('file', params.file);
+  form.append('tenantId', params.tenantId);
+  form.append('role', params.role);
+  form.append('defaultPassword', params.defaultPassword);
+  form.append('fileType', params.fileType);
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      ...requestHeaders,
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: form,
+  });
+
+  if (!response.ok) {
+    let errorMessage = `API call failed: ${response.statusText}`;
+    try {
+      const errorData = await response.json();
+      errorMessage = errorData.error || errorMessage;
+    } catch {
+      errorMessage = `API call failed with status ${response.status}: ${response.statusText}`;
+    }
+    throw new Error(errorMessage);
+  }
+
+  const json = await response.json();
+  return json.data as {
+    summary: { total: number; created: number; updated: number; skipped: number; errors: number };
+    rows: AdminImportRowResult[];
+  };
+}
+
 export interface AdminCostAnalyticsResponse {
   summary: {
     totalRequests: number;

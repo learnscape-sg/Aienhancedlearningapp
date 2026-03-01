@@ -2553,7 +2553,7 @@ CRITICAL: Output language must be 简体中文 only.
                       />
                     ) : useBilibili ? (
                       <iframe
-                        src={`https://player.bilibili.com/player.html?bvid=${bilibiliBvid}&p=1&danmaku=0`}
+                        src={`https://player.bilibili.com/player.html?bvid=${bilibiliBvid}&p=1&danmaku=0&autoplay=0`}
                         title={t('instructionalVideo')}
                         className="w-full aspect-video"
                         scrolling="no"
@@ -3290,7 +3290,7 @@ CRITICAL: Output language must be 简体中文 only.
                                 if (useBilibili) {
                                   return (
                                     <iframe
-                                      src={`https://player.bilibili.com/player.html?bvid=${bilibiliBvid}&p=1&danmaku=0`}
+                                      src={`https://player.bilibili.com/player.html?bvid=${bilibiliBvid}&p=1&danmaku=0&autoplay=0`}
                                       title={t('instructionalVideo')}
                                       className="w-full aspect-video"
                                       scrolling="no"

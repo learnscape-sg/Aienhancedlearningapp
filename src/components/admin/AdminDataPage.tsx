@@ -1,7 +1,17 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../utils/supabase/client';
-import { listAdminTenants, listAdminClasses, batchCreateAccounts, type AdminTenantRow, type BatchCreateAccountsResult } from '../../lib/backendApi';
+import {
+  listAdminTenants,
+  listAdminClasses,
+  createAdminClass,
+  lookupAdminClasses,
+  batchCreateAccounts,
+  importAdminAccountsByFile,
+  type AdminTenantRow,
+  type BatchCreateAccountsResult,
+  type AdminImportRowResult,
+} from '../../lib/backendApi';
 import { AdminTopNav } from './AdminTopNav';
 
 interface ClassItem {
@@ -23,7 +33,21 @@ export function AdminDataPage() {
   const [classIds, setClassIds] = useState<string[]>([]);
   const [classes, setClasses] = useState<ClassItem[]>([]);
   const [classesLoading, setClassesLoading] = useState(false);
+  const [creatingClass, setCreatingClass] = useState(false);
+  const [newClassName, setNewClassName] = useState('');
+  const [newClassGrade, setNewClassGrade] = useState('');
+  const [lookupQuery, setLookupQuery] = useState('');
+  const [lookupLoading, setLookupLoading] = useState(false);
+  const [lookupResults, setLookupResults] = useState<ClassItem[]>([]);
   const [submitting, setSubmitting] = useState(false);
+  const [importFileType, setImportFileType] = useState<'student_sheet' | 'teacher_sheet'>('student_sheet');
+  const [importPassword, setImportPassword] = useState('');
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [importing, setImporting] = useState(false);
+  const [importResult, setImportResult] = useState<{
+    summary: { total: number; created: number; updated: number; skipped: number; errors: number };
+    rows: AdminImportRowResult[];
+  } | null>(null);
   const [lastResult, setLastResult] = useState<{
     summary: { created: number; updated: number; skipped: number; errors: number };
     results: BatchCreateAccountsResult[];
@@ -94,6 +118,117 @@ export function AdminDataPage() {
       cancelled = true;
     };
   }, [role, tenantId]);
+
+  const addClassSelection = (classItem: ClassItem) => {
+    setClasses((prev) => {
+      if (prev.some((c) => c.id === classItem.id)) return prev;
+      return [classItem, ...prev];
+    });
+    setClassIds((prev) => (prev.includes(classItem.id) ? prev : [...prev, classItem.id]));
+  };
+
+  const handleCreateClass = async () => {
+    setError('');
+    if (!tenantId.trim()) {
+      setError('请先选择 Tenant');
+      return;
+    }
+    if (!newClassName.trim()) {
+      setError('请输入班级名称');
+      return;
+    }
+
+    const token = await getAccessToken();
+    if (!token) return;
+
+    setCreatingClass(true);
+    try {
+      const created = await createAdminClass(tenantId.trim(), newClassName.trim(), newClassGrade || undefined, token);
+      addClassSelection({
+        id: created.id,
+        name: created.name,
+        grade: created.grade,
+        studentCount: 0,
+      });
+      setNewClassName('');
+      setNewClassGrade('');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '新建班级失败');
+    } finally {
+      setCreatingClass(false);
+    }
+  };
+
+  const handleLookupClasses = async () => {
+    setError('');
+    setLookupResults([]);
+    if (!tenantId.trim()) {
+      setError('请先选择 Tenant');
+      return;
+    }
+    if (!lookupQuery.trim()) {
+      setError('请输入班级 ID 或名称');
+      return;
+    }
+
+    const token = await getAccessToken();
+    if (!token) return;
+
+    setLookupLoading(true);
+    try {
+      const result = await lookupAdminClasses(tenantId.trim(), lookupQuery.trim(), token);
+      setLookupResults(result.classes ?? []);
+      if (!result.classes || result.classes.length === 0) {
+        setError('未找到匹配班级');
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '查找班级失败');
+    } finally {
+      setLookupLoading(false);
+    }
+  };
+
+  const handleImportSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    setImportResult(null);
+
+    if (!tenantId.trim()) {
+      setError('请先选择 Tenant');
+      return;
+    }
+    if (!importPassword || importPassword.length < 6) {
+      setError('请填写导入默认密码（至少 6 位）');
+      return;
+    }
+    if (!importFile) {
+      setError('请上传 Excel 文件（.xlsx）');
+      return;
+    }
+
+    const token = await getAccessToken();
+    if (!token) return;
+
+    setImporting(true);
+    try {
+      const roleForImport = importFileType === 'student_sheet' ? 'student' : 'teacher';
+      const data = await importAdminAccountsByFile(
+        {
+          file: importFile,
+          tenantId: tenantId.trim(),
+          role: roleForImport,
+          defaultPassword: importPassword,
+          fileType: importFileType,
+        },
+        token
+      );
+      setImportResult(data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '导入失败');
+    } finally {
+      setImporting(false);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -197,35 +332,104 @@ export function AdminDataPage() {
               <label className="block text-sm font-medium text-slate-700 mb-1">班级（学生必选，可多选）</label>
               {!tenantId.trim() ? (
                 <p className="text-sm text-slate-500">请先选择 Tenant</p>
-              ) : classesLoading ? (
-                <p className="text-sm text-slate-500">加载班级中...</p>
-              ) : classes.length === 0 ? (
-                <p className="text-sm text-amber-600">该租户下暂无班级，请先在教师端创建班级</p>
               ) : (
-                <div className="flex flex-wrap gap-2">
-                  {classes.map((c) => {
-                    const checked = classIds.includes(c.id);
-                    return (
-                      <label
-                        key={c.id}
-                        className={`inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm cursor-pointer ${
-                          checked ? 'border-slate-900 bg-slate-50' : 'border-slate-200 hover:bg-slate-50'
-                        }`}
+                <div className="space-y-3">
+                  <div className="rounded-md border border-slate-200 p-3">
+                    <p className="text-xs font-medium text-slate-600 mb-2">A. 手动新建班级</p>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                      <input
+                        value={newClassName}
+                        onChange={(e) => setNewClassName(e.target.value)}
+                        placeholder="班级名称，例如：高一(1)班"
+                        className="rounded-md border border-slate-300 px-3 py-2 text-sm"
+                      />
+                      <input
+                        value={newClassGrade}
+                        onChange={(e) => setNewClassGrade(e.target.value)}
+                        placeholder="年级（可选）"
+                        className="rounded-md border border-slate-300 px-3 py-2 text-sm"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleCreateClass}
+                        disabled={creatingClass}
+                        className="rounded-md border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50 disabled:opacity-60"
                       >
-                        <input
-                          type="checkbox"
-                          checked={checked}
-                          onChange={(e) => {
-                            if (e.target.checked) setClassIds((prev) => [...prev, c.id]);
-                            else setClassIds((prev) => prev.filter((id) => id !== c.id));
-                          }}
-                        />
-                        {c.name}
-                        {c.grade ? ` (${c.grade})` : ''}
-                        {c.studentCount != null ? ` · ${c.studentCount}人` : ''}
-                      </label>
-                    );
-                  })}
+                        {creatingClass ? '创建中...' : '新建班级并选中'}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="rounded-md border border-slate-200 p-3">
+                    <p className="text-xs font-medium text-slate-600 mb-2">B. 添加已有班级（ID 或名称）</p>
+                    <div className="flex gap-2">
+                      <input
+                        value={lookupQuery}
+                        onChange={(e) => setLookupQuery(e.target.value)}
+                        placeholder="输入班级 ID 或班级名称"
+                        className="flex-1 rounded-md border border-slate-300 px-3 py-2 text-sm"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleLookupClasses}
+                        disabled={lookupLoading}
+                        className="rounded-md border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50 disabled:opacity-60"
+                      >
+                        {lookupLoading ? '查找中...' : '查找并添加'}
+                      </button>
+                    </div>
+                    {lookupResults.length > 0 ? (
+                      <div className="mt-2 space-y-1">
+                        {lookupResults.map((c) => (
+                          <div key={`lookup-${c.id}`} className="flex items-center justify-between rounded border px-2 py-1 text-sm">
+                            <span>
+                              {c.name}
+                              {c.grade ? ` (${c.grade})` : ''}
+                              {c.studentCount != null ? ` · ${c.studentCount}人` : ''}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => addClassSelection(c)}
+                              className="rounded border border-slate-300 px-2 py-1 text-xs hover:bg-slate-50"
+                            >
+                              添加
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
+
+                  {classesLoading ? <p className="text-sm text-slate-500">加载班级中...</p> : null}
+                  {classes.length === 0 ? (
+                    <p className="text-sm text-amber-600">该租户下暂无班级，可使用上方「手动新建班级」。</p>
+                  ) : (
+                    <div className="flex flex-wrap gap-2">
+                      {classes.map((c) => {
+                        const checked = classIds.includes(c.id);
+                        return (
+                          <label
+                            key={c.id}
+                            className={`inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm cursor-pointer ${
+                              checked ? 'border-slate-900 bg-slate-50' : 'border-slate-200 hover:bg-slate-50'
+                            }`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={(e) => {
+                                if (e.target.checked) setClassIds((prev) => [...prev, c.id]);
+                                else setClassIds((prev) => prev.filter((id) => id !== c.id));
+                              }}
+                            />
+                            {c.name}
+                            {c.grade ? ` (${c.grade})` : ''}
+                            {c.studentCount != null ? ` · ${c.studentCount}人` : ''}
+                          </label>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -265,6 +469,67 @@ export function AdminDataPage() {
               className="rounded-md bg-slate-900 text-white px-4 py-2 text-sm font-medium disabled:opacity-60"
             >
               {submitting ? '生成中...' : '批量生成账号'}
+            </button>
+          </div>
+        </form>
+
+        <form onSubmit={handleImportSubmit} className="rounded-xl border bg-white p-6 space-y-4">
+          <div>
+            <h3 className="text-base font-semibold text-slate-900">Excel 导入账号（学生 / 教师）</h3>
+            <p className="text-sm text-slate-500 mt-1">
+              先手动选择文件类型，再上传 xlsx。支持按班级名称自动关联学生-班级-老师，教师 profile 支持预填。
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">文件类型</label>
+              <select
+                value={importFileType}
+                onChange={(e) => setImportFileType(e.target.value as 'student_sheet' | 'teacher_sheet')}
+                className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+              >
+                <option value="student_sheet">学生表 (student_sheet)</option>
+                <option value="teacher_sheet">教师表 (teacher_sheet)</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">导入默认密码</label>
+              <input
+                type="password"
+                value={importPassword}
+                onChange={(e) => setImportPassword(e.target.value)}
+                placeholder="至少 6 位"
+                className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+                minLength={6}
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">选择文件 (.xlsx)</label>
+              <input
+                type="file"
+                accept=".xlsx"
+                onChange={(e) => setImportFile(e.target.files?.[0] ?? null)}
+                className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+              />
+            </div>
+          </div>
+
+          <div className="text-xs text-slate-500 rounded-md bg-slate-50 border p-3">
+            <p>字段建议：</p>
+            <p>- 通用账号列：账号 / 用户名 / 邮箱 / 手机号</p>
+            <p>- 学生表：学生姓名、班级、年级(可选)</p>
+            <p>- 教师表：教师姓名、班级、学科(可选)、工号(可选)</p>
+          </div>
+
+          <div>
+            <button
+              type="submit"
+              disabled={importing || loading}
+              className="rounded-md bg-slate-900 text-white px-4 py-2 text-sm font-medium disabled:opacity-60"
+            >
+              {importing ? '导入中...' : '上传并导入'}
             </button>
           </div>
         </form>
@@ -309,6 +574,51 @@ export function AdminDataPage() {
                         </span>
                       </td>
                       <td className="px-3 py-2 text-slate-600">{r.message ?? (r.userId ? r.userId.slice(0, 8) + '...' : '')}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {importResult && (
+          <div className="rounded-xl border bg-white p-6 space-y-3">
+            <h3 className="text-base font-semibold">Excel 导入结果</h3>
+            <div className="flex gap-4 text-sm">
+              <span className="text-slate-700">总行数: {importResult.summary.total}</span>
+              <span className="text-green-600">新建: {importResult.summary.created}</span>
+              <span className="text-blue-600">更新: {importResult.summary.updated}</span>
+              <span className="text-slate-500">跳过: {importResult.summary.skipped}</span>
+              {importResult.summary.errors > 0 ? (
+                <span className="text-red-600">失败: {importResult.summary.errors}</span>
+              ) : null}
+            </div>
+            <div className="max-h-[260px] overflow-auto rounded-md border">
+              <table className="min-w-full text-xs">
+                <thead>
+                  <tr className="border-b bg-slate-50">
+                    <th className="text-left px-2 py-2">行号</th>
+                    <th className="text-left px-2 py-2">账号</th>
+                    <th className="text-left px-2 py-2">姓名</th>
+                    <th className="text-left px-2 py-2">班级</th>
+                    <th className="text-left px-2 py-2">状态</th>
+                    <th className="text-left px-2 py-2">说明</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {importResult.rows.map((row, idx) => (
+                    <tr key={`${row.rowNumber}-${idx}`} className="border-b last:border-0">
+                      <td className="px-2 py-2">{row.rowNumber}</td>
+                      <td className="px-2 py-2 font-mono">{row.identifier ?? '-'}</td>
+                      <td className="px-2 py-2">{row.name ?? '-'}</td>
+                      <td className="px-2 py-2">{row.className ?? '-'}</td>
+                      <td className="px-2 py-2">
+                        <span className={row.status === 'error' ? 'text-red-600' : row.status === 'created' ? 'text-green-600' : 'text-blue-600'}>
+                          {row.status}
+                        </span>
+                      </td>
+                      <td className="px-2 py-2 text-slate-600">{row.message ?? ''}</td>
                     </tr>
                   ))}
                 </tbody>

@@ -132,7 +132,7 @@ function getVideoEmbedUrl(item: VideoSearchItem): string | null {
     return `https://www.youtube.com/embed/${item.id}`;
   }
   if (platform === 'bilibili') {
-    return `https://player.bilibili.com/player.html?bvid=${item.id}&p=1&danmaku=0`;
+    return `https://player.bilibili.com/player.html?bvid=${item.id}&p=1&danmaku=0&autoplay=0`;
   }
   return null;
 }
