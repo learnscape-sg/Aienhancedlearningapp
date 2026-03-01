@@ -394,6 +394,24 @@ export async function addStudentToClassByEmail(
   });
 }
 
+export async function teacherBatchCreateStudents(params: {
+  classId: string;
+  defaultPassword: string;
+  identifiers: string[];
+}): Promise<{
+  summary: { created: number; updated: number; skipped: number; errors: number };
+  results: BatchCreateAccountsResult[];
+}> {
+  return apiCall('/api/teacher/batch-create-students', {
+    method: 'POST',
+    body: JSON.stringify({
+      classId: params.classId,
+      defaultPassword: params.defaultPassword,
+      identifiers: params.identifiers,
+    }),
+  });
+}
+
 export async function removeStudentFromClass(
   classId: string,
   studentId: string

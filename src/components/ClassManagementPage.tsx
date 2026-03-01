@@ -20,6 +20,7 @@ import {
   createClass,
   getClass,
   addStudentToClassByEmail,
+  teacherBatchCreateStudents,
   removeStudentFromClass,
   deleteClass,
   type ClassItem,
@@ -59,6 +60,15 @@ export function ClassManagementPage() {
   const [addStudentEmail, setAddStudentEmail] = useState('');
   const [addingStudent, setAddingStudent] = useState(false);
   const [addStudentError, setAddStudentError] = useState('');
+  const [bulkCreateOpen, setBulkCreateOpen] = useState(false);
+  const [bulkDefaultPassword, setBulkDefaultPassword] = useState('');
+  const [bulkIdentifiersInput, setBulkIdentifiersInput] = useState('');
+  const [bulkCreating, setBulkCreating] = useState(false);
+  const [bulkCreateError, setBulkCreateError] = useState('');
+  const [bulkCreateResult, setBulkCreateResult] = useState<{
+    summary: { created: number; updated: number; skipped: number; errors: number };
+    results: Array<{ identifier: string; status: 'created' | 'updated' | 'skipped' | 'error'; userId?: string; message?: string }>;
+  } | null>(null);
 
   const loadClasses = async () => {
     if (!user?.id) return;
@@ -145,6 +155,47 @@ export function ClassManagementPage() {
       );
     } finally {
       setAddingStudent(false);
+    }
+  };
+
+  const handleBulkCreateStudents = async () => {
+    if (!selectedClassId) return;
+    if (!bulkDefaultPassword || bulkDefaultPassword.length < 6) {
+      setBulkCreateError('请输入至少 6 位默认密码');
+      return;
+    }
+
+    const identifiers = bulkIdentifiersInput
+      .split(/[\n,]+/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+    if (identifiers.length === 0) {
+      setBulkCreateError('请输入至少一个邮箱/手机号/账号名，每行一个');
+      return;
+    }
+
+    setBulkCreating(true);
+    setBulkCreateError('');
+    setBulkCreateResult(null);
+    try {
+      const result = await teacherBatchCreateStudents({
+        classId: selectedClassId,
+        defaultPassword: bulkDefaultPassword,
+        identifiers,
+      });
+      setBulkCreateResult(result);
+      const res = await getClass(selectedClassId);
+      setClassDetail({
+        id: res.id,
+        name: res.name,
+        grade: res.grade,
+        students: res.students ?? [],
+      });
+      loadClasses();
+    } catch (err) {
+      setBulkCreateError(err instanceof Error ? err.message : '批量创建失败');
+    } finally {
+      setBulkCreating(false);
     }
   };
 
@@ -289,10 +340,24 @@ export function ClassManagementPage() {
                 </CardDescription>
               </div>
               {selectedClassId && (
-                <Button size="sm" onClick={() => setAddStudentOpen(true)}>
-                  <UserPlus className="w-4 h-4 mr-1" />
-                  添加学生
-                </Button>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setBulkCreateOpen(true);
+                      setBulkCreateError('');
+                      setBulkCreateResult(null);
+                    }}
+                  >
+                    <UserPlus className="w-4 h-4 mr-1" />
+                    批量创建
+                  </Button>
+                  <Button size="sm" onClick={() => setAddStudentOpen(true)}>
+                    <UserPlus className="w-4 h-4 mr-1" />
+                    添加学生
+                  </Button>
+                </div>
               )}
             </div>
           </CardHeader>
@@ -430,6 +495,88 @@ export function ClassManagementPage() {
             <Button onClick={handleAddStudent} disabled={!addStudentEmail.trim() || addingStudent}>
               {addingStudent && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
               添加
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Bulk Create Students Dialog */}
+      <Dialog
+        open={bulkCreateOpen}
+        onOpenChange={(open) => {
+          setBulkCreateOpen(open);
+          if (!open) {
+            setBulkCreateError('');
+            setBulkCreateResult(null);
+            setBulkIdentifiersInput('');
+            setBulkDefaultPassword('');
+          }
+        }}
+      >
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>批量创建学生账号</DialogTitle>
+            <DialogDescription>
+              为当前班级批量创建学生账号，创建后自动加入班级。默认密码支持教师自定义（至少 6 位）。
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="bulk-default-password">默认密码</Label>
+              <Input
+                id="bulk-default-password"
+                type="password"
+                minLength={6}
+                autoComplete="new-password"
+                placeholder="例如: ChangeMe123"
+                value={bulkDefaultPassword}
+                onChange={(e) => setBulkDefaultPassword(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="bulk-identifiers">邮箱 / 手机号 / 账号名（每行一个）</Label>
+              <textarea
+                id="bulk-identifiers"
+                value={bulkIdentifiersInput}
+                onChange={(e) => setBulkIdentifiersInput(e.target.value)}
+                placeholder={'student1@example.com\n+8613800138000\nstudent001'}
+                className="w-full min-h-[180px] rounded-md border border-slate-300 px-3 py-2 text-sm font-mono"
+              />
+            </div>
+
+            {bulkCreateError ? <p className="text-sm text-destructive">{bulkCreateError}</p> : null}
+
+            {bulkCreateResult ? (
+              <div className="rounded-md border border-slate-200 p-3 space-y-2">
+                <div className="flex gap-4 text-sm">
+                  <span className="text-green-600">新建: {bulkCreateResult.summary.created}</span>
+                  <span className="text-blue-600">更新: {bulkCreateResult.summary.updated}</span>
+                  <span className="text-slate-500">跳过: {bulkCreateResult.summary.skipped}</span>
+                  {bulkCreateResult.summary.errors > 0 ? (
+                    <span className="text-red-600">失败: {bulkCreateResult.summary.errors}</span>
+                  ) : null}
+                </div>
+                {bulkCreateResult.results.some((r) => r.message) ? (
+                  <div className="max-h-48 overflow-auto rounded border border-slate-100 bg-slate-50 p-2 text-xs space-y-1">
+                    {bulkCreateResult.results
+                      .filter((r) => r.message)
+                      .map((r) => (
+                        <p key={`${r.identifier}-${r.status}`}>
+                          {r.identifier}: {r.message}
+                        </p>
+                      ))}
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setBulkCreateOpen(false)}>
+              关闭
+            </Button>
+            <Button onClick={handleBulkCreateStudents} disabled={bulkCreating}>
+              {bulkCreating && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+              批量创建并加入班级
             </Button>
           </DialogFooter>
         </DialogContent>
