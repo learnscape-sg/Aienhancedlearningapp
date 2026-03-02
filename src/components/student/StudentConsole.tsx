@@ -3360,15 +3360,28 @@ CRITICAL: Output language must be 简体中文 only.
                                   );
                                 }
                                 if (useBilibili) {
+                                  const bilibiliEmbedUrl = `https://player.bilibili.com/player.html?bvid=${bilibiliBvid}&p=1&danmaku=0&autoplay=0&high_quality=1`;
+                                  const bilibiliDirectUrl = `https://www.bilibili.com/video/${bilibiliBvid}`;
                                   return (
-                                    <iframe
-                                      src={`https://player.bilibili.com/player.html?bvid=${bilibiliBvid}&p=1&danmaku=0&autoplay=0`}
-                                      title={t('instructionalVideo')}
-                                      className="w-full aspect-video"
-                                      scrolling="no"
-                                      frameBorder="0"
-                                      allowFullScreen
-                                    />
+                                    <div className="space-y-2">
+                                      <iframe
+                                        src={bilibiliEmbedUrl}
+                                        title={t('instructionalVideo')}
+                                        className="w-full aspect-video"
+                                        scrolling="no"
+                                        frameBorder="0"
+                                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; fullscreen"
+                                        allowFullScreen
+                                      />
+                                      <a
+                                        href={bilibiliDirectUrl}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-cyan-600 hover:text-cyan-700 hover:underline"
+                                      >
+                                        {t('openInBilibili')}
+                                      </a>
+                                    </div>
                                   );
                                 }
                                 if (source) {
