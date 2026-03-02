@@ -313,7 +313,7 @@ export function ClassManagementPage() {
                     setExistingClassId('');
                   }}
                 >
-                  添加已有班级
+                  从全校选班
                 </Button>
                 <Button size="sm" onClick={() => setNewClassOpen(true)}>
                   <UserPlus className="w-4 h-4 mr-1" />
@@ -522,7 +522,7 @@ export function ClassManagementPage() {
       >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>添加已有班级</DialogTitle>
+            <DialogTitle>从全校选班</DialogTitle>
             <DialogDescription>先选择年级，再选择该年级下的班级</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
@@ -579,7 +579,7 @@ export function ClassManagementPage() {
                   setSelectedClassId(existingClassId);
                   setAddExistingOpen(false);
                 } catch (err) {
-                  setAddExistingError(err instanceof Error ? err.message : '添加已有班级失败');
+                  setAddExistingError(err instanceof Error ? err.message : '从全校选班失败');
                 } finally {
                   setAddingExisting(false);
                 }
