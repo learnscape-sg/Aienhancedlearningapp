@@ -15,6 +15,8 @@
             if (!tenantId) tenantId = (localStorage.getItem('tenantId') || '').trim();
             if (tenantId === 'tenant_cn_bamboo') {
               document.documentElement.setAttribute('data-tenant-compat', 'true');
+              var vp = document.querySelector('meta[name=viewport]');
+              if (vp) vp.setAttribute('content', 'width=1280, user-scalable=yes, viewport-fit=cover');
             }
           } catch (e) {}
         })();

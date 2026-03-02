@@ -3,7 +3,7 @@
   <html lang="en">
     <head>
       <meta charset="UTF-8" />
-      <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5, viewport-fit=cover" />
+      <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5, minimum-scale=0.5, viewport-fit=cover, user-scalable=yes" />
       <title>AI Enhanced Learning App</title>
       <script>
         (function(){
@@ -15,12 +15,14 @@
             if (!tenantId) tenantId = (localStorage.getItem('tenantId') || '').trim();
             if (tenantId === 'tenant_cn_bamboo') {
               document.documentElement.setAttribute('data-tenant-compat', 'true');
+              var vp = document.querySelector('meta[name=viewport]');
+              if (vp) vp.setAttribute('content', 'width=1280, user-scalable=yes, viewport-fit=cover');
             }
           } catch (e) {}
         })();
       </script>
-      <script type="module" crossorigin src="/assets/index-ikMLG_1b.js"></script>
-      <link rel="stylesheet" crossorigin href="/assets/index-D1gf6FY8.css">
+      <script type="module" crossorigin src="/assets/index-CYSHhML8.js"></script>
+      <link rel="stylesheet" crossorigin href="/assets/index-757C-sbZ.css">
     </head>
 
     <body>

@@ -84,8 +84,12 @@ function AppContent() {
     const tenantId = resolveTenantId();
     if (shouldUseTenantCompat(tenantId)) {
       document.documentElement.setAttribute('data-tenant-compat', 'true');
+      const vp = document.querySelector('meta[name=viewport]');
+      if (vp) vp.setAttribute('content', 'width=1280, user-scalable=yes, viewport-fit=cover');
     } else {
       document.documentElement.removeAttribute('data-tenant-compat');
+      const vp = document.querySelector('meta[name=viewport]');
+      if (vp) vp.setAttribute('content', 'width=device-width, initial-scale=1.0, maximum-scale=5, minimum-scale=0.5, viewport-fit=cover, user-scalable=yes');
     }
   }, [searchParams, user?.tenantId]);
 
