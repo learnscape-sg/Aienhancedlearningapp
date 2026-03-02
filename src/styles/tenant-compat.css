@@ -272,41 +272,6 @@
   -webkit-overflow-scrolling: touch !important;
 }
 
-/* Student Console: stacked only in portrait; keep 3-column in landscape like desktop */
-@media (max-width: 960px) and (orientation: portrait) {
-  [data-tenant-compat="true"] .student-console {
-    flex-direction: column !important;
-    height: auto !important;
-    min-height: 100vh !important;
-    min-height: 100dvh !important;
-    min-height: -webkit-fill-available !important;
-    overflow-y: auto !important;
-    overflow-x: hidden !important;
-    -webkit-overflow-scrolling: touch !important;
-  }
-  [data-tenant-compat="true"] .student-console > div[style*="width:"] {
-    width: 100% !important;
-    min-width: 100% !important;
-    max-width: 100% !important;
-    flex: none !important;
-    height: auto !important;
-    min-height: 280px !important;
-    overflow-y: auto !important;
-    -webkit-overflow-scrolling: touch !important;
-    border-right: none !important;
-    border-left: none !important;
-    border-bottom: 1px solid #E2E8F0 !important;
-  }
-  [data-tenant-compat="true"] .student-console > div[style*="width:"]:last-of-type {
-    border-bottom: none !important;
-  }
-  /* Hide resizer handles when stacked */
-  [data-tenant-compat="true"] .student-console > div.w-1\.5,
-  [data-tenant-compat="true"] .student-console > div[class*="w-1.5"] {
-    display: none !important;
-  }
-}
-
 /* Safe area for notched devices */
 [data-tenant-compat="true"] body {
   padding-left: env(safe-area-inset-left, 0);
