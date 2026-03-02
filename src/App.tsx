@@ -58,7 +58,7 @@ function AppContent() {
   const parentWorkspaceEnabled = policy?.featureFlags?.flags?.enableParentWorkspace ?? true;
   useTheme(experience.brand.themeTokens);
   const [appState, setAppState] = useState<AppState>('login');
-  const [activeSection, setActiveSection] = useState('learn-your-way');
+  const [activeSection, setActiveSection] = useState('home');
   const [languageSpace, setLanguageSpace] = useState<LanguageSpace>(experience.entry.defaultLanguageSpace);
   const [initialCourseTab, setInitialCourseTab] = useState<'active' | 'shared' | 'recycle' | undefined>(undefined);
   const [currentChapter, setCurrentChapter] = useState<string | null>(null);
@@ -125,7 +125,7 @@ function AppContent() {
         const needsOnboarding = !user.grade && (!user.interests || user.interests.length === 0);
         setAppState(needsOnboarding ? 'onboarding' : 'dashboard');
         if (!needsOnboarding && !sectionFromUrl) {
-          setActiveSection('learn-your-way');
+          setActiveSection('home');
         }
       }
     } else {
@@ -244,7 +244,7 @@ function AppContent() {
 
   const handleBackFromLearningMode = () => {
     setAppState('dashboard');
-    setActiveSection('learn-your-way');
+    setActiveSection('home');
   };
 
   const handleBackFromImmersiveText = () => {
