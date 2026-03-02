@@ -1,0 +1,56 @@
+/**
+ * Tenant-scoped tablet/WebView color compatibility layer.
+ * When html[data-tenant-compat="true"], overrides semantic variables with pure hex
+ * to avoid oklch/color-mix failures on older Chromium.
+ */
+[data-tenant-compat="true"] {
+  --primary: #4F46E5;
+  --primary-foreground: #FFFFFF;
+  --primary-hover: #4338CA;
+  --background: #FFFFFF;
+  --foreground: #0F172A;
+  --card: #FFFFFF;
+  --muted: #F8FAFC;
+  --muted-foreground: #475569;
+  --border: #E2E8F0;
+  --ring: #4F46E5;
+  --destructive: #DC2626;
+  --destructive-foreground: #FFFFFF;
+  --accent: #FBBF24;
+  --accent-foreground: #0F172A;
+  --secondary: #22D3EE;
+  --secondary-foreground: #0F172A;
+  --sidebar: #FFFFFF;
+  --sidebar-foreground: #0F172A;
+  --sidebar-primary: #4F46E5;
+  --input-background: #F8FAFC;
+  --switch-background: #E2E8F0;
+  -webkit-text-size-adjust: 100%;
+}
+
+/* Component fallbacks when Tailwind output uses unsupported color syntax */
+[data-tenant-compat="true"] .bg-primary,
+[data-tenant-compat="true"] button.bg-primary {
+  background-color: #4F46E5 !important;
+}
+[data-tenant-compat="true"] .text-primary {
+  color: #4F46E5 !important;
+}
+[data-tenant-compat="true"] .bg-background {
+  background-color: #FFFFFF !important;
+}
+[data-tenant-compat="true"] .text-foreground {
+  color: #0F172A !important;
+}
+[data-tenant-compat="true"] .bg-muted {
+  background-color: #F8FAFC !important;
+}
+[data-tenant-compat="true"] .border-border {
+  border-color: #E2E8F0 !important;
+}
+[data-tenant-compat="true"] .bg-card {
+  background-color: #FFFFFF !important;
+}
+[data-tenant-compat="true"] .bg-destructive {
+  background-color: #DC2626 !important;
+}

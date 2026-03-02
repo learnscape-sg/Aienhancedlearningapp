@@ -39,10 +39,14 @@ export function AdminDataPage() {
   const [lookupQuery, setLookupQuery] = useState('');
   const [lookupLoading, setLookupLoading] = useState(false);
   const [lookupResults, setLookupResults] = useState<ClassItem[]>([]);
+  const [importLookupQuery, setImportLookupQuery] = useState('');
+  const [importLookupLoading, setImportLookupLoading] = useState(false);
+  const [importLookupResults, setImportLookupResults] = useState<ClassItem[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [importFileType, setImportFileType] = useState<'student_sheet' | 'teacher_sheet'>('student_sheet');
   const [importPassword, setImportPassword] = useState('');
   const [importFile, setImportFile] = useState<File | null>(null);
+  const [importClassIds, setImportClassIds] = useState<string[]>([]);
   const [importing, setImporting] = useState(false);
   const [importResult, setImportResult] = useState<{
     summary: { total: number; created: number; updated: number; skipped: number; errors: number };
@@ -94,9 +98,13 @@ export function AdminDataPage() {
   }, [navigate]);
 
   useEffect(() => {
-    if (role !== 'student' || !tenantId.trim()) {
-      setClasses([]);
-      setClassIds([]);
+    const needClasses = role === 'student' || importFileType === 'student_sheet';
+    if (!needClasses || !tenantId.trim()) {
+      if (!needClasses) {
+        setClasses([]);
+        setClassIds([]);
+        setImportClassIds([]);
+      }
       return;
     }
     let cancelled = false;
@@ -117,7 +125,7 @@ export function AdminDataPage() {
     return () => {
       cancelled = true;
     };
-  }, [role, tenantId]);
+  }, [role, importFileType, tenantId]);
 
   const addClassSelection = (classItem: ClassItem) => {
     setClasses((prev) => {
@@ -125,6 +133,14 @@ export function AdminDataPage() {
       return [classItem, ...prev];
     });
     setClassIds((prev) => (prev.includes(classItem.id) ? prev : [...prev, classItem.id]));
+  };
+
+  const addClassToImport = (classItem: ClassItem) => {
+    setClasses((prev) => {
+      if (prev.some((c) => c.id === classItem.id)) return prev;
+      return [classItem, ...prev];
+    });
+    setImportClassIds((prev) => (prev.includes(classItem.id) ? prev : [...prev, classItem.id]));
   };
 
   const handleCreateClass = async () => {
@@ -188,6 +204,35 @@ export function AdminDataPage() {
     }
   };
 
+  const handleImportLookupClasses = async () => {
+    setError('');
+    setImportLookupResults([]);
+    if (!tenantId.trim()) {
+      setError('请先选择 Tenant');
+      return;
+    }
+    if (!importLookupQuery.trim()) {
+      setError('请输入班级 ID 或名称');
+      return;
+    }
+
+    const token = await getAccessToken();
+    if (!token) return;
+
+    setImportLookupLoading(true);
+    try {
+      const result = await lookupAdminClasses(tenantId.trim(), importLookupQuery.trim(), token);
+      setImportLookupResults(result.classes ?? []);
+      if (!result.classes || result.classes.length === 0) {
+        setError('未找到匹配班级');
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '查找班级失败');
+    } finally {
+      setImportLookupLoading(false);
+    }
+  };
+
   const handleImportSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
@@ -219,6 +264,7 @@ export function AdminDataPage() {
           role: roleForImport,
           defaultPassword: importPassword,
           fileType: importFileType,
+          classIds: importFileType === 'student_sheet' && importClassIds.length > 0 ? importClassIds : undefined,
         },
         token
       );
@@ -486,7 +532,11 @@ export function AdminDataPage() {
               <label className="block text-sm font-medium text-slate-700 mb-1">文件类型</label>
               <select
                 value={importFileType}
-                onChange={(e) => setImportFileType(e.target.value as 'student_sheet' | 'teacher_sheet')}
+                onChange={(e) => {
+                  const v = e.target.value as 'student_sheet' | 'teacher_sheet';
+                  setImportFileType(v);
+                  if (v !== 'student_sheet') setImportClassIds([]);
+                }}
                 className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
               >
                 <option value="student_sheet">学生表 (student_sheet)</option>
@@ -515,6 +565,85 @@ export function AdminDataPage() {
               />
             </div>
           </div>
+
+          {importFileType === 'student_sheet' && (
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">选择班级（可选，导入后加入所选班级）</label>
+              {!tenantId.trim() ? (
+                <p className="text-sm text-slate-500">请先在「批量生成账号」上方选择 Tenant</p>
+              ) : classesLoading ? (
+                <p className="text-sm text-slate-500">加载班级中...</p>
+              ) : (
+                <div className="space-y-3">
+                  <div className="flex gap-2">
+                    <input
+                      value={importLookupQuery}
+                      onChange={(e) => setImportLookupQuery(e.target.value)}
+                      placeholder="输入班级 ID 或名称查找"
+                      className="flex-1 rounded-md border border-slate-300 px-3 py-2 text-sm"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleImportLookupClasses}
+                      disabled={importLookupLoading}
+                      className="rounded-md border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50 disabled:opacity-60"
+                    >
+                      {importLookupLoading ? '查找中...' : '查找并添加'}
+                    </button>
+                  </div>
+                  {importLookupResults.length > 0 && (
+                    <div className="space-y-1">
+                      {importLookupResults.map((c) => (
+                        <div key={`import-lookup-${c.id}`} className="flex items-center justify-between rounded border px-2 py-1 text-sm">
+                          <span>
+                            {c.name}
+                            {c.grade ? ` (${c.grade})` : ''}
+                            {c.studentCount != null ? ` · ${c.studentCount}人` : ''}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => addClassToImport(c)}
+                            className="rounded border border-slate-300 px-2 py-1 text-xs hover:bg-slate-50"
+                          >
+                            添加
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {classes.length === 0 && importLookupResults.length === 0 ? (
+                    <p className="text-sm text-amber-600">该租户下暂无班级，可先在「批量生成账号」中新建班级，或上方查找添加。</p>
+                  ) : (
+                    <div className="flex flex-wrap gap-2">
+                      {classes.map((c) => {
+                        const checked = importClassIds.includes(c.id);
+                        return (
+                          <label
+                            key={c.id}
+                            className={`inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm cursor-pointer ${
+                              checked ? 'border-slate-900 bg-slate-50' : 'border-slate-200 hover:bg-slate-50'
+                            }`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={(e) => {
+                                if (e.target.checked) setImportClassIds((prev) => [...prev, c.id]);
+                                else setImportClassIds((prev) => prev.filter((id) => id !== c.id));
+                              }}
+                            />
+                            {c.name}
+                            {c.grade ? ` (${c.grade})` : ''}
+                            {c.studentCount != null ? ` · ${c.studentCount}人` : ''}
+                          </label>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
 
           <div className="text-xs text-slate-500 rounded-md bg-slate-50 border p-3">
             <p>字段建议：</p>

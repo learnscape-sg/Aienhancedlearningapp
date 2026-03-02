@@ -32,6 +32,8 @@ import { useTheme } from '@/hooks/useTheme';
 import type { EntryId, LanguageSpace } from '@/config/entryConfig';
 import { RoleBasedLayout } from '@/components/shared/RoleBasedLayout';
 import { useRuntimePolicy } from '@/hooks/useRuntimePolicy';
+import { shouldUseTenantCompat } from '@/config/tenantCompat';
+import { appConfig } from '@/config/appConfig';
 
 // Teacher platform components
 import { TeacherOverview } from './components/TeacherOverview';
@@ -65,6 +67,27 @@ function AppContent() {
   const [pdfData, setPdfData] = useState<{ fileName: string; grade: string; interests: string[] } | null>(null);
   const [tutorQuestionTrigger, setTutorQuestionTrigger] = useState<{ selectedText: string; context: string; timestamp: number } | null>(null);
   const [courseDesignData, setCourseDesignData] = useState<any>(null);
+
+  // Apply tenant-scoped tablet color compat (hex overrides for older Chromium/WebView)
+  useEffect(() => {
+    const resolveTenantId = (): string | null => {
+      if (!appConfig.enableTenantScoping) return null;
+      const urlTenantId = searchParams.get('tenantId')?.trim();
+      if (urlTenantId) return urlTenantId;
+      const authTenantId = (localStorage.getItem('runtimeTenantId') || '').trim();
+      if (authTenantId) return authTenantId;
+      const cachedTenantId = (localStorage.getItem('tenantId') || '').trim();
+      if (cachedTenantId) return cachedTenantId;
+      if (user?.tenantId) return user.tenantId ?? null;
+      return null;
+    };
+    const tenantId = resolveTenantId();
+    if (shouldUseTenantCompat(tenantId)) {
+      document.documentElement.setAttribute('data-tenant-compat', 'true');
+    } else {
+      document.documentElement.removeAttribute('data-tenant-compat');
+    }
+  }, [searchParams, user?.tenantId]);
 
   // Read URL params for deep linking (e.g. ?section=course-design, ?section=courses&courseTab=shared)
   useEffect(() => {

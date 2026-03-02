@@ -12,6 +12,7 @@ import { ForgotPasswordPage } from './components/ForgotPasswordPage';
 import { ResetPasswordPage } from './components/ResetPasswordPage';
 import { AdminPortal } from './components/admin/AdminPortal';
 import './styles/globals.css';
+import './styles/tenant-compat.css';
 
 createRoot(document.getElementById('root')!).render(
   <AuthProvider>

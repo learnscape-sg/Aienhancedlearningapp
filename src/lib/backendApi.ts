@@ -1846,6 +1846,8 @@ export async function importAdminAccountsByFile(
     role: 'student' | 'teacher';
     defaultPassword: string;
     fileType: 'student_sheet' | 'teacher_sheet';
+    /** 学生导入时可选：选中的班级 ID 列表，导入后加入这些班级 */
+    classIds?: string[];
   },
   accessToken: string
 ): Promise<{
@@ -1861,6 +1863,9 @@ export async function importAdminAccountsByFile(
   form.append('role', params.role);
   form.append('defaultPassword', params.defaultPassword);
   form.append('fileType', params.fileType);
+  if (params.classIds && params.classIds.length > 0) {
+    params.classIds.forEach((id) => form.append('classIds', id));
+  }
 
   const response = await fetch(url, {
     method: 'POST',
