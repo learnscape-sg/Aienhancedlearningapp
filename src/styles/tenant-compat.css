@@ -1,6 +1,8 @@
 /**
  * Tenant-scoped tablet/WebView color compatibility layer.
- * When html[data-tenant-compat="true"], overrides semantic variables with pure hex
+ * ONLY affects tenant_cn_bamboo (data-tenant-compat="true").
+ * Other tenants are unchanged.
+ * Overrides semantic + palette variables with pure hex/rgba
  * to avoid oklch/color-mix failures on older Chromium.
  */
 [data-tenant-compat="true"] {
@@ -138,4 +140,100 @@
 }
 [data-tenant-compat="true"] [class*="to-accent"] {
   background: #4F46E5 !important;
+}
+
+/* ============================================
+ * Student Console - three-column layout compat
+ * slate/cyan/emerald palette + layout safeguards
+ * ============================================ */
+
+/* Student-console root */
+[data-tenant-compat="true"] .student-console {
+  background-color: #F8FAFC !important;
+  color: #1E293B !important;
+}
+
+/* Slate palette (hex) */
+[data-tenant-compat="true"] .student-console [class*="bg-slate-50"]:not([class*="/"]) {
+  background-color: #F8FAFC !important;
+}
+[data-tenant-compat="true"] .student-console [class*="bg-slate-100"]:not([class*="/"]) {
+  background-color: #F1F5F9 !important;
+}
+[data-tenant-compat="true"] .student-console [class*="bg-slate-200"]:not([class*="/"]) {
+  background-color: #E2E8F0 !important;
+}
+[data-tenant-compat="true"] .student-console [class*="bg-slate-300"]:not([class*="/"]) {
+  background-color: #CBD5E1 !important;
+}
+[data-tenant-compat="true"] .student-console [class*="text-slate-400"] { color: #94A3B8 !important; }
+[data-tenant-compat="true"] .student-console [class*="text-slate-500"] { color: #64748B !important; }
+[data-tenant-compat="true"] .student-console [class*="text-slate-600"] { color: #475569 !important; }
+[data-tenant-compat="true"] .student-console [class*="text-slate-700"] { color: #334155 !important; }
+[data-tenant-compat="true"] .student-console [class*="text-slate-800"] { color: #1E293B !important; }
+[data-tenant-compat="true"] .student-console [class*="border-slate-200"] { border-color: #E2E8F0 !important; }
+[data-tenant-compat="true"] .student-console [class*="border-slate-300"] { border-color: #CBD5E1 !important; }
+[data-tenant-compat="true"] .student-console [class*="hover:bg-slate-200"]:hover { background-color: #E2E8F0 !important; }
+[data-tenant-compat="true"] .student-console [class*="hover:bg-slate-300"]:hover { background-color: #CBD5E1 !important; }
+[data-tenant-compat="true"] .student-console [class*="hover:bg-cyan-300"]:hover { background-color: #67E8F9 !important; }
+[data-tenant-compat="true"] .student-console [class*="hover:bg-cyan-400"]:hover { background-color: #22D3EE !important; }
+
+/* Slate opacity variants */
+[data-tenant-compat="true"] .student-console [class*="bg-slate-50/10"] {
+  background-color: rgba(248, 250, 252, 0.1) !important;
+}
+[data-tenant-compat="true"] .student-console [class*="bg-slate-50/50"] {
+  background-color: rgba(248, 250, 252, 0.5) !important;
+}
+
+/* White opacity - replace backdrop-blur with solid fallback */
+[data-tenant-compat="true"] .student-console [class*="bg-white/90"],
+[data-tenant-compat="true"] .student-console [class*="bg-white/95"] {
+  background-color: rgba(255, 255, 255, 0.95) !important;
+  backdrop-filter: none !important;
+}
+
+/* Cyan palette */
+[data-tenant-compat="true"] .student-console [class*="bg-cyan-100"] { background-color: #CFFAFE !important; }
+[data-tenant-compat="true"] .student-console [class*="bg-cyan-200"] { background-color: #A5F3FC !important; }
+[data-tenant-compat="true"] .student-console [class*="bg-cyan-300"] { background-color: #67E8F9 !important; }
+[data-tenant-compat="true"] .student-console [class*="bg-cyan-400"] { background-color: #22D3EE !important; }
+[data-tenant-compat="true"] .student-console [class*="bg-cyan-500"] { background-color: #06B6D4 !important; }
+[data-tenant-compat="true"] .student-console [class*="border-cyan-100"] { border-color: #CFFAFE !important; }
+[data-tenant-compat="true"] .student-console [class*="border-cyan-200"] { border-color: #A5F3FC !important; }
+[data-tenant-compat="true"] .student-console [class*="border-cyan-300"] { border-color: #67E8F9 !important; }
+[data-tenant-compat="true"] .student-console [class*="ring-cyan-100"] { --tw-ring-color: #CFFAFE !important; }
+[data-tenant-compat="true"] .student-console [class*="text-cyan-600"] { color: #0891B2 !important; }
+[data-tenant-compat="true"] .student-console [class*="bg-cyan-200/20"] { background-color: rgba(165, 243, 252, 0.2) !important; }
+[data-tenant-compat="true"] .student-console [class*="to-cyan-50/30"] {
+  background: linear-gradient(to bottom right, #FFFFFF, rgba(236, 254, 255, 0.3)) !important;
+}
+[data-tenant-compat="true"] .student-console [class*="from-cyan-200/20"][class*="to-blue-200/20"] {
+  background: linear-gradient(to bottom right, rgba(165, 243, 252, 0.2), rgba(191, 219, 254, 0.2)) !important;
+}
+
+/* Emerald palette */
+[data-tenant-compat="true"] .student-console [class*="bg-emerald-50"] { background-color: #ECFDF5 !important; }
+[data-tenant-compat="true"] .student-console [class*="bg-emerald-500"] { background-color: #10B981 !important; }
+[data-tenant-compat="true"] .student-console [class*="border-emerald-300"] { border-color: #6EE7B7 !important; }
+[data-tenant-compat="true"] .student-console [class*="text-emerald-600"] { color: #059669 !important; }
+[data-tenant-compat="true"] .student-console [class*="text-emerald-700"] { color: #047857 !important; }
+
+/* Amber/Green (buttons) */
+[data-tenant-compat="true"] .student-console [class*="bg-amber-100"] { background-color: #FEF3C7 !important; }
+[data-tenant-compat="true"] .student-console [class*="bg-amber-200"] { background-color: #FDE68A !important; }
+[data-tenant-compat="true"] .student-console [class*="border-amber-200"] { border-color: #FCD34D !important; }
+[data-tenant-compat="true"] .student-console [class*="text-amber-700"] { color: #B45309 !important; }
+[data-tenant-compat="true"] .student-console [class*="bg-green-100"] { background-color: #DCFCE7 !important; }
+[data-tenant-compat="true"] .student-console [class*="bg-green-200"] { background-color: #BBF7D0 !important; }
+[data-tenant-compat="true"] .student-console [class*="border-green-200"] { border-color: #86EFAC !important; }
+[data-tenant-compat="true"] .student-console [class*="text-green-700"] { color: #15803D !important; }
+
+/* Three-column layout: ensure columns have min-width, visible borders */
+[data-tenant-compat="true"] .student-console > div[style*="width:"] {
+  min-width: 80px !important;
+}
+[data-tenant-compat="true"] .student-console [class*="border-r"][class*="border-slate"],
+[data-tenant-compat="true"] .student-console [class*="border-l"][class*="border-slate"] {
+  border-color: #E2E8F0 !important;
 }
