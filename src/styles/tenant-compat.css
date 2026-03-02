@@ -278,3 +278,40 @@
   padding-right: env(safe-area-inset-right, 0);
   padding-bottom: env(safe-area-inset-bottom, 0);
 }
+
+/* ============================================
+ * Force desktop layout - no stacking on tablet
+ * 覆盖 Tailwind md:/lg: 响应式，始终保持多栏横排
+ * ============================================ */
+
+/* Grid: force multi-column (override grid-cols-1) */
+[data-tenant-compat="true"] [class*="md:grid-cols-2"] { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+[data-tenant-compat="true"] [class*="md:grid-cols-3"] { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; }
+[data-tenant-compat="true"] [class*="md:grid-cols-4"] { grid-template-columns: repeat(4, minmax(0, 1fr)) !important; }
+[data-tenant-compat="true"] [class*="md:grid-cols-5"] { grid-template-columns: repeat(5, minmax(0, 1fr)) !important; }
+[data-tenant-compat="true"] [class*="md:grid-cols-6"] { grid-template-columns: repeat(6, minmax(0, 1fr)) !important; }
+[data-tenant-compat="true"] [class*="lg:grid-cols-2"] { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+[data-tenant-compat="true"] [class*="lg:grid-cols-3"] { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; }
+[data-tenant-compat="true"] [class*="lg:grid-cols-4"] { grid-template-columns: repeat(4, minmax(0, 1fr)) !important; }
+[data-tenant-compat="true"] [class*="sm:grid-cols-2"] { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+[data-tenant-compat="true"] [class*="sm:grid-cols-3"] { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; }
+[data-tenant-compat="true"] [class*="xl:grid-cols-4"] { grid-template-columns: repeat(4, minmax(0, 1fr)) !important; }
+
+/* Flex: force row (override flex-col) */
+[data-tenant-compat="true"] [class*="md:flex-row"] { flex-direction: row !important; }
+[data-tenant-compat="true"] [class*="md:flex-row"][class*="flex-col"] { flex-direction: row !important; }
+[data-tenant-compat="true"] [class*="sm:flex-row"] { flex-direction: row !important; }
+[data-tenant-compat="true"] [class*="sm:flex-row"][class*="flex-col"] { flex-direction: row !important; }
+
+/* Hidden md:flex - show as flex (e.g. TopNavigation nav) */
+[data-tenant-compat="true"] [class~="hidden"][class*="md:flex"] { display: flex !important; }
+
+/* md:space-y-0, md:space-x-* - horizontal layout spacing */
+[data-tenant-compat="true"] [class*="md:space-y-0"] { row-gap: 0 !important; }
+[data-tenant-compat="true"] [class*="md:space-x-3"] { column-gap: 0.75rem !important; }
+
+/* Student Console: ensure flex row for three columns */
+[data-tenant-compat="true"] .student-console {
+  flex-direction: row !important;
+  display: flex !important;
+}
