@@ -17,6 +17,7 @@ import { Avatar, AvatarFallback } from './ui/avatar';
 import { useAuth } from './AuthContext';
 import {
   listTeacherClasses,
+  addExistingClassForTeacher,
   createClass,
   getClass,
   addStudentToClassByEmail,
@@ -39,6 +40,7 @@ interface Student {
 export function ClassManagementPage() {
   const { user } = useAuth();
   const [classes, setClasses] = useState<ClassWithCount[]>([]);
+  const [tenantClasses, setTenantClasses] = useState<ClassWithCount[]>([]);
   const [classesLoading, setClassesLoading] = useState(true);
   const [selectedClassId, setSelectedClassId] = useState<string | null>(null);
   const [classDetail, setClassDetail] = useState<{
@@ -55,6 +57,11 @@ export function ClassManagementPage() {
   const [newClassGrade, setNewClassGrade] = useState('');
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState('');
+  const [addExistingOpen, setAddExistingOpen] = useState(false);
+  const [existingGrade, setExistingGrade] = useState('');
+  const [existingClassId, setExistingClassId] = useState('');
+  const [addingExisting, setAddingExisting] = useState(false);
+  const [addExistingError, setAddExistingError] = useState('');
 
   const [addStudentOpen, setAddStudentOpen] = useState(false);
   const [addStudentEmail, setAddStudentEmail] = useState('');
@@ -74,9 +81,18 @@ export function ClassManagementPage() {
     if (!user?.id) return;
     setClassesLoading(true);
     try {
-      const res = await listTeacherClasses(user.id);
+      const [managedRes, tenantRes] = await Promise.all([
+        listTeacherClasses(user.id),
+        listTeacherClasses(user.id, { scope: 'tenant' }),
+      ]);
       setClasses(
-        (res.classes ?? []).map((c) => ({
+        (managedRes.classes ?? []).map((c) => ({
+          ...c,
+          studentCount: c.studentCount ?? 0,
+        }))
+      );
+      setTenantClasses(
+        (tenantRes.classes ?? []).map((c) => ({
           ...c,
           studentCount: c.studentCount ?? 0,
         }))
@@ -239,12 +255,21 @@ export function ClassManagementPage() {
   );
 
   const selectedClass = classes.find((c) => c.id === selectedClassId);
+  const canManageSelectedClass = !!selectedClass && selectedClass.teacherId === user?.id;
+  const gradeOptions = Array.from(
+    new Set(
+      tenantClasses
+        .map((c) => (c.grade ?? '').trim())
+        .filter((grade) => grade.length > 0)
+    )
+  ).sort((a, b) => a.localeCompare(b, 'zh-Hans-CN'));
+  const classesForSelectedGrade = tenantClasses.filter((c) => (c.grade ?? '').trim() === existingGrade);
 
   return (
     <div className="p-8 space-y-6">
       <div>
         <h1 className="text-3xl font-bold text-gray-900">班级管理</h1>
-        <p className="text-muted-foreground mt-2">管理您的班级和学生</p>
+        <p className="text-muted-foreground mt-2">管理我的班级（自建 + 已添加）</p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -279,10 +304,22 @@ export function ClassManagementPage() {
           <CardHeader>
             <div className="flex items-center justify-between">
               <CardTitle>班级列表</CardTitle>
-              <Button size="sm" onClick={() => setNewClassOpen(true)}>
-                <UserPlus className="w-4 h-4 mr-1" />
-                新建
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    setAddExistingOpen(true);
+                    setExistingGrade('');
+                    setExistingClassId('');
+                  }}
+                >
+                  添加已有班级
+                </Button>
+                <Button size="sm" onClick={() => setNewClassOpen(true)}>
+                  <UserPlus className="w-4 h-4 mr-1" />
+                  新建
+                </Button>
+              </div>
             </div>
             <CardDescription>选择一个班级查看详情</CardDescription>
           </CardHeader>
@@ -307,22 +344,29 @@ export function ClassManagementPage() {
                       <div className="flex items-center gap-2 mb-1">
                         <h3 className="font-medium">{c.name}</h3>
                         {c.grade && <Badge variant="secondary">{c.grade}</Badge>}
+                        {c.teacherId === user?.id ? (
+                          <Badge variant="outline">我创建</Badge>
+                        ) : (
+                          <Badge variant="outline">已添加</Badge>
+                        )}
                       </div>
                       <p className="text-sm text-muted-foreground">
                         {(c.studentCount ?? 0)} 名学生
                       </p>
                     </div>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="text-destructive hover:text-destructive"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleDeleteClass(c.id);
-                      }}
-                    >
-                      <X className="w-4 h-4" />
-                    </Button>
+                    {c.teacherId === user?.id ? (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="bg-white text-destructive border-destructive/30 hover:bg-red-50 hover:text-destructive"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteClass(c.id);
+                        }}
+                      >
+                        <X className="w-4 h-4" />
+                      </Button>
+                    ) : null}
                   </div>
                 ))}
               </div>
@@ -339,10 +383,9 @@ export function ClassManagementPage() {
                   {selectedClass ? `${selectedClass.name} 的学生` : '选择班级查看学生'}
                 </CardDescription>
               </div>
-              {selectedClassId && (
+              {selectedClassId && canManageSelectedClass && (
                 <div className="flex items-center gap-2">
                   <Button
-                    variant="outline"
                     size="sm"
                     onClick={() => {
                       setBulkCreateOpen(true);
@@ -404,14 +447,16 @@ export function ClassManagementPage() {
                             <p className="text-sm text-muted-foreground">{s.email || s.id}</p>
                           </div>
                         </div>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="text-destructive"
-                          onClick={() => handleRemoveStudent(s.id)}
-                        >
-                          移出
-                        </Button>
+                        {canManageSelectedClass ? (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-destructive hover:text-destructive"
+                            onClick={() => handleRemoveStudent(s.id)}
+                          >
+                            移出
+                          </Button>
+                        ) : null}
                       </div>
                     ))
                   )}
@@ -459,6 +504,89 @@ export function ClassManagementPage() {
             <Button onClick={handleCreateClass} disabled={!newClassName.trim() || creating}>
               {creating && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
               创建
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Add Existing Class Dialog */}
+      <Dialog
+        open={addExistingOpen}
+        onOpenChange={(open) => {
+          setAddExistingOpen(open);
+          if (!open) {
+            setExistingGrade('');
+            setExistingClassId('');
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>添加已有班级</DialogTitle>
+            <DialogDescription>先选择年级，再选择该年级下的班级</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="existing-grade">年级</Label>
+              <select
+                id="existing-grade"
+                value={existingGrade}
+                onChange={(e) => {
+                  setExistingGrade(e.target.value);
+                  setExistingClassId('');
+                }}
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              >
+                <option value="">请选择年级</option>
+                {gradeOptions.map((grade) => (
+                  <option key={grade} value={grade}>
+                    {grade}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="existing-class">班级</Label>
+              <select
+                id="existing-class"
+                value={existingClassId}
+                disabled={!existingGrade}
+                onChange={(e) => setExistingClassId(e.target.value)}
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <option value="">请选择班级</option>
+                {classesForSelectedGrade.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            {addExistingError ? <p className="text-sm text-destructive">{addExistingError}</p> : null}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAddExistingOpen(false)}>
+              取消
+            </Button>
+            <Button
+              disabled={!existingClassId || addingExisting}
+              onClick={async () => {
+                setAddExistingError('');
+                setAddingExisting(true);
+                try {
+                  await addExistingClassForTeacher(existingClassId);
+                  await loadClasses();
+                  setSelectedClassId(existingClassId);
+                  setAddExistingOpen(false);
+                } catch (err) {
+                  setAddExistingError(err instanceof Error ? err.message : '添加已有班级失败');
+                } finally {
+                  setAddingExisting(false);
+                }
+              }}
+            >
+              {addingExisting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+              添加并查看
             </Button>
           </DialogFooter>
         </DialogContent>

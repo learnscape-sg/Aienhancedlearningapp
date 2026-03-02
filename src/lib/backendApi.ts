@@ -387,14 +387,20 @@ export async function listPublicTasks(params?: {
 export interface ClassItem {
   id: string;
   teacherId: string;
+  isOwner?: boolean;
   name: string;
   grade?: string;
   createdAt?: string;
   studentCount?: number;
 }
 
-export async function listTeacherClasses(teacherId: string): Promise<{ classes: ClassItem[] }> {
-  return apiCall(`/api/classes?teacherId=${encodeURIComponent(teacherId)}`, { method: 'GET' });
+export async function listTeacherClasses(
+  teacherId: string,
+  options?: { scope?: 'teacher' | 'tenant' }
+): Promise<{ classes: ClassItem[] }> {
+  const qs = new URLSearchParams({ teacherId });
+  if (options?.scope) qs.set('scope', options.scope);
+  return apiCall(`/api/classes?${qs.toString()}`, { method: 'GET' });
 }
 
 export async function createClass(
@@ -459,6 +465,10 @@ export async function removeStudentFromClass(
 
 export async function deleteClass(classId: string): Promise<void> {
   await apiCall(`/api/classes/${encodeURIComponent(classId)}`, { method: 'DELETE' });
+}
+
+export async function addExistingClassForTeacher(classId: string): Promise<{ success: boolean; alreadyAdded?: boolean }> {
+  return apiCall(`/api/classes/${encodeURIComponent(classId)}/teachers`, { method: 'POST' });
 }
 
 // --- Assignments (Phase 2) ---

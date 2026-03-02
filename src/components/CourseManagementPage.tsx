@@ -143,7 +143,7 @@ export function CourseManagementPage({ initialCourseTab }: { initialCourseTab?: 
     const dialogOpen = taskAssignDialogOpen || courseAssignDialogOpen;
     if (!user?.id || !dialogOpen) return;
     setClassesLoading(true);
-    listTeacherClasses(user.id)
+    listTeacherClasses(user.id, { scope: 'tenant' })
       .then((res) =>
         setClasses(
           (res.classes ?? []).map((c) => ({
