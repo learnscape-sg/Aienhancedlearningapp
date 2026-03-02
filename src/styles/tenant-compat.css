@@ -23,18 +23,24 @@
   --sidebar: #FFFFFF;
   --sidebar-foreground: #0F172A;
   --sidebar-primary: #4F46E5;
+  --sidebar-accent: #EEF2FF;
+  --sidebar-border: #E2E8F0;
+  --input: #E2E8F0;
   --input-background: #F8FAFC;
   --switch-background: #E2E8F0;
   -webkit-text-size-adjust: 100%;
 }
 
-/* Component fallbacks when Tailwind output uses unsupported color syntax */
+/* Base color overrides */
 [data-tenant-compat="true"] .bg-primary,
 [data-tenant-compat="true"] button.bg-primary {
   background-color: #4F46E5 !important;
 }
 [data-tenant-compat="true"] .text-primary {
   color: #4F46E5 !important;
+}
+[data-tenant-compat="true"] .text-primary-foreground {
+  color: #FFFFFF !important;
 }
 [data-tenant-compat="true"] .bg-background {
   background-color: #FFFFFF !important;
@@ -45,7 +51,13 @@
 [data-tenant-compat="true"] .bg-muted {
   background-color: #F8FAFC !important;
 }
+[data-tenant-compat="true"] .text-muted-foreground {
+  color: #475569 !important;
+}
 [data-tenant-compat="true"] .border-border {
+  border-color: #E2E8F0 !important;
+}
+[data-tenant-compat="true"] .border-input {
   border-color: #E2E8F0 !important;
 }
 [data-tenant-compat="true"] .bg-card {
@@ -53,4 +65,77 @@
 }
 [data-tenant-compat="true"] .bg-destructive {
   background-color: #DC2626 !important;
+}
+[data-tenant-compat="true"] .text-destructive {
+  color: #DC2626 !important;
+}
+[data-tenant-compat="true"] .bg-input-background {
+  background-color: #F8FAFC !important;
+}
+
+/* Sidebar */
+[data-tenant-compat="true"] .bg-sidebar {
+  background-color: #FFFFFF !important;
+}
+[data-tenant-compat="true"] .text-sidebar-foreground {
+  color: #0F172A !important;
+}
+[data-tenant-compat="true"] .bg-sidebar-primary {
+  background-color: #4F46E5 !important;
+}
+[data-tenant-compat="true"] .text-sidebar-primary-foreground {
+  color: #FFFFFF !important;
+}
+[data-tenant-compat="true"] .border-sidebar-border {
+  border-color: #E2E8F0 !important;
+}
+[data-tenant-compat="true"] .bg-sidebar-accent {
+  background-color: #EEF2FF !important;
+}
+[data-tenant-compat="true"] .hover\:bg-sidebar-accent:hover,
+[data-tenant-compat="true"] .hover\:bg-sidebar-accent:focus {
+  background-color: #EEF2FF !important;
+}
+
+/* Opacity variants - Tailwind v4 uses color-mix, override with rgba */
+[data-tenant-compat="true"] [class*="bg-primary/10"] {
+  background-color: rgba(79, 70, 229, 0.1) !important;
+}
+[data-tenant-compat="true"] [class*="bg-primary/20"] {
+  background-color: rgba(79, 70, 229, 0.2) !important;
+}
+[data-tenant-compat="true"] [class*="border-primary/20"] {
+  border-color: rgba(79, 70, 229, 0.2) !important;
+}
+[data-tenant-compat="true"] [class*="border-primary/30"] {
+  border-color: rgba(79, 70, 229, 0.3) !important;
+}
+[data-tenant-compat="true"] [class*="bg-sidebar-primary/10"] {
+  background-color: rgba(79, 70, 229, 0.1) !important;
+}
+[data-tenant-compat="true"] [class*="bg-sidebar-primary/20"] {
+  background-color: rgba(79, 70, 229, 0.2) !important;
+}
+[data-tenant-compat="true"] [class*="bg-destructive/10"] {
+  background-color: rgba(220, 38, 38, 0.1) !important;
+}
+[data-tenant-compat="true"] [class*="border-destructive/20"] {
+  border-color: rgba(220, 38, 38, 0.2) !important;
+}
+[data-tenant-compat="true"] [class*="text-primary-foreground/80"] {
+  color: rgba(255, 255, 255, 0.8) !important;
+}
+
+/* Hover states */
+[data-tenant-compat="true"] .hover\:bg-primary-hover:hover,
+[data-tenant-compat="true"] button:hover.bg-primary {
+  background-color: #4338CA !important;
+}
+
+/* Gradients fallback - use solid primary for compat */
+[data-tenant-compat="true"] [class*="from-primary"] {
+  background: #4F46E5 !important;
+}
+[data-tenant-compat="true"] [class*="to-accent"] {
+  background: #4F46E5 !important;
 }

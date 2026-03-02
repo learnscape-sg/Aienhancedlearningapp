@@ -3,8 +3,22 @@
   <html lang="en">
     <head>
       <meta charset="UTF-8" />
-      <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+      <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5, viewport-fit=cover" />
       <title>AI Enhanced Learning App</title>
+      <script>
+        (function(){
+          var tenantId = '';
+          try {
+            var q = new URL(window.location.href).searchParams.get('tenantId') || '';
+            if (q) tenantId = q.trim();
+            if (!tenantId) tenantId = (localStorage.getItem('runtimeTenantId') || '').trim();
+            if (!tenantId) tenantId = (localStorage.getItem('tenantId') || '').trim();
+            if (tenantId === 'tenant_cn_bamboo') {
+              document.documentElement.setAttribute('data-tenant-compat', 'true');
+            }
+          } catch (e) {}
+        })();
+      </script>
     </head>
 
     <body>
