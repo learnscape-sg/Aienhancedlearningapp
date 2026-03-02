@@ -64,6 +64,17 @@ const toServerLanguage = (lang: string): string => {
   return lang;
 };
 
+const pickSupportedAudioMimeType = (): string | null => {
+  if (typeof MediaRecorder === 'undefined' || typeof MediaRecorder.isTypeSupported !== 'function') {
+    return null;
+  }
+  const candidates = ['audio/webm;codecs=opus', 'audio/webm'];
+  for (const type of candidates) {
+    if (MediaRecorder.isTypeSupported(type)) return type;
+  }
+  return null;
+};
+
 export function useSpeechRecognition(
   options: UseSpeechRecognitionOptions = {}
 ): UseSpeechRecognitionReturn {
@@ -149,9 +160,10 @@ export function useSpeechRecognition(
 
       streamRef.current = stream;
 
-      const mediaRecorder = new MediaRecorder(stream, {
-        mimeType: 'audio/webm;codecs=opus',
-      });
+      const preferredMimeType = pickSupportedAudioMimeType();
+      const mediaRecorder = preferredMimeType
+        ? new MediaRecorder(stream, { mimeType: preferredMimeType })
+        : new MediaRecorder(stream);
 
       mediaRecorderRef.current = mediaRecorder;
       audioChunksRef.current = [];
@@ -166,7 +178,8 @@ export function useSpeechRecognition(
           streamRef.current = null;
         }
 
-        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+        const blobType = mediaRecorder.mimeType || preferredMimeType || 'audio/webm';
+        const audioBlob = new Blob(audioChunksRef.current, { type: blobType });
         const reader = new FileReader();
 
         reader.onloadend = async () => {

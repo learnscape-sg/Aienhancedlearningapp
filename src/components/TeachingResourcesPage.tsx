@@ -192,18 +192,6 @@ function Stepper({
   );
 }
 
-/** Render key idea text with __KEY__ replaced by highlighted blanks */
-function KeyIdeaBlock({ idea }: { idea: KeyIdea }) {
-  const parts = idea.text.split('__KEY__');
-  const blanks = idea.blanks || [];
-  const rendered = parts
-    .map((part, i) => `${part}${i < parts.length - 1 ? `【${blanks[i] ?? '______'}】` : ''}`)
-    .join('');
-  return (
-    <MathTextPreview text={rendered} className="text-sm [&_p]:mb-0" />
-  );
-}
-
 /** Parse markdown-bold keywords (**...**) into fill-in blanks */
 function parseKeyPointToKeyIdea(raw: string): KeyIdea {
   const blanks: string[] = [];
@@ -221,6 +209,18 @@ function keyIdeaToRaw(idea: KeyIdea): string {
   return parts
     .map((p, i) => p + (i < (idea.blanks?.length ?? 0) ? `**${idea.blanks![i]}**` : ''))
     .join('');
+}
+
+function keyIdeasToText(ideas: KeyIdea[]): string {
+  return ideas.map((idea) => keyIdeaToRaw(idea)).join('\n');
+}
+
+function textToKeyIdeas(text: string): KeyIdea[] {
+  return text
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => parseKeyPointToKeyIdea(line));
 }
 
 /** Parse task-design practice/exit_ticket item (question/answer or q/a) into GeneratedQuestion */
@@ -348,6 +348,10 @@ const TASK_TYPES = [
   { id: 'autonomous', label: '自主型任务', available: false },
 ] as const;
 
+const DEFAULT_TEXT_INSTRUCTION = `请打开洋葱APP学习（指定某单元某课），完成后进入下一步
+或者
+请学习课本内容（指定课本内容），完成后进入下一步`;
+
 export function TeachingResourcesPage() {
   const { user, preferences } = useAuth();
   const { policy } = useRuntimePolicy();
@@ -370,7 +374,8 @@ export function TeachingResourcesPage() {
   const [videoContent, setVideoContent] = useState<VideoContentResult | null>(null);
   const [selectedVideoItem, setSelectedVideoItem] = useState<VideoSearchItem | null>(null);
   const [keyIdeas, setKeyIdeas] = useState<KeyIdea[]>([]);
-  const [editingKeyIdeaIndex, setEditingKeyIdeaIndex] = useState<number | null>(null);
+  const [keyIdeasText, setKeyIdeasText] = useState('');
+  const [keyIdeasEditing, setKeyIdeasEditing] = useState(false);
   const [practiceQuestions, setPracticeQuestions] = useState<GeneratedQuestion[]>([]);
   const [editingPracticeIndex, setEditingPracticeIndex] = useState<number | null>(null);
   const [exitTicketQuestions, setExitTicketQuestions] = useState<GeneratedQuestion[]>([]);
@@ -383,7 +388,7 @@ export function TeachingResourcesPage() {
   const [searchResults, setSearchResults] = useState<VideoSearchItem[]>([]);
   const [customVideoItems, setCustomVideoItems] = useState<VideoSearchItem[]>([]);
   const [pasteUrl, setPasteUrl] = useState('');
-  const [customTextInstruction, setCustomTextInstruction] = useState('');
+  const [customTextInstruction, setCustomTextInstruction] = useState(DEFAULT_TEXT_INSTRUCTION);
   const [loading, setLoading] = useState(false);
   const [uploadingResource, setUploadingResource] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -628,7 +633,10 @@ export function TeachingResourcesPage() {
   const handleViewKeyIdeas = () => {
     const json = taskDesignJsonRef.current;
     const keyPoints = (json?.key_points as string[] | undefined) || [];
-    setKeyIdeas(keyPoints.map((t) => parseKeyPointToKeyIdea(t)));
+    const parsedIdeas = keyPoints.map((t) => parseKeyPointToKeyIdea(t));
+    setKeyIdeas(parsedIdeas);
+    setKeyIdeasText(keyIdeasToText(parsedIdeas));
+    setKeyIdeasEditing(false);
     setStep(3);
     setMaxStepReached((m) => Math.max(m, 3));
   };
@@ -670,7 +678,12 @@ export function TeachingResourcesPage() {
     if (!restReady || step !== 3 || keyIdeas.length > 0) return;
     const json = taskDesignJsonRef.current;
     const keyPoints = (json?.key_points as string[] | undefined) || [];
-    if (keyPoints.length > 0) setKeyIdeas(keyPoints.map((t) => parseKeyPointToKeyIdea(t)));
+    if (keyPoints.length > 0) {
+      const parsedIdeas = keyPoints.map((t) => parseKeyPointToKeyIdea(t));
+      setKeyIdeas(parsedIdeas);
+      setKeyIdeasText(keyIdeasToText(parsedIdeas));
+      setKeyIdeasEditing(false);
+    }
   }, [restReady, step, keyIdeas.length]);
 
   const handleGenerateTask = async () => {
@@ -722,6 +735,7 @@ export function TeachingResourcesPage() {
         durationMin: parseInt(entryDuration, 10) || 15,
         difficulty: entryDifficulty,
         prerequisites: entryPrerequisites,
+        source: 'task_generation',
       });
       void trackProductEvent({
         eventName: 'task_create_succeeded',
@@ -1130,7 +1144,8 @@ export function TeachingResourcesPage() {
                       const effectiveSubject = (entrySubject === CUSTOM_SUBJECT_OPTION ? entryCustomSubject : entrySubject).trim();
                       setError(null);
                       setKeyIdeas([]);
-                      setEditingKeyIdeaIndex(null);
+                      setKeyIdeasText('');
+                      setKeyIdeasEditing(false);
                       setPracticeQuestions([]);
                       setEditingPracticeIndex(null);
                       setExitTicketQuestions([]);
@@ -1464,58 +1479,65 @@ export function TeachingResourcesPage() {
               <CardContent className="p-6">
                 <h2 className="text-lg font-semibold mb-2">关键要点</h2>
                 <p className="text-sm text-muted-foreground mb-4">
-                  学生阅读或观看学习素材时可填写高亮关键词。点击文本框进入编辑模式。
+                  默认展示渲染结果，点击下方区域进入编辑模式；编辑时每行一个要点，方便增减条目。
                 </p>
                 {!restReady ? (
                   <div className="flex items-center gap-2 text-sm text-muted-foreground py-8">
                     <Loader2 className="w-5 h-5 animate-spin" />
                     正在准备关键要点…
                   </div>
-                ) : keyIdeas.length > 0 ? (
-                  <ol className="list-decimal list-inside space-y-3 text-sm mb-4">
-                    {keyIdeas.map((idea, idx) => (
-                      <li key={idx} className="flex flex-col gap-2">
-                        <div className="flex gap-2">
-                          <span className="shrink-0 pt-2">{idx + 1}.</span>
-                          {editingKeyIdeaIndex === idx ? (
-                            <div className="flex-1 flex flex-col gap-2">
-                              <Textarea
-                                className="min-h-[60px] text-sm"
-                                value={keyIdeaToRaw(idea)}
-                                onChange={(e) => {
-                                  const next = [...keyIdeas];
-                                  next[idx] = parseKeyPointToKeyIdea(e.target.value);
-                                  setKeyIdeas(next);
-                                }}
-                                onBlur={() => setEditingKeyIdeaIndex(null)}
-                                autoFocus
-                                placeholder="用 **关键词** 包裹填空词，公式用 $...$，如：根据 $F=ma$，**力**等于质量乘以加速度"
-                              />
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                className="w-fit"
-                                onClick={() => setEditingKeyIdeaIndex(null)}
-                              >
-                                完成编辑
-                              </Button>
-                            </div>
-                          ) : (
-                            <div
-                              role="button"
-                              tabIndex={0}
-                              onClick={() => setEditingKeyIdeaIndex(idx)}
-                              onKeyDown={(e) => e.key === 'Enter' && setEditingKeyIdeaIndex(idx)}
-                              className="flex-1 min-h-[44px] px-3 py-2 rounded-md border border-transparent hover:border-slate-200 hover:bg-slate-50/80 cursor-text transition-colors text-left"
-                            >
-                              <KeyIdeaBlock idea={idea} />
-                            </div>
-                          )}
-                        </div>
-                      </li>
-                    ))}
-                  </ol>
-                ) : null}
+                ) : keyIdeasEditing ? (
+                  <div className="mb-4 space-y-2">
+                    <Textarea
+                      className="min-h-[220px] text-sm"
+                      value={keyIdeasText}
+                      onChange={(e) => {
+                        const nextText = e.target.value;
+                        setKeyIdeasText(nextText);
+                        setKeyIdeas(textToKeyIdeas(nextText));
+                      }}
+                      autoFocus
+                      placeholder={`每行一个关键要点，可自由增减条目。
+示例：
+根据 $F=ma$，**力**等于质量乘以加速度
+惯性是物体保持原有运动状态的性质`}
+                    />
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="w-fit"
+                      onClick={() => setKeyIdeasEditing(false)}
+                    >
+                      完成编辑
+                    </Button>
+                  </div>
+                ) : (
+                  <div
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => setKeyIdeasEditing(true)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        setKeyIdeasEditing(true);
+                      }
+                    }}
+                    className="min-h-[220px] mb-4 rounded-md border px-3 py-3 cursor-text hover:border-slate-300 hover:bg-slate-50/60 transition-colors"
+                  >
+                    {keyIdeas.length > 0 ? (
+                      <div className="space-y-3 text-sm">
+                        {keyIdeas.map((idea, idx) => (
+                          <div key={idx} className="flex gap-2">
+                            <span className="shrink-0 text-muted-foreground pt-0.5">{idx + 1}.</span>
+                            <MathTextPreview text={keyIdeaToRaw(idea)} className="flex-1 [&_p]:mb-0" />
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">暂无关键要点，点击此处开始编辑。</p>
+                    )}
+                  </div>
+                )}
                 <div className="flex justify-end gap-2 mt-4">
                   <Button variant="outline" onClick={() => setStep(2)}>
                     <ChevronLeft className="w-4 h-4 mr-1" />

@@ -276,6 +276,8 @@ export async function saveTask(
     durationMin?: number;
     difficulty?: string;
     prerequisites?: string;
+    generationBatchId?: string;
+    source?: 'course_generation' | 'task_generation';
   }
 ): Promise<{ taskId: string }> {
   return apiCall<{ taskId: string }>('/api/tasks', {
@@ -314,6 +316,8 @@ export async function listTeacherTasks(
     publishedAt?: string;
     scheduledPublishAt?: string;
     publishStatus?: 'draft' | 'scheduled' | 'published' | 'cancelled';
+    generationBatchId?: string;
+    source?: 'course_generation' | 'task_generation';
     deletedAt?: string;
     canRestore?: boolean;
     createdAt?: string;

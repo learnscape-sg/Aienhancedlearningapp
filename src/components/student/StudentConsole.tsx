@@ -393,6 +393,9 @@ const StudentConsole: React.FC<StudentConsoleProps> = ({ plan, onComplete, onApi
   const [practiceInputMode, setPracticeInputMode] = useState<Record<number, 'text' | 'upload' | 'draw'>>({});
   const [practiceCurrentIndex, setPracticeCurrentIndex] = useState(0);
   const practiceCanvasRef = useRef<SignatureCanvas>(null);
+  const [mindmapInputMode, setMindmapInputMode] = useState<'upload' | 'draw'>('upload');
+  const [mindmapImageAnswer, setMindmapImageAnswer] = useState<string>('');
+  const mindmapCanvasRef = useRef<SignatureCanvas>(null);
   const [showPracticeSolutions, setShowPracticeSolutions] = useState<Record<number, boolean>>({});
   const [stuckClicksPerPracticeQuestion, setStuckClicksPerPracticeQuestion] = useState<Record<number, number>>({});
   const [stuckClicksForKeyIdeas, setStuckClicksForKeyIdeas] = useState(0);
@@ -635,6 +638,12 @@ const StudentConsole: React.FC<StudentConsoleProps> = ({ plan, onComplete, onApi
       practiceCanvasRef.current?.clear();
     }
   }, [guidedStep, practiceCurrentIndex]);
+
+  useEffect(() => {
+    if (viewType === 'mindmap_editor') {
+      mindmapCanvasRef.current?.clear();
+    }
+  }, [viewType, currentTaskIndex]);
 
   const getIconForTrait = (key: string) => {
       switch(key) {
@@ -1254,18 +1263,9 @@ const StudentConsole: React.FC<StudentConsoleProps> = ({ plan, onComplete, onApi
   const getTaskContext = () => {
       let context = "";
       if (viewType === 'mindmap_editor') {
-        // Use visualizationData if available, otherwise fall back to mindMapInput
-        if (visualizationData) {
-          if (visualizationData.type === 'mindmap') {
-            // For mindmap, use Mermaid code if available
-            context = `Student ${visualizationData.type === 'mindmap' ? 'Mindmap' : visualizationData.type === 'conceptmap' ? 'Concept Map' : 'Knowledge Graph'}: \n${mindMapInput || JSON.stringify(visualizationData, null, 2)}`;
-          } else {
-            // For conceptmap and knowledgegraph, use structured data
-            context = `Student ${visualizationData.type === 'conceptmap' ? 'Concept Map' : 'Knowledge Graph'}: \nNodes: ${visualizationData.nodes.map(n => n.label).join(', ')}\nEdges: ${visualizationData.edges.length} connections\n${JSON.stringify(visualizationData, null, 2)}`;
-          }
-        } else {
-          context = `Student Mindmap Code: \n${mindMapInput}`;
-        }
+        context = mindmapImageAnswer
+          ? 'Student submitted a handwritten/photo knowledge map image.'
+          : 'Student has not submitted a knowledge map image yet.';
       } else if (viewType === 'table_editor') context = `Student Table Data: \nColumns: ${tableData.columns.join(', ')}. \nCurrent Content: ${JSON.stringify(tableData.rows)}`;
       else if (viewType === 'text_editor') context = `Student Text Editor Content: \n${textEditorContent}`;
       else if (viewType === 'math_editor') context = `Student Math Editor Content: \n${mathEditorContent}`;
@@ -1643,6 +1643,10 @@ STEP VERIFICATION PROTOCOL (guided flow):
 
     // ──── 非引导流（原有逻辑）────
     const context = getTaskContext();
+    const doneImages =
+      viewType === 'mindmap_editor' && mindmapImageAnswer
+        ? [mindmapImageAnswer]
+        : undefined;
     handleSendMessage(
         t('guidedDoneTask'), 
         `Student clicked 'I'm Done'. Context: ${context}. 
@@ -1658,6 +1662,8 @@ CRITICAL TASK COMPLETION PROTOCOL:
 5. Do NOT continue asking questions or requesting more work if the core goal is met
 6. Allow students to move forward even if their work isn't perfect - learning is iterative
 7. Give immediate positive feedback on what they did well before any suggestions`
+      ,
+      doneImages
     );
   };
 
@@ -2073,7 +2079,7 @@ CRITICAL: Output language must be 简体中文 only.
 
   const handleFinishLearning = async () => {
     // Capture the final mind map if the current view is a mind map editor
-    const finalMindMap = viewType === 'mindmap_editor' ? mindMapInput : undefined;
+    const finalMindMap = viewType === 'mindmap_editor' ? (mindmapImageAnswer || mindMapInput) : undefined;
     const log = studentLog.join("\n");
     
     // Extract objective metrics
@@ -2170,6 +2176,8 @@ CRITICAL: Output language must be 简体中文 only.
     setMessages([]);
     setStudentLog([]);
     setMindMapInput('');
+    setMindmapImageAnswer('');
+    setMindmapInputMode('upload');
     setTableData({ columns: [], rows: [] });
     setTextEditorContent('');
     setMathEditorContent('');
@@ -2486,6 +2494,125 @@ CRITICAL: Output language must be 简体中文 only.
     );
   }
 
+  const renderPhotoHandwriteInput = (
+    mode: 'upload' | 'draw',
+    setMode: React.Dispatch<React.SetStateAction<'upload' | 'draw'>>,
+    imageValue: string,
+    setImageValue: React.Dispatch<React.SetStateAction<string>>,
+    canvasRef: React.RefObject<SignatureCanvas>
+  ) => {
+    const hasImageAnswer = !!imageValue;
+    return (
+      <div className="space-y-3">
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={() => setMode('upload')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+              mode === 'upload'
+                ? 'bg-cyan-100 text-cyan-800 border border-cyan-300'
+                : 'bg-white text-slate-600 border border-slate-300 hover:bg-slate-50'
+            }`}
+          >
+            <Camera size={14} /> 拍照上传
+          </button>
+          <button
+            type="button"
+            onClick={() => setMode('draw')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+              mode === 'draw'
+                ? 'bg-cyan-100 text-cyan-800 border border-cyan-300'
+                : 'bg-white text-slate-600 border border-slate-300 hover:bg-slate-50'
+            }`}
+          >
+            <Pencil size={14} /> 屏幕手写
+          </button>
+        </div>
+
+        {mode === 'upload' && (
+          <div className="space-y-2">
+            <label className="flex flex-col items-center justify-center w-full min-h-[140px] border-2 border-dashed border-slate-300 rounded-lg cursor-pointer hover:bg-slate-50 transition-colors">
+              <Upload className="w-8 h-8 text-slate-400 mb-2" />
+              <span className="text-sm text-slate-600">{t('takePhotoUpload')}</span>
+              <input
+                type="file"
+                accept="image/*"
+                capture="environment"
+                className="sr-only"
+                onChange={(e) => {
+                  const file = e.target?.files?.[0];
+                  if (!file) return;
+                  const reader = new FileReader();
+                  reader.onload = () => {
+                    const base64 = reader.result as string;
+                    setImageValue(base64);
+                  };
+                  reader.readAsDataURL(file);
+                }}
+              />
+            </label>
+            {hasImageAnswer && (
+              <div className="flex items-center gap-2">
+                <img src={imageValue} alt={t('handwrittenAnswer')} className="max-h-24 rounded border border-slate-200" />
+                <button
+                  type="button"
+                  onClick={() => setImageValue('')}
+                  className="text-xs text-red-600 hover:underline"
+                >
+                  移除
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {mode === 'draw' && (
+          <div className="space-y-2">
+            <div className="border border-slate-300 rounded-lg overflow-hidden bg-white">
+              <SignatureCanvas
+                ref={canvasRef}
+                canvasProps={{ className: 'w-full h-44 touch-none' }}
+                penColor="black"
+                backgroundColor="white"
+              />
+            </div>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => canvasRef.current?.clear()}
+                className="px-3 py-1.5 text-xs rounded border border-slate-300 bg-white hover:bg-slate-50"
+              >
+                清空
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const dataUrl = canvasRef.current?.toDataURL('image/png');
+                  if (dataUrl) setImageValue(dataUrl);
+                }}
+                className="px-3 py-1.5 text-xs rounded bg-cyan-600 text-white hover:bg-cyan-700"
+              >
+                保存手写
+              </button>
+            </div>
+            {hasImageAnswer && (
+              <div className="flex items-center gap-2">
+                <img src={imageValue} alt={t('handwrittenAnswer')} className="max-h-24 rounded border border-slate-200" />
+                <button
+                  type="button"
+                  onClick={() => setImageValue('')}
+                  className="text-xs text-red-600 hover:underline"
+                >
+                  重新绘制
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   const renderLeftWorkspace = () => {
     // Guided flow for teacher-generated JSON (video + worksheet)
     if (isGuidedVideoFlow) {
@@ -2787,85 +2914,19 @@ CRITICAL: Output language must be 简体中文 only.
                                   className="w-full min-h-[90px] rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-200 resize-y"
                                 />
                               )}
-                              {inputMode === 'upload' && (
-                                <div className="space-y-2">
-                                  <label className="flex flex-col items-center justify-center w-full min-h-[120px] border-2 border-dashed border-slate-300 rounded-lg cursor-pointer hover:bg-slate-50 transition-colors">
-                                    <Camera className="w-8 h-8 text-slate-400 mb-2" />
-                                    <span className="text-sm text-slate-600">{t('takePhotoUpload')}</span>
-                                    <input
-                                      type="file"
-                                      accept="image/*"
-                                      capture="environment"
-                                      className="sr-only"
-                                      onChange={(e) => {
-                                        const file = e.target?.files?.[0];
-                                        if (!file) return;
-                                        const reader = new FileReader();
-                                        reader.onload = () => {
-                                          const base64 = reader.result as string;
-                                          setPracticeImageAnswers((prev) => ({ ...prev, [idx]: base64 }));
-                                        };
-                                        reader.readAsDataURL(file);
-                                      }}
-                                    />
-                                  </label>
-                                  {hasImageAnswer && (
-                                    <div className="flex items-center gap-2">
-                                      <img src={practiceImageAnswers[idx]} alt={t('handwrittenAnswer')} className="max-h-24 rounded border border-slate-200" />
-                                      <button
-                                        type="button"
-                                        onClick={() => setPracticeImageAnswers((prev) => ({ ...prev, [idx]: '' }))}
-                                        className="text-xs text-red-600 hover:underline"
-                                      >
-                                        移除
-                                      </button>
-                                    </div>
-                                  )}
-                                </div>
-                              )}
-                              {inputMode === 'draw' && (
-                                <div className="space-y-2">
-                                  <div className="border border-slate-300 rounded-lg overflow-hidden bg-white">
-                                    <SignatureCanvas
-                                      ref={practiceCanvasRef}
-                                      canvasProps={{ className: 'w-full h-36 touch-none' }}
-                                      penColor="black"
-                                      backgroundColor="white"
-                                    />
-                                  </div>
-                                  <div className="flex gap-2">
-                                    <button
-                                      type="button"
-                                      onClick={() => practiceCanvasRef.current?.clear()}
-                                      className="px-3 py-1.5 text-xs rounded border border-slate-300 bg-white hover:bg-slate-50"
-                                    >
-                                      清空
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        const dataUrl = practiceCanvasRef.current?.toDataURL('image/png');
-                                        if (dataUrl) setPracticeImageAnswers((prev) => ({ ...prev, [idx]: dataUrl }));
-                                      }}
-                                      className="px-3 py-1.5 text-xs rounded bg-cyan-600 text-white hover:bg-cyan-700"
-                                    >
-                                      保存手写
-                                    </button>
-                                  </div>
-                                  {hasImageAnswer && (
-                                    <div className="flex items-center gap-2">
-                                      <img src={practiceImageAnswers[idx]} alt={t('handwrittenAnswer')} className="max-h-24 rounded border border-slate-200" />
-                                      <button
-                                        type="button"
-                                        onClick={() => setPracticeImageAnswers((prev) => ({ ...prev, [idx]: '' }))}
-                                        className="text-xs text-red-600 hover:underline"
-                                      >
-                                        重新绘制
-                                      </button>
-                                    </div>
-                                  )}
-                                </div>
-                              )}
+                              {(inputMode === 'upload' || inputMode === 'draw') &&
+                                renderPhotoHandwriteInput(
+                                  inputMode,
+                                  (next) =>
+                                    setPracticeInputMode((prev) => ({ ...prev, [idx]: next })),
+                                  practiceImageAnswers[idx] || '',
+                                  (next) =>
+                                    setPracticeImageAnswers((prev) => ({
+                                      ...prev,
+                                      [idx]: typeof next === 'function' ? next(prev[idx] || '') : next,
+                                    })),
+                                  practiceCanvasRef as React.RefObject<SignatureCanvas>
+                                )}
                             </>
                           )}
                           {q.correctAnswer && (stuckClicksPerPracticeQuestion[idx] ?? 0) >= 5 && (
@@ -3022,12 +3083,8 @@ CRITICAL: Output language must be 简体中文 only.
         );
     }
 
-    // 2. MINDMAP EDITOR (Using New VisualizationEditor)
+    // 2. MINDMAP EDITOR (Photo/Handwrite Input)
     if (viewType === 'mindmap_editor') {
-        // Note: All handler functions are defined at component level (above) for use in both embedded and fullscreen modes
-        // 获取课程主题
-        const courseTopic = currentTask.title || currentTask.outputGoal || '本节课主题';
-
         return (
             <div className="w-full h-full bg-white flex flex-col relative border-r border-slate-200">
                 {currentTask.description && (
@@ -3037,44 +3094,21 @@ CRITICAL: Output language must be 简体中文 only.
                     </p>
                   </div>
                 )}
-                {/* Fullscreen button */}
-                {visualizationData && (
-                    <div className="absolute top-2 right-2 z-50">
-                        <button
-                            onClick={() => setIsFullscreenMindmap(true)}
-                            className="p-2 rounded-lg bg-white/90 hover:bg-white border border-slate-200 shadow-md transition-all hover:shadow-lg text-slate-700 hover:text-slate-900"
-                            title={t('fullscreen')}
-                        >
-                            <Maximize size={16} />
-                        </button>
+                <div className="flex-1 p-6 overflow-auto custom-scrollbar bg-slate-50/20">
+                    <div className="max-w-2xl space-y-4">
+                        <h3 className="text-lg font-bold text-slate-800">知识图谱作答</h3>
+                        <p className="text-sm text-slate-600">
+                          请通过拍照上传或屏幕手写提交你的知识图谱，提交后再点击「我做完了」让 AI 导师进行评价。
+                        </p>
+                        {renderPhotoHandwriteInput(
+                          mindmapInputMode,
+                          setMindmapInputMode,
+                          mindmapImageAnswer,
+                          setMindmapImageAnswer,
+                          mindmapCanvasRef as React.RefObject<SignatureCanvas>
+                        )}
                     </div>
-                )}
-                
-                {isAssetLoading && (
-                    <div className="absolute inset-0 z-50 bg-white/80 backdrop-blur-sm flex items-center justify-center flex-col gap-2 animate-fade-in">
-                        <Loader2 size={32} className="animate-spin text-purple-600"/>
-                        <span className="text-xs font-bold text-slate-500">AI 正在生成思维导图框架...</span>
-                    </div>
-                )}
-                
-                {visualizationData ? (
-                    <VisualizationEditor
-                        initialData={visualizationData}
-                        onChange={handleVisualizationChange}
-                        editable={true}
-                        courseTopic={courseTopic}
-                        onGenerateFramework={handleGenerateFramework}
-                        onNodeCreated={handleNodeCreated}
-                        onNodeEdited={handleNodeEdited}
-                        onEdgeCreated={handleEdgeCreated}
-                        onConfusionMarked={handleConfusionMarked}
-                        onProgressUpdate={handleProgressUpdate}
-                    />
-                ) : (
-                    <div className="w-full h-full flex items-center justify-center text-slate-400 text-sm">
-                        正在初始化可视化编辑器...
-                    </div>
-                )}
+                </div>
             </div>
         );
     }

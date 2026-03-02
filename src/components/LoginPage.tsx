@@ -80,8 +80,8 @@ export function LoginPage({ onSuccess }: LoginPageProps) {
           {/* Background with organic shapes */}
           <div className="absolute inset-0 bg-gradient-to-br from-orange-200 via-orange-300 to-orange-400 opacity-80"></div>
           <div className="absolute top-0 right-0 w-1/2 h-full">
-            <div className="absolute top-8 right-8 w-80 h-80 bg-white/30 rounded-full blur-3xl"></div>
-            <div className="absolute bottom-16 right-16 w-60 h-60 bg-white/40 rounded-full blur-2xl"></div>
+            <div className="absolute top-8 right-8 w-80 h-80 bg-white/30 rounded-full blur-2xl motion-reduce:blur-lg will-change-transform"></div>
+            <div className="absolute bottom-16 right-16 w-60 h-60 bg-white/40 rounded-full blur-xl motion-reduce:blur-md will-change-transform"></div>
           </div>
           
           <div className="relative z-10 h-full flex items-center justify-center px-8">

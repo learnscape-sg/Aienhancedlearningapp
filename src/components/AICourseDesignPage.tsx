@@ -23,7 +23,10 @@ import {
   Layers,
   ChevronDown,
   ChevronUp,
+  ChevronLeft,
+  ChevronRight,
   Pencil,
+  Trash2,
   Download,
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
@@ -42,6 +45,7 @@ import {
   generateTaskDocuments,
   generateSystemTaskPlan,
   generateTaskAsset,
+  saveTask,
   createCourse,
   trackProductEvent,
 } from '../lib/backendApi';
@@ -60,6 +64,41 @@ type GenStep = 'curriculum' | 'documents' | 'tasks' | 'assets';
 
 const needsAssetGeneration = (assetType: string): boolean =>
   assetType !== 'editable_text' && assetType !== 'math_editable';
+
+const createGenerationBatchId = (): string => {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === 'x' ? r : ((r & 0x3) | 0x8);
+    return v.toString(16);
+  });
+};
+
+const downloadMarkdownFile = (content: string, filename: string) => {
+  const blob = new Blob([content], { type: 'text/markdown;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+};
+
+const buildCourseTaskTopic = (params: {
+  grade: string;
+  subject: string;
+  topic: string;
+  learningGoal?: string;
+}): string => {
+  const gradePart = params.grade.trim();
+  const subjectPart = params.subject.trim();
+  const topicPart = params.topic.trim();
+  const goalPart = (params.learningGoal || '').trim();
+  const parts = [gradePart, subjectPart, topicPart, goalPart].filter(Boolean);
+  return parts.join(' - ');
+};
 
 interface AICourseDesignPageProps {
   onNextStep?: (data: { plan: SystemTaskPlan; courseId?: string; courseUrl?: string }) => void;
@@ -92,8 +131,15 @@ export function AICourseDesignPage({ onNextStep }: AICourseDesignPageProps) {
   const [regeneratingTaskId, setRegeneratingTaskId] = useState<string | null>(null);
   const [editingTaskIndex, setEditingTaskIndex] = useState<number | null>(null);
   const [editingPromptTaskIndex, setEditingPromptTaskIndex] = useState<number | null>(null);
+  const [previewTaskIndex, setPreviewTaskIndex] = useState(0);
   const [expandedDescIds, setExpandedDescIds] = useState<Set<string>>(new Set());
   const [pdfDownloading, setPdfDownloading] = useState<'task' | 'guide' | null>(null);
+
+  useEffect(() => {
+    if (!plan) return;
+    const maxIndex = Math.max(plan.tasks.length - 1, 0);
+    setPreviewTaskIndex((prev) => Math.min(prev, maxIndex));
+  }, [plan?.tasks.length]);
 
   const hasPrefilledRef = useRef(false);
   useEffect(() => {
@@ -193,6 +239,7 @@ export function AICourseDesignPage({ onNextStep }: AICourseDesignPageProps) {
         tasks: newTasks,
       };
       setPlan(planWithAssets);
+      setPreviewTaskIndex(0);
       void trackProductEvent({
         eventName: 'task_create_succeeded',
         role: 'teacher',
@@ -281,6 +328,7 @@ export function AICourseDesignPage({ onNextStep }: AICourseDesignPageProps) {
 
       const planWithAssets = { ...planResult, tasks: newTasks };
       setPlan(planWithAssets);
+      setPreviewTaskIndex(0);
       setGenStep(null);
       setStep('preview');
     } catch (err) {
@@ -324,6 +372,36 @@ export function AICourseDesignPage({ onNextStep }: AICourseDesignPageProps) {
     }
   };
 
+  const resetTaskEditorState = () => {
+    setEditingTaskIndex(null);
+    setEditingPromptTaskIndex(null);
+  };
+
+  const handlePreviewNavigate = (nextIndex: number) => {
+    if (!plan) return;
+    const maxIndex = Math.max(plan.tasks.length - 1, 0);
+    const clamped = Math.max(0, Math.min(nextIndex, maxIndex));
+    resetTaskEditorState();
+    setPreviewTaskIndex(clamped);
+  };
+
+  const handleDeleteCurrentTask = () => {
+    if (!plan || plan.tasks.length <= 1) return;
+    const removingTask = plan.tasks[previewTaskIndex];
+    const nextTasks = plan.tasks.filter((_, index) => index !== previewTaskIndex);
+    resetTaskEditorState();
+    setRegeneratingTaskId((prev) => (prev === removingTask?.id ? null : prev));
+    if (removingTask?.id) {
+      setExpandedDescIds((prev) => {
+        const next = new Set(prev);
+        next.delete(removingTask.id);
+        return next;
+      });
+    }
+    setPlan({ ...plan, tasks: nextTasks });
+    setPreviewTaskIndex((prev) => Math.min(prev, nextTasks.length - 1));
+  };
+
   const normalizeBase64Image = (content?: string): string | null => {
     if (!content) return null;
     if (content.startsWith('data:image')) return content;
@@ -338,7 +416,35 @@ export function AICourseDesignPage({ onNextStep }: AICourseDesignPageProps) {
     setCreateLoading(true);
     setCreateError(null);
     try {
-      const result = await createCourse(plan, user?.id, {
+      const batchId = createGenerationBatchId();
+      const taskIds: string[] = [];
+
+      for (let i = 0; i < plan.tasks.length; i++) {
+        const task = plan.tasks[i];
+        const taskTopic = buildCourseTaskTopic({
+          grade,
+          subject: effectiveSubject,
+          topic,
+          learningGoal: task.outputGoal || task.title,
+        });
+        try {
+          const { taskId } = await saveTask(task, user?.id, {
+            subject: subjectMeta.subject,
+            subjectCustom: subjectMeta.subjectCustom,
+            subjectIsCustom: subjectMeta.subjectIsCustom,
+            grade,
+            topic: taskTopic,
+            generationBatchId: batchId,
+            source: 'course_generation',
+          });
+          taskIds.push(taskId);
+        } catch (taskSaveError) {
+          const message = taskSaveError instanceof Error ? taskSaveError.message : String(taskSaveError);
+          throw new Error(`第 ${i + 1} 个任务保存失败：${message}`);
+        }
+      }
+
+      const result = await createCourse({ taskIds }, user?.id, {
         subject: subjectMeta.subject,
         subjectCustom: subjectMeta.subjectCustom,
         subjectIsCustom: subjectMeta.subjectIsCustom,
@@ -352,7 +458,7 @@ export function AICourseDesignPage({ onNextStep }: AICourseDesignPageProps) {
         teacherId: user?.id,
         language,
         courseId: result.courseId,
-        properties: { source: 'AICourseDesignPage', taskCount: plan.tasks.length },
+        properties: { source: 'AICourseDesignPage', taskCount: taskIds.length },
       }).catch(() => undefined);
 
       // 尝试将课程元数据写入 Supabase，再更新前端课程管理列表
@@ -617,7 +723,20 @@ export function AICourseDesignPage({ onNextStep }: AICourseDesignPageProps) {
                         className="inline-flex items-center gap-1 text-xs text-cyan-600 hover:text-cyan-700 hover:underline disabled:opacity-50"
                       >
                         {pdfDownloading === 'task' ? <Loader2 className="w-3 h-3 animate-spin" /> : <Download className="w-3 h-3" />}
-                        任务单
+                        任务单 .pdf
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          downloadMarkdownFile(
+                            documents.studentTaskSheet,
+                            `任务单-${topic || '课程'}-${Date.now()}.md`
+                          )
+                        }
+                        className="inline-flex items-center gap-1 text-xs text-cyan-600 hover:text-cyan-700 hover:underline"
+                      >
+                        <Download className="w-3 h-3" />
+                        任务单 .md
                       </button>
                       <button
                         type="button"
@@ -636,7 +755,20 @@ export function AICourseDesignPage({ onNextStep }: AICourseDesignPageProps) {
                         className="inline-flex items-center gap-1 text-xs text-cyan-600 hover:text-cyan-700 hover:underline disabled:opacity-50"
                       >
                         {pdfDownloading === 'guide' ? <Loader2 className="w-3 h-3 animate-spin" /> : <Download className="w-3 h-3" />}
-                        教师指南
+                        教师指南 .pdf
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          downloadMarkdownFile(
+                            documents.teacherGuide,
+                            `教师指南-${topic || '课程'}-${Date.now()}.md`
+                          )
+                        }
+                        className="inline-flex items-center gap-1 text-xs text-cyan-600 hover:text-cyan-700 hover:underline"
+                      >
+                        <Download className="w-3 h-3" />
+                        教师指南 .md
                       </button>
                     </span>
                   </AccordionPrimitive.Header>
@@ -708,7 +840,20 @@ export function AICourseDesignPage({ onNextStep }: AICourseDesignPageProps) {
                     className="inline-flex items-center gap-1 px-3 py-1.5 text-sm text-cyan-600 hover:text-cyan-700 hover:underline border border-cyan-200 rounded-md disabled:opacity-50"
                   >
                     {pdfDownloading === 'task' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
-                    下载任务单
+                    下载任务单 .pdf
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      downloadMarkdownFile(
+                        documents.studentTaskSheet,
+                        `任务单-${topic || '课程'}-${Date.now()}.md`
+                      )
+                    }
+                    className="inline-flex items-center gap-1 px-3 py-1.5 text-sm text-cyan-600 hover:text-cyan-700 hover:underline border border-cyan-200 rounded-md"
+                  >
+                    <Download className="w-4 h-4" />
+                    下载任务单 .md
                   </button>
                   <button
                     type="button"
@@ -727,7 +872,20 @@ export function AICourseDesignPage({ onNextStep }: AICourseDesignPageProps) {
                     className="inline-flex items-center gap-1 px-3 py-1.5 text-sm text-cyan-600 hover:text-cyan-700 hover:underline border border-cyan-200 rounded-md disabled:opacity-50"
                   >
                     {pdfDownloading === 'guide' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
-                    下载教师指南
+                    下载教师指南 .pdf
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      downloadMarkdownFile(
+                        documents.teacherGuide,
+                        `教师指南-${topic || '课程'}-${Date.now()}.md`
+                      )
+                    }
+                    className="inline-flex items-center gap-1 px-3 py-1.5 text-sm text-cyan-600 hover:text-cyan-700 hover:underline border border-cyan-200 rounded-md"
+                  >
+                    <Download className="w-4 h-4" />
+                    下载教师指南 .md
                   </button>
                 </div>
                 <Accordion type="single" collapsible>
@@ -764,15 +922,50 @@ export function AICourseDesignPage({ onNextStep }: AICourseDesignPageProps) {
             </p>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="space-y-4">
-              {plan.tasks.map((t, i) => {
-                const needsAsset = needsAssetGeneration(t.assetType) && t.assetPrompt;
-                const hasAsset = !!t.generatedAssetContent;
-                return (
-                  <div
-                    key={t.id}
-                    className="border rounded-lg p-4 bg-gray-50/50 space-y-3"
-                  >
+            {plan.tasks.length > 0 && (() => {
+              const i = previewTaskIndex;
+              const t = plan.tasks[i];
+              const needsAsset = needsAssetGeneration(t.assetType) && t.assetPrompt;
+              const hasAsset = !!t.generatedAssetContent;
+              return (
+                <div className="space-y-4">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <p className="text-sm text-muted-foreground">
+                      第 {i + 1} / {plan.tasks.length} 个任务
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handlePreviewNavigate(i - 1)}
+                        disabled={i === 0}
+                      >
+                        <ChevronLeft className="w-4 h-4 mr-1" />
+                        上一个
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handlePreviewNavigate(i + 1)}
+                        disabled={i === plan.tasks.length - 1}
+                      >
+                        下一个
+                        <ChevronRight className="w-4 h-4 ml-1" />
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="text-red-600 hover:text-red-700"
+                        onClick={handleDeleteCurrentTask}
+                        disabled={plan.tasks.length <= 1}
+                      >
+                        <Trash2 className="w-4 h-4 mr-1" />
+                        删除当前任务
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div className="border rounded-lg p-4 bg-gray-50/50 space-y-3">
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex-1 space-y-2">
                         <div className="flex items-center gap-2">
@@ -785,112 +978,107 @@ export function AICourseDesignPage({ onNextStep }: AICourseDesignPageProps) {
                           />
                         </div>
                         <div className="text-sm text-muted-foreground">
-                            {editingTaskIndex === i ? (
-                              <div className="space-y-2">
-                                <Textarea
-                                  value={t.description || ''}
-                                  onChange={(e) => {
-                                    if (!plan) return;
-                                    const newTasks = [...plan.tasks];
-                                    newTasks[i] = { ...newTasks[i], description: e.target.value };
-                                    setPlan({ ...plan, tasks: newTasks });
+                          {editingTaskIndex === i ? (
+                            <div className="space-y-2">
+                              <Textarea
+                                value={t.description || ''}
+                                onChange={(e) => handleUpdateTask(i, { description: e.target.value })}
+                                onBlur={() => setEditingTaskIndex(null)}
+                                className="min-h-24 text-sm"
+                                placeholder="任务描述"
+                                autoFocus
+                              />
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => setEditingTaskIndex(null)}
+                              >
+                                完成编辑
+                              </Button>
+                            </div>
+                          ) : t.description ? (
+                            <div className="space-y-1">
+                              <div className="prose prose-sm max-w-none text-slate-700">
+                                <ReactMarkdown
+                                  remarkPlugins={[remarkMath, remarkGfm]}
+                                  rehypePlugins={[rehypeKatex]}
+                                  components={{
+                                    p: ({ children }) => (
+                                      <p className="mb-2 last:mb-0">{children}</p>
+                                    ),
+                                    strong: ({ children }) => (
+                                      <strong className="font-semibold text-slate-800">
+                                        {children}
+                                      </strong>
+                                    ),
+                                    ul: ({ children }) => (
+                                      <ul className="list-disc list-inside mb-2 ml-4">
+                                        {children}
+                                      </ul>
+                                    ),
+                                    ol: ({ children }) => (
+                                      <ol className="list-decimal list-inside mb-2 ml-4">
+                                        {children}
+                                      </ol>
+                                    ),
+                                    li: ({ children }) => (
+                                      <li className="mb-1">{children}</li>
+                                    ),
                                   }}
-                                  onBlur={() => setEditingTaskIndex(null)}
-                                  className="min-h-24 text-sm"
-                                  placeholder="任务描述"
-                                  autoFocus
-                                />
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => setEditingTaskIndex(null)}
                                 >
-                                  完成编辑
-                                </Button>
+                                  {(t.description?.length ?? 0) > 200 &&
+                                  !expandedDescIds.has(t.id)
+                                    ? `${t.description.slice(0, 200)}...`
+                                    : t.description}
+                                </ReactMarkdown>
                               </div>
-                            ) : t.description ? (
-                              <div className="space-y-1">
-                                <div className="prose prose-sm max-w-none text-slate-700">
-                                  <ReactMarkdown
-                                    remarkPlugins={[remarkMath, remarkGfm]}
-                                    rehypePlugins={[rehypeKatex]}
-                                    components={{
-                                      p: ({ children }) => (
-                                        <p className="mb-2 last:mb-0">{children}</p>
-                                      ),
-                                      strong: ({ children }) => (
-                                        <strong className="font-semibold text-slate-800">
-                                          {children}
-                                        </strong>
-                                      ),
-                                      ul: ({ children }) => (
-                                        <ul className="list-disc list-inside mb-2 ml-4">
-                                          {children}
-                                        </ul>
-                                      ),
-                                      ol: ({ children }) => (
-                                        <ol className="list-decimal list-inside mb-2 ml-4">
-                                          {children}
-                                        </ol>
-                                      ),
-                                      li: ({ children }) => (
-                                        <li className="mb-1">{children}</li>
-                                      ),
-                                    }}
-                                  >
-                                    {(t.description?.length ?? 0) > 200 &&
-                                    !expandedDescIds.has(t.id)
-                                      ? `${t.description.slice(0, 200)}...`
-                                      : t.description}
-                                  </ReactMarkdown>
-                                </div>
-                                {(t.description?.length ?? 0) > 200 && (
-                                  <button
-                                    type="button"
-                                    className="flex items-center gap-1 text-cyan-600 hover:text-cyan-700 text-xs font-medium"
-                                    onClick={() =>
-                                      setExpandedDescIds((prev) => {
-                                        const next = new Set(prev);
-                                        if (next.has(t.id)) next.delete(t.id);
-                                        else next.add(t.id);
-                                        return next;
-                                      })
-                                    }
-                                  >
-                                    {expandedDescIds.has(t.id) ? (
-                                      <>
-                                        <ChevronUp className="w-4 h-4" />
-                                        收起
-                                      </>
-                                    ) : (
-                                      <>
-                                        <ChevronDown className="w-4 h-4" />
-                                        展开全文
-                                      </>
-                                    )}
-                                  </button>
-                                )}
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  className="h-7 px-2 text-xs text-slate-500 hover:text-slate-700 -ml-1"
-                                  onClick={() => setEditingTaskIndex(i)}
+                              {(t.description?.length ?? 0) > 200 && (
+                                <button
+                                  type="button"
+                                  className="flex items-center gap-1 text-cyan-600 hover:text-cyan-700 text-xs font-medium"
+                                  onClick={() =>
+                                    setExpandedDescIds((prev) => {
+                                      const next = new Set(prev);
+                                      if (next.has(t.id)) next.delete(t.id);
+                                      else next.add(t.id);
+                                      return next;
+                                    })
+                                  }
                                 >
-                                  <Pencil className="w-3 h-3 mr-1" />
-                                  编辑
-                                </Button>
-                              </div>
-                            ) : (
+                                  {expandedDescIds.has(t.id) ? (
+                                    <>
+                                      <ChevronUp className="w-4 h-4" />
+                                      收起
+                                    </>
+                                  ) : (
+                                    <>
+                                      <ChevronDown className="w-4 h-4" />
+                                      展开全文
+                                    </>
+                                  )}
+                                </button>
+                              )}
                               <Button
                                 size="sm"
                                 variant="ghost"
-                                className="h-7 text-xs text-slate-500"
+                                className="h-7 px-2 text-xs text-slate-500 hover:text-slate-700 -ml-1"
                                 onClick={() => setEditingTaskIndex(i)}
                               >
                                 <Pencil className="w-3 h-3 mr-1" />
-                                添加描述
+                                编辑
                               </Button>
-                            )}
+                            </div>
+                          ) : (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-7 text-xs text-slate-500"
+                              onClick={() => setEditingTaskIndex(i)}
+                            >
+                              <Pencil className="w-3 h-3 mr-1" />
+                              添加描述
+                            </Button>
+                          )}
                         </div>
                       </div>
                       {needsAsset && (
@@ -931,12 +1119,7 @@ export function AICourseDesignPage({ onNextStep }: AICourseDesignPageProps) {
                             </Label>
                             <Textarea
                               value={t.assetPrompt || ''}
-                              onChange={(e) => {
-                                if (!plan) return;
-                                const newTasks = [...plan.tasks];
-                                newTasks[i] = { ...newTasks[i], assetPrompt: e.target.value };
-                                setPlan({ ...plan, tasks: newTasks });
-                              }}
+                              onChange={(e) => handleUpdateTask(i, { assetPrompt: e.target.value })}
                               className="min-h-20 text-sm font-mono"
                               placeholder="输入生成素材的提示词…"
                               autoFocus
@@ -1011,9 +1194,9 @@ export function AICourseDesignPage({ onNextStep }: AICourseDesignPageProps) {
                       </div>
                     )}
                   </div>
-                );
-              })}
-            </div>
+                </div>
+              );
+            })()}
             {createError && (
               <Alert variant="destructive">
                 <AlertDescription>{createError}</AlertDescription>
