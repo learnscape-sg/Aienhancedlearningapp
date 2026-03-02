@@ -22,14 +22,28 @@ export type ProductEventName =
   | 'teacher_signup_completed'
   | 'task_create_started'
   | 'task_create_succeeded'
+  | 'task_design_generation_failed'
+  | 'task_design_phase_completed'
   | 'course_create_succeeded'
   | 'course_publish_succeeded'
   | 'course_assign_succeeded'
+  | 'course_assignment_removed'
   | 'course_opened'
   | 'step_entered'
   | 'step_completed'
   | 'stuck_clicked'
   | 'course_completed'
+  | 'report_viewed'
+  | 'report_filter_changed'
+  | 'report_refresh_clicked'
+  | 'exit_ticket_generation_started'
+  | 'exit_ticket_generation_succeeded'
+  | 'exit_ticket_generation_failed'
+  | 'class_created'
+  | 'student_added_to_class'
+  | 'student_removed_from_class'
+  | 'class_deleted'
+  | 'students_batch_created_for_class'
   | 'language_switched'
   | 'feedback_submitted';
 
@@ -1291,7 +1305,8 @@ export async function generateExitTicket(
   learningLog: string,
   language: Language,
   studentName?: string,
-  objectiveMetrics?: ObjectiveMetrics
+  objectiveMetrics?: ObjectiveMetrics,
+  courseId?: string
 ): Promise<ExitTicketAnalysis | null> {
   try {
     return await apiCall<ExitTicketAnalysis>('/api/exit-ticket', {
@@ -1301,6 +1316,7 @@ export async function generateExitTicket(
         language,
         studentName: studentName || '您',
         ...(objectiveMetrics && { objectiveMetrics }),
+        ...(courseId && { courseId }),
       }),
     });
   } catch (error) {
@@ -1632,6 +1648,20 @@ export async function getStudentTraitsSummary(
 ): Promise<StudentTraitsSummary> {
   const qs = new URLSearchParams({ range });
   return apiCall<StudentTraitsSummary>(`/api/student-traits/summary?${qs}`, { method: 'GET' });
+}
+
+export type StudentReportsData = {
+  range: string;
+  weeklyProgress: Array<{ day: string; hours: number; completed: number }>;
+  monthlyTrend: Array<{ period: string; score: number; time: number }>;
+  subjectPerformance: Array<{ subject: string; accuracy: number; completed: number; total: number }>;
+};
+
+export async function getStudentReports(
+  range: 'week' | 'month' | 'quarter' = 'month'
+): Promise<StudentReportsData> {
+  const qs = new URLSearchParams({ range });
+  return apiCall<StudentReportsData>(`/api/student-reports?${qs}`, { method: 'GET' });
 }
 
 export async function getRuntimePolicy(params: {

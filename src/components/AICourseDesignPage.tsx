@@ -205,6 +205,20 @@ export function AICourseDesignPage({ onNextStep }: AICourseDesignPageProps) {
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       setGenError(msg);
+      void trackProductEvent({
+        eventName: 'task_design_generation_failed',
+        role: 'teacher',
+        teacherId: user?.id,
+        language,
+        properties: {
+          source: 'AICourseDesignPage',
+          subject: effectiveSubject,
+          grade: grade.trim(),
+          topic: topic.trim(),
+          stage: genStep || 'unknown',
+          errorMessage: msg,
+        },
+      }).catch(() => undefined);
       setGenStep(null);
     }
   };

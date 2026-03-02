@@ -499,7 +499,23 @@ export function TeachingResourcesPage() {
       taskDesignMarkdownRef.current = result.markdown ?? null;
       generateTaskDesignPromiseRef.current = null;
     } catch (e) {
-      setError(e instanceof Error ? e.message : '生成学习目标失败');
+      const message = e instanceof Error ? e.message : '生成学习目标失败';
+      const effectiveSubject = (entrySubject === CUSTOM_SUBJECT_OPTION ? entryCustomSubject : entrySubject).trim();
+      setError(message);
+      void trackProductEvent({
+        eventName: 'task_design_generation_failed',
+        role: 'teacher',
+        teacherId: user?.id,
+        language: entryLanguage,
+        properties: {
+          source: 'TeachingResourcesPage',
+          stage: 'objective',
+          subject: effectiveSubject,
+          grade: entryGrade,
+          topic: entryTopic.trim(),
+          errorMessage: message,
+        },
+      }).catch(() => undefined);
     } finally {
       setObjectiveLoading(false);
     }
@@ -738,7 +754,23 @@ export function TeachingResourcesPage() {
       setTaskGenerating(false);
     } catch (err) {
       console.error('Failed to generate task:', err);
-      setGenerateError(err instanceof Error ? err.message : '生成任务失败，请重试');
+      const message = err instanceof Error ? err.message : '生成任务失败，请重试';
+      const effectiveSubject = (entrySubject === CUSTOM_SUBJECT_OPTION ? entryCustomSubject : entrySubject).trim();
+      setGenerateError(message);
+      void trackProductEvent({
+        eventName: 'task_design_generation_failed',
+        role: 'teacher',
+        teacherId: user?.id,
+        language: entryLanguage,
+        properties: {
+          source: 'TeachingResourcesPage',
+          stage: 'create_course',
+          subject: effectiveSubject,
+          grade: entryGrade,
+          topic: entryTopic.trim(),
+          errorMessage: message,
+        },
+      }).catch(() => undefined);
       setTaskGenerating(false);
     }
   };
@@ -1120,7 +1152,24 @@ export function TeachingResourcesPage() {
                           taskDesignMarkdownRef.current = res.markdown ?? null;
                           setRestReady(true);
                         })
-                        .catch((e) => setError(e instanceof Error ? e.message : '生成任务内容失败'));
+                        .catch((e) => {
+                          const message = e instanceof Error ? e.message : '生成任务内容失败';
+                          setError(message);
+                          void trackProductEvent({
+                            eventName: 'task_design_generation_failed',
+                            role: 'teacher',
+                            teacherId: user?.id,
+                            language: entryLanguage,
+                            properties: {
+                              source: 'TeachingResourcesPage',
+                              stage: 'task_rest',
+                              subject: effectiveSubject,
+                              grade: entryGrade,
+                              topic: entryTopic.trim(),
+                              errorMessage: message,
+                            },
+                          }).catch(() => undefined);
+                        });
                       setStep(2);
                       setMaxStepReached(2);
                     }}

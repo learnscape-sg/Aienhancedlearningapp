@@ -2095,6 +2095,21 @@ CRITICAL: Output language must be 简体中文 only.
     }
     setShowReport(true);
     setExitData(null); // Reset to show loading screen
+
+    const sessionDurationSec = Math.round((Date.now() - sessionStartRef.current) / 1000);
+    void trackProductEvent({
+      eventName: 'exit_ticket_generation_started',
+      role: 'student',
+      language: contentLanguage,
+      courseId,
+      studentId: user?.id,
+      properties: {
+        source: 'StudentConsole',
+        taskCount: plan.tasks.length,
+        hasObjectiveMetrics: Boolean(objectiveMetrics),
+        sessionDurationSec,
+      },
+    }).catch(() => undefined);
     
     try {
       console.log('[StudentConsole] Calling generateExitTicket with:', {
@@ -2105,6 +2120,18 @@ CRITICAL: Output language must be 简体中文 only.
       const data = await generateExitTicket(log, contentLanguage, studentName, objectiveMetrics, courseId);
       console.log('[StudentConsole] Exit ticket generated successfully');
       setExitData(data);
+      void trackProductEvent({
+        eventName: 'exit_ticket_generation_succeeded',
+        role: 'student',
+        language: contentLanguage,
+        courseId,
+        studentId: user?.id,
+        properties: {
+          source: 'StudentConsole',
+          hasData: Boolean(data),
+          characteristicCount: Array.isArray(data?.characteristics) ? data.characteristics.length : 0,
+        },
+      }).catch(() => undefined);
       if (data && Array.isArray(data.characteristics) && data.characteristics.length > 0) {
         setSelectedCharacteristic(data.characteristics[0].key);
       }
@@ -2115,6 +2142,17 @@ CRITICAL: Output language must be 简体中文 only.
         console.error("[StudentConsole] Error stack:", error.stack);
       }
       setExitData(null);
+      void trackProductEvent({
+        eventName: 'exit_ticket_generation_failed',
+        role: 'student',
+        language: contentLanguage,
+        courseId,
+        studentId: user?.id,
+        properties: {
+          source: 'StudentConsole',
+          errorMessage: error instanceof Error ? error.message : String(error),
+        },
+      }).catch(() => undefined);
     }
   };
 
