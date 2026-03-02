@@ -272,8 +272,8 @@
   -webkit-overflow-scrolling: touch !important;
 }
 
-/* Student Console: stacked layout on narrow screens (e.g. tablet portrait) */
-@media (max-width: 960px) {
+/* Student Console: stacked only in portrait; keep 3-column in landscape like desktop */
+@media (max-width: 960px) and (orientation: portrait) {
   [data-tenant-compat="true"] .student-console {
     flex-direction: column !important;
     height: auto !important;
