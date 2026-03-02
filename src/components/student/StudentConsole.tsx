@@ -2102,7 +2102,7 @@ CRITICAL: Output language must be 简体中文 only.
         studentName,
         hasObjectiveMetrics: !!objectiveMetrics
       });
-      const data = await generateExitTicket(log, contentLanguage, studentName, objectiveMetrics);
+      const data = await generateExitTicket(log, contentLanguage, studentName, objectiveMetrics, courseId);
       console.log('[StudentConsole] Exit ticket generated successfully');
       setExitData(data);
       if (data && Array.isArray(data.characteristics) && data.characteristics.length > 0) {

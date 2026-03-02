@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
-import { supabase } from '../utils/supabase/client';
-import { projectId } from '../utils/supabase/info';
+import { getStudentMetrics, type StudentMetrics } from '@/lib/backendApi';
 
 interface AnalyticsData {
   totalChapters: number;
@@ -9,6 +8,13 @@ interface AnalyticsData {
   averageScore: number;
   recentQuizzes: any[];
   weeklyProgress: any[];
+  weeklyGoalHours?: number;
+  weeklyStudyHours?: number;
+  weeklyProgressPercent?: number;
+  streakDays?: number;
+  badges?: Array<{ name: string; icon: string; earned: boolean }>;
+  earnedBadges?: number;
+  badgeDeltaVsLastWeek?: number;
 }
 
 export function useAnalytics() {
@@ -17,62 +23,40 @@ export function useAnalytics() {
 
   const loadAnalytics = async () => {
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token;
-      
-      if (!token) {
-        setLoading(false);
-        return;
-      }
-      
-      try {
-        // Try backend first
-        const response = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-82343da6/analytics`, {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-          },
-        });
-        
-        if (response.ok) {
-          const { analytics } = await response.json();
-          setAnalytics(analytics);
-          return;
-        }
-      } catch (error) {
-        console.log('Backend failed, calculating from localStorage:', error);
-      }
-      
-      // Fallback: calculate analytics from localStorage
-      if (session?.user) {
-        const progressData = localStorage.getItem(`progress_${session.user.id}`);
-        if (progressData) {
-          const progress = JSON.parse(progressData);
-          const progressArray = Object.values(progress) as any[];
-          
-          const mockAnalytics: AnalyticsData = {
-            totalChapters: progressArray.length || 5,
-            completedChapters: progressArray.filter((p: any) => p.completed).length,
-            totalTimeSpent: progressArray.reduce((sum: number, p: any) => sum + (p.timeSpent || 0), 0),
-            averageScore: 85, // Mock score
-            recentQuizzes: [],
-            weeklyProgress: progressArray.slice(-7)
-          };
-          
-          setAnalytics(mockAnalytics);
-        } else {
-          // Default mock data
-          setAnalytics({
-            totalChapters: 5,
-            completedChapters: 0,
-            totalTimeSpent: 0,
-            averageScore: 0,
-            recentQuizzes: [],
-            weeklyProgress: []
-          });
-        }
-      }
+      const metrics: StudentMetrics = await getStudentMetrics();
+      setAnalytics({
+        totalChapters: metrics.totalChapters,
+        completedChapters: metrics.completedChapters,
+        totalTimeSpent: metrics.totalTimeSpent,
+        averageScore: metrics.averageScore,
+        recentQuizzes: [],
+        weeklyProgress: [],
+        weeklyGoalHours: metrics.weeklyGoalHours,
+        weeklyStudyHours: metrics.weeklyStudyHours,
+        weeklyProgressPercent: metrics.weeklyProgressPercent,
+        streakDays: metrics.streakDays,
+        badges: metrics.badges,
+        earnedBadges: metrics.earnedBadges,
+        badgeDeltaVsLastWeek: metrics.badgeDeltaVsLastWeek,
+      });
     } catch (error) {
       console.error('Error loading analytics:', error);
+      // Graceful fallback: show empty-state values instead of mock numbers.
+      setAnalytics({
+        totalChapters: 0,
+        completedChapters: 0,
+        totalTimeSpent: 0,
+        averageScore: 0,
+        recentQuizzes: [],
+        weeklyProgress: [],
+        weeklyGoalHours: 18,
+        weeklyStudyHours: 0,
+        weeklyProgressPercent: 0,
+        streakDays: 0,
+        badges: [],
+        earnedBadges: 0,
+        badgeDeltaVsLastWeek: 0,
+      });
     } finally {
       setLoading(false);
     }

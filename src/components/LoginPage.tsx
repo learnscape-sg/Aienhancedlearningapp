@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { useAuth } from './AuthContext';
 import { resolveRuntimeExperienceConfig } from '@/lib/entryDetector';
+import { resolveLogin } from '@/lib/backendApi';
 
 interface LoginPageProps {
   onSuccess: () => void;
@@ -38,11 +39,19 @@ export function LoginPage({ onSuccess }: LoginPageProps) {
     setIsLoading(true);
     setError('');
     try {
-      await login(email, password);
+      const identifier = email.trim();
+      const loginEmail = identifier.includes('@')
+        ? identifier
+        : (await resolveLogin(identifier)).email;
+      await login(loginEmail, password);
       handlePostAuth();
     } catch (error: any) {
       console.error('Login failed:', error);
-      setError(error.message || 'Login failed');
+      const msg = error?.message || 'Login failed';
+      const isEmailNotConfirmed = /email not confirmed/i.test(msg);
+      setError(isEmailNotConfirmed
+        ? '邮箱尚未验证，请先点击注册邮件中的确认链接，或联系管理员确认账号。'
+        : msg);
     } finally {
       setIsLoading(false);
     }
@@ -134,11 +143,11 @@ export function LoginPage({ onSuccess }: LoginPageProps) {
                 <TabsContent value="login">
                   <form onSubmit={handleLogin} className="space-y-4">
                     <div className="space-y-2">
-                      <Label htmlFor="email">邮箱</Label>
+                      <Label htmlFor="email">邮箱 / 手机号 / 账号</Label>
                       <Input
                         id="email"
-                        type="email"
-                        placeholder="输入您的邮箱"
+                        type="text"
+                        placeholder="输入邮箱、手机号或账号名"
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
                         required

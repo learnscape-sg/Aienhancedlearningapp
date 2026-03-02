@@ -1,6 +1,5 @@
 import {
   Home,
-  Sparkles,
   TrendingUp,
   BarChart3,
   Settings,
@@ -30,7 +29,6 @@ export interface NavigationPolicyConfig {
 
 const studentNavigation: NavigationItem[] = [
   { id: 'home', nameZh: '学习任务', nameEn: 'Tasks', icon: Home },
-  { id: 'learn-your-way', nameZh: 'AI随心学', nameEn: 'LearnYourWay', icon: Sparkles },
   { id: 'paths', nameZh: '推荐路径', nameEn: 'Recommended Paths', icon: TrendingUp },
   { id: 'reports', nameZh: '学习报告', nameEn: 'Reports', icon: BarChart3 },
   { id: 'settings', nameZh: '设置', nameEn: 'Settings', icon: Settings },

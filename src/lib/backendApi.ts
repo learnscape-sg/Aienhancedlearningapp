@@ -117,6 +117,27 @@ async function apiCall<T>(endpoint: string, options: RequestInit = {}): Promise<
   }
 }
 
+export async function resolveLogin(identifier: string): Promise<{ email: string }> {
+  const base = getBaseUrl();
+  const url = `${base}/api/auth/resolve-login`;
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...getExperienceHeaders(),
+    },
+    body: JSON.stringify({ identifier: identifier.trim() }),
+  });
+  const json = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(json.error || '无法解析登录账号');
+  }
+  if (!json.email || typeof json.email !== 'string') {
+    throw new Error('登录账号解析失败');
+  }
+  return { email: json.email };
+}
+
 export async function generateCurriculumDesign(
   subject: string,
   grade: string,
@@ -1554,6 +1575,63 @@ export interface AdminTenantRow {
   active: boolean;
   created_at: string;
   updated_at: string;
+}
+
+export type StudentMetrics = {
+  weeklyStudyHours: number;
+  weeklyGoalHours: number;
+  weeklyProgressPercent: number;
+  streakDays: number;
+  badges: Array<{ name: string; icon: string; earned: boolean }>;
+  earnedBadges: number;
+  badgeDeltaVsLastWeek: number;
+  totalChapters: number;
+  completedChapters: number;
+  totalTimeSpent: number;
+  averageScore: number;
+  thisWeekCompletedCourses?: number;
+  previousWeekCompletedCourses?: number;
+};
+
+export async function getStudentMetrics(): Promise<StudentMetrics> {
+  return apiCall<StudentMetrics>('/api/student-metrics', { method: 'GET' });
+}
+
+export type StudentTraitsSummary = {
+  range: string;
+  latest: {
+    assessedAt: string | null;
+    summary: string;
+    nextSteps: string;
+    overallScore: number;
+    overallLevel: { level: string; label: string };
+    language: string | null;
+    traits: Array<{
+      key: string;
+      trait: string;
+      score: number;
+      fullMark: number;
+      dimensions: Array<{ name: string; score: number; comment?: string }>;
+      strengths: string[];
+      improvements: string[];
+      level: { level: string; label: string };
+    }>;
+  } | null;
+  trend: Array<{
+    period: string;
+    self_drive: number;
+    focus: number;
+    thinking: number;
+    improvement: number;
+    overall: number;
+  }>;
+};
+
+export async function getStudentTraitsSummary(
+  range: 'week' | 'month' | 'quarter' = 'month'
+): Promise<StudentTraitsSummary> {
+  const qs = new URLSearchParams({ range });
+  return apiCall<StudentTraitsSummary>(`/api/student-traits/summary?${qs}`, { method: 'GET' });
 }
 
 export async function getRuntimePolicy(params: {

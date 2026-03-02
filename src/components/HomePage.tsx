@@ -14,6 +14,7 @@ import {
 import { useAuth } from './AuthContext';
 import { useProgressTracker } from './ProgressTracker';
 import { getStudentCourses } from '@/lib/backendApi';
+import { useAnalytics } from './useAnalytics';
 
 interface HomePageProps {
   onStartChapter: (chapterId: string) => void;
@@ -21,17 +22,11 @@ interface HomePageProps {
 
 const COURSE_COLORS = ['#34A853', '#FBBC05', '#1A73E8', '#EA4335'];
 
-const achievements = [
-  { name: '连续学习7天', icon: '🔥', earned: true },
-  { name: '完成10个章节', icon: '📚', earned: true },
-  { name: '测验满分', icon: '🏆', earned: false },
-  { name: '学习达人', icon: '⭐', earned: false }
-];
-
 export function HomePage({ onStartChapter }: HomePageProps) {
   const { user } = useAuth();
   const navigate = useNavigate();
   const { progressData } = useProgressTracker();
+  const { analytics } = useAnalytics();
   const [assignedCourses, setAssignedCourses] = useState<{ courseId: string; topic?: string; teacherName?: string }[]>([]);
   const [coursesLoading, setCoursesLoading] = useState(true);
 
@@ -155,12 +150,12 @@ export function HomePage({ onStartChapter }: HomePageProps) {
               <div className="space-y-3">
                 <div className="flex justify-between text-sm">
                   <span>学习时长</span>
-                  <span>12.5小时</span>
+                  <span>{analytics ? `${analytics.weeklyStudyHours ?? 0}小时` : '--'}</span>
                 </div>
-                <Progress value={70} className="h-2" />
+                <Progress value={analytics?.weeklyProgressPercent ?? 0} className="h-2" />
                 <div className="flex justify-between text-sm text-muted-foreground">
-                  <span>目标：18小时</span>
-                  <span>70%</span>
+                  <span>目标：{analytics?.weeklyGoalHours ?? 18}小时</span>
+                  <span>{analytics?.weeklyProgressPercent ?? 0}%</span>
                 </div>
               </div>
             </CardContent>
@@ -173,7 +168,7 @@ export function HomePage({ onStartChapter }: HomePageProps) {
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-2 gap-3">
-                {achievements.map((achievement, index) => (
+                {(analytics?.badges ?? []).map((achievement, index) => (
                   <div
                     key={index}
                     className={`text-center p-3 rounded-lg border ${
@@ -190,6 +185,9 @@ export function HomePage({ onStartChapter }: HomePageProps) {
                     </p>
                   </div>
                 ))}
+                {(!analytics?.badges || analytics.badges.length === 0) && (
+                  <p className="col-span-2 text-xs text-muted-foreground text-center py-2">暂无徽章数据</p>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -202,7 +200,7 @@ export function HomePage({ onStartChapter }: HomePageProps) {
             <CardContent>
               <div className="text-center">
                 <div className="text-3xl text-[#FACC15] mb-2">🔥</div>
-                <p className="text-lg font-medium">连续 7 天</p>
+                <p className="text-lg font-medium">连续 {analytics?.streakDays ?? 0} 天</p>
                 <p className="text-sm text-gray-600">继续保持！</p>
               </div>
             </CardContent>

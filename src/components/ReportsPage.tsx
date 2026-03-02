@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
@@ -6,6 +6,7 @@ import { Badge } from './ui/badge';
 import { Progress } from './ui/progress';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { useAnalytics } from './useAnalytics';
+import { getStudentTraitsSummary, type StudentTraitsSummary } from '@/lib/backendApi';
 import { 
   BarChart, 
   Bar, 
@@ -150,13 +151,6 @@ const xuebaTraitsData = [
   }
 ];
 
-// 雷达图数据
-const radarData = xuebaTraitsData.map(item => ({
-  subject: item.trait,
-  score: item.score,
-  fullMark: item.fullMark
-}));
-
 // 四特质趋势数据
 const traitTrendData = [
   { month: '9月', 自驱力: 75, 专注力: 68, 享受思考: 85, 痴迷改进: 78 },
@@ -170,6 +164,87 @@ export function ReportsPage() {
   const [timeRange, setTimeRange] = useState('week');
   const [selectedSubject, setSelectedSubject] = useState('all');
   const { analytics, loading, refresh } = useAnalytics();
+  const [traitsSummary, setTraitsSummary] = useState<StudentTraitsSummary | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadTraits = async () => {
+      try {
+        const data = await getStudentTraitsSummary(
+          timeRange === 'week' || timeRange === 'month' || timeRange === 'quarter'
+            ? (timeRange as 'week' | 'month' | 'quarter')
+            : 'month'
+        );
+        if (!cancelled) setTraitsSummary(data);
+      } catch (error) {
+        console.error('Failed to load student traits summary:', error);
+        if (!cancelled) setTraitsSummary(null);
+      }
+    };
+    void loadTraits();
+    return () => {
+      cancelled = true;
+    };
+  }, [timeRange]);
+
+  const effectiveTraits = useMemo(() => {
+    if (!traitsSummary?.latest?.traits || traitsSummary.latest.traits.length === 0) return xuebaTraitsData;
+    const iconByKey: Record<string, typeof Zap> = {
+      self_drive: Zap,
+      focus: Eye,
+      thinking: Brain,
+      improvement: Repeat,
+    };
+    const colorByKey: Record<string, string> = {
+      self_drive: '#4285F4',
+      focus: '#34A853',
+      thinking: '#FBBC05',
+      improvement: '#EA4335',
+    };
+    const descByKey: Record<string, string> = {
+      self_drive: '主动设定目标并坚持完成',
+      focus: '抵御干扰，保持注意力集中',
+      thinking: '乐于动脑筋，喜欢提问和探讨',
+      improvement: '对自身学习的反思与优化',
+    };
+    return traitsSummary.latest.traits.map((item) => ({
+      trait: item.trait,
+      score: item.score,
+      fullMark: item.fullMark,
+      icon: iconByKey[item.key] || Zap,
+      color: colorByKey[item.key] || '#4285F4',
+      description: descByKey[item.key] || '学习特质',
+      metrics: (item.dimensions || []).map((d) => ({
+        name: d.name,
+        value: d.score,
+        total: 100,
+        unit: '%',
+      })),
+      strengths: item.strengths?.length ? item.strengths : ['持续保持当前优势表现'],
+      improvements: item.improvements?.length ? item.improvements : ['继续通过刻意练习提升该特质'],
+    }));
+  }, [traitsSummary]);
+
+  const effectiveTrendData = useMemo(() => {
+    if (!traitsSummary?.trend || traitsSummary.trend.length === 0) return traitTrendData;
+    return traitsSummary.trend.map((item) => ({
+      month: item.period,
+      自驱力: item.self_drive,
+      专注力: item.focus,
+      享受思考: item.thinking,
+      痴迷改进: item.improvement,
+    }));
+  }, [traitsSummary]);
+
+  const radarData = useMemo(
+    () =>
+      effectiveTraits.map((item) => ({
+        subject: item.trait,
+        score: item.score,
+        fullMark: item.fullMark,
+      })),
+    [effectiveTraits]
+  );
 
   if (loading) {
     return (
@@ -280,8 +355,13 @@ export function ReportsPage() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-gray-600">获得徽章</p>
-                <p className="text-2xl font-medium">12个</p>
-                <p className="text-sm text-[#22C55E]">+2个 vs 上周</p>
+                <p className="text-2xl font-medium">{analytics?.earnedBadges ?? 0}个</p>
+                <p className="text-sm text-[#22C55E]">
+                  {(() => {
+                    const delta = Number(analytics?.badgeDeltaVsLastWeek ?? 0);
+                    return `${delta >= 0 ? '+' : ''}${delta}个 vs 上周`;
+                  })()}
+                </p>
               </div>
               <div className="w-12 h-12 bg-[#EF4444]/10 rounded-lg flex items-center justify-center">
                 <Trophy className="w-6 h-6 text-[#EF4444]" />
@@ -367,7 +447,7 @@ export function ReportsPage() {
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
-                {xuebaTraitsData.map((trait) => {
+                {effectiveTraits.map((trait) => {
                   const Icon = trait.icon;
                   const colorClass = 
                     trait.color === '#4285F4' ? 'bg-[#4285F4]/10 text-[#4285F4]' :
@@ -443,7 +523,7 @@ export function ReportsPage() {
               <CardContent>
                 <div className="w-full overflow-x-auto">
                   <ResponsiveContainer width="100%" height={280} minWidth={280}>
-                    <LineChart data={traitTrendData}>
+                    <LineChart data={effectiveTrendData}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#E0E0E0" />
                       <XAxis dataKey="month" tick={{ fill: '#5F6368', fontSize: 12 }} />
                       <YAxis domain={[60, 100]} tick={{ fill: '#5F6368', fontSize: 12 }} />
@@ -469,7 +549,7 @@ export function ReportsPage() {
 
           {/* 四特质详细分析 */}
           <div className="grid lg:grid-cols-2 gap-4 md:gap-6">
-            {xuebaTraitsData.map((trait) => {
+            {effectiveTraits.map((trait) => {
               const Icon = trait.icon;
               const borderClass = 
                 trait.color === '#4285F4' ? 'border-l-[#4285F4]' :
@@ -594,7 +674,7 @@ export function ReportsPage() {
                     <span>突出特质</span>
                   </h4>
                   <div className="space-y-2">
-                    {xuebaTraitsData
+                    {effectiveTraits
                       .sort((a, b) => b.score - a.score)
                       .slice(0, 2)
                       .map((trait) => {
@@ -638,7 +718,7 @@ export function ReportsPage() {
                     <span>提升空间</span>
                   </h4>
                   <div className="space-y-2">
-                    {xuebaTraitsData
+                    {effectiveTraits
                       .sort((a, b) => a.score - b.score)
                       .slice(0, 2)
                       .map((trait) => {
@@ -680,11 +760,16 @@ export function ReportsPage() {
               <div className="p-3 md:p-4 bg-background rounded-lg border">
                 <p className="text-xs md:text-sm leading-relaxed">
                   <span className="font-medium text-primary">总体评价：</span>
-                  您在"享受思考"和"痴迷改进"方面表现优异，展现出了学霸的核心素养。
-                  同时，在"自驱力"和"专注力"方面也有不错的表现。
-                  建议继续保持对学习的热情，同时通过改善学习环境和方法来进一步提升专注力。
-                  相信通过持续努力，四大特质将得到全面发展，助力您在学业上取得更大的成功！
+                  {traitsSummary?.latest?.summary?.trim()
+                    ? traitsSummary.latest.summary
+                    : '暂无评估总结。请至少完成一次课程学习并生成评估后查看。'}
                 </p>
+                {traitsSummary?.latest?.nextSteps?.trim() ? (
+                  <p className="text-xs md:text-sm leading-relaxed mt-3 text-muted-foreground">
+                    <span className="font-medium text-primary">下一步建议：</span>
+                    {traitsSummary.latest.nextSteps}
+                  </p>
+                ) : null}
               </div>
             </CardContent>
           </Card>
