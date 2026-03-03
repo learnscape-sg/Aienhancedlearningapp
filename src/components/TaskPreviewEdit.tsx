@@ -524,8 +524,30 @@ export function TaskPreviewEdit({
                             className="min-h-16"
                             autoFocus
                           />
+                          {q.options?.length ? (
+                            <div className="space-y-2">
+                              <Label className="text-xs font-medium">选项</Label>
+                              {q.options.map((opt, j) => (
+                                <div key={j} className="flex items-center gap-2">
+                                  <span className="text-xs text-muted-foreground w-5">{String.fromCharCode(65 + j)}.</span>
+                                  <Input
+                                    value={opt}
+                                    onChange={(e) => {
+                                      const next = [...(guidedPayload.practiceQuestions ?? [])];
+                                      const opts = [...(next[idx].options ?? [])];
+                                      opts[j] = e.target.value;
+                                      next[idx] = { ...next[idx], options: opts };
+                                      applyGuidedUpdate({ practiceQuestions: next });
+                                    }}
+                                    placeholder={`选项 ${String.fromCharCode(65 + j)}`}
+                                    className="flex-1"
+                                  />
+                                </div>
+                              ))}
+                            </div>
+                          ) : null}
                           <Input
-                            placeholder="参考答案"
+                            placeholder="参考答案（选择题填 A/B/C/D）"
                             value={q.correctAnswer ?? ''}
                             onChange={(e) => {
                               const next = [...(guidedPayload.practiceQuestions ?? [])];
@@ -541,6 +563,17 @@ export function TaskPreviewEdit({
                             <span className="text-xs text-muted-foreground">{idx + 1}.</span>
                             <MathTextPreview text={q.question} className="text-sm flex-1 [&_p]:mb-0" />
                           </div>
+                          {q.options?.length ? (
+                            <div className="ml-5 mt-2 space-y-1 text-sm">
+                              {q.options.map((opt, j) => (
+                                <div key={j} className="flex items-center gap-2">
+                                  <span className="text-muted-foreground shrink-0">{String.fromCharCode(65 + j)}.</span>
+                                  <MathTextPreview text={opt} className="flex-1 [&_p]:mb-0" />
+                                  {q.correctIndex === j && <span className="text-green-600 text-xs">✓</span>}
+                                </div>
+                              ))}
+                            </div>
+                          ) : null}
                           {q.imageUrl && <img src={q.imageUrl} alt="" className="mt-1 max-h-32 rounded border object-contain" />}
                           <div className="flex gap-2">
                             <Button size="sm" variant="ghost" onClick={() => setEditingPracticeIdx(idx)}>
@@ -593,8 +626,30 @@ export function TaskPreviewEdit({
                             className="min-h-16"
                             autoFocus
                           />
+                          {q.options?.length ? (
+                            <div className="space-y-2">
+                              <Label className="text-xs font-medium">选项</Label>
+                              {q.options.map((opt, j) => (
+                                <div key={j} className="flex items-center gap-2">
+                                  <span className="text-xs text-muted-foreground w-5">{String.fromCharCode(65 + j)}.</span>
+                                  <Input
+                                    value={opt}
+                                    onChange={(e) => {
+                                      const next = [...(guidedPayload.exitTicketItems ?? [])];
+                                      const opts = [...(next[idx].options ?? [])];
+                                      opts[j] = e.target.value;
+                                      next[idx] = { ...next[idx], options: opts };
+                                      applyGuidedUpdate({ exitTicketItems: next });
+                                    }}
+                                    placeholder={`选项 ${String.fromCharCode(65 + j)}`}
+                                    className="flex-1"
+                                  />
+                                </div>
+                              ))}
+                            </div>
+                          ) : null}
                           <Input
-                            placeholder="参考答案"
+                            placeholder="参考答案（选择题填 A/B/C/D）"
                             value={q.correctAnswer ?? ''}
                             onChange={(e) => {
                               const next = [...(guidedPayload.exitTicketItems ?? [])];
@@ -610,6 +665,17 @@ export function TaskPreviewEdit({
                             <span className="text-xs text-muted-foreground">{idx + 1}.</span>
                             <MathTextPreview text={q.question} className="text-sm flex-1 [&_p]:mb-0" />
                           </div>
+                          {q.options?.length ? (
+                            <div className="ml-5 mt-2 space-y-1 text-sm">
+                              {q.options.map((opt, j) => (
+                                <div key={j} className="flex items-center gap-2">
+                                  <span className="text-muted-foreground shrink-0">{String.fromCharCode(65 + j)}.</span>
+                                  <MathTextPreview text={opt} className="flex-1 [&_p]:mb-0" />
+                                  {q.correctIndex === j && <span className="text-green-600 text-xs">✓</span>}
+                                </div>
+                              ))}
+                            </div>
+                          ) : null}
                           {q.imageUrl && <img src={q.imageUrl} alt="" className="mt-1 max-h-32 rounded border object-contain" />}
                           <div className="flex gap-2">
                             <Button size="sm" variant="ghost" onClick={() => setEditingExitTicketIdx(idx)}>
