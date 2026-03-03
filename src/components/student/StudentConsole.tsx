@@ -3519,51 +3519,6 @@ CRITICAL: Output language must be 简体中文 only.
             </div>
         </div>
 
-        {/* 请帮我读题 - 绿色按钮 */}
-        {voiceServiceAvailable && (
-          <div className="shrink-0 px-4 py-3 border-b border-slate-200 bg-white">
-            <button
-              type="button"
-              onClick={() => {
-                const stripMath = (s: string) => s.replace(/\[[\s\S]*?\]|\$\$[\s\S]*?\$\$|\$[^$]*\$/g, ' ').replace(/\s+/g, ' ').trim();
-                let textToRead = '';
-                if (isGuidedVideoFlow) {
-                  if (guidedStep === 1) {
-                    const parts: string[] = [t('guidedStep1')];
-                    const obj = guidedPayload?.learningObjective || currentTask.outputGoal || t('learnObjectivePlaceholder');
-                    if (obj) parts.push(`${t('learningObjective')}：${stripMath(obj)}`);
-                    if (guidedPayload?.whyItMatters?.meaning_anchor) {
-                      parts.push(`${t('whyLearnThis')} ${stripMath(guidedPayload.whyItMatters.meaning_anchor)}`);
-                    }
-                    if (guidedPayload?.whyItMatters?.advance_organizer) {
-                      parts.push(`${t('whatToLearn')} ${stripMath(guidedPayload.whyItMatters.advance_organizer)}`);
-                    }
-                    textToRead = parts.join('。');
-                  } else if (guidedStep === 2) {
-                    const inst = guidedPayload?.customTextInstruction?.trim();
-                    const html = guidedPayload?.convertedHtml?.trim();
-                    if (inst) textToRead = stripMath(inst);
-                    else if (html) textToRead = stripMath(html.replace(/<[^>]+>/g, ' '));
-                  } else if (guidedStep === 3 && guidedKeyIdeas.length > 0) {
-                    textToRead = guidedKeyIdeas.map((i) => stripMath(i.text.replace(/__KEY__/g, '填空'))).filter(Boolean).join('。');
-                  } else if (guidedStep === 4 && guidedPractice.length > 0) {
-                    textToRead = guidedPractice.map((q) => stripMath(q.stem || q.question || '')).filter(Boolean).join('。');
-                  } else if (guidedStep === 5 && guidedExitTickets.length > 0) {
-                    textToRead = guidedExitTickets.map((q) => stripMath(q.question || q.stem || '')).filter(Boolean).join('。');
-                  }
-                } else {
-                  const desc = (currentTask.description || currentTask.contentPayload || '').trim();
-                  textToRead = stripMath(desc);
-                }
-                if (textToRead) playVoice(textToRead).catch(() => {});
-              }}
-              className="flex items-center justify-center gap-2 w-full py-2.5 px-4 rounded-lg text-sm font-semibold bg-emerald-500 hover:bg-emerald-600 text-white border border-emerald-600 transition-colors shadow-sm"
-            >
-              <Volume2 size={18} /> {t('readTaskAloud')}
-            </button>
-          </div>
-        )}
-
         {/* Workspace Content */}
         <div className="student-console-content flex-1 overflow-y-auto overflow-x-hidden relative bg-slate-50/10 min-h-0 custom-scrollbar">
             {renderLeftWorkspace()}
@@ -3595,6 +3550,47 @@ CRITICAL: Output language must be 简体中文 only.
                 </p>
             </div>
             <div className="flex items-center gap-2 shrink-0">
+                {voiceServiceAvailable && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const stripMath = (s: string) => s.replace(/\[[\s\S]*?\]|\$\$[\s\S]*?\$\$|\$[^$]*\$/g, ' ').replace(/\s+/g, ' ').trim();
+                      let textToRead = '';
+                      if (isGuidedVideoFlow) {
+                        if (guidedStep === 1) {
+                          const parts: string[] = [t('guidedStep1')];
+                          const obj = guidedPayload?.learningObjective || currentTask.outputGoal || t('learnObjectivePlaceholder');
+                          if (obj) parts.push(`${t('learningObjective')}：${stripMath(obj)}`);
+                          if (guidedPayload?.whyItMatters?.meaning_anchor) {
+                            parts.push(`${t('whyLearnThis')} ${stripMath(guidedPayload.whyItMatters.meaning_anchor)}`);
+                          }
+                          if (guidedPayload?.whyItMatters?.advance_organizer) {
+                            parts.push(`${t('whatToLearn')} ${stripMath(guidedPayload.whyItMatters.advance_organizer)}`);
+                          }
+                          textToRead = parts.join('。');
+                        } else if (guidedStep === 2) {
+                          const inst = guidedPayload?.customTextInstruction?.trim();
+                          const html = guidedPayload?.convertedHtml?.trim();
+                          if (inst) textToRead = stripMath(inst);
+                          else if (html) textToRead = stripMath(html.replace(/<[^>]+>/g, ' '));
+                        } else if (guidedStep === 3 && guidedKeyIdeas.length > 0) {
+                          textToRead = guidedKeyIdeas.map((i) => stripMath(i.text.replace(/__KEY__/g, '填空'))).filter(Boolean).join('。');
+                        } else if (guidedStep === 4 && guidedPractice.length > 0) {
+                          textToRead = guidedPractice.map((q) => stripMath(q.stem || q.question || '')).filter(Boolean).join('。');
+                        } else if (guidedStep === 5 && guidedExitTickets.length > 0) {
+                          textToRead = guidedExitTickets.map((q) => stripMath(q.question || q.stem || '')).filter(Boolean).join('。');
+                        }
+                      } else {
+                        const desc = (currentTask.description || currentTask.contentPayload || '').trim();
+                        textToRead = stripMath(desc);
+                      }
+                      if (textToRead) playVoice(textToRead).catch(() => {});
+                    }}
+                    className="flex items-center gap-2 px-3 py-2 rounded-full text-sm font-semibold bg-emerald-500 hover:bg-emerald-600 text-white border border-emerald-600 transition-colors shadow-sm"
+                  >
+                    <Volume2 size={16} /> {t('readTaskAloud')}
+                  </button>
+                )}
                 <button
                     onClick={handleStuck}
                     className="flex items-center gap-2 px-4 py-2 rounded-full text-sm font-bold bg-amber-100 text-amber-700 hover:bg-amber-200 border border-amber-200 transition-colors shadow-sm"
