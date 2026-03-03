@@ -1,5 +1,5 @@
 export const appConfig = {
-  speechRecognitionMode: 'server' as const, // use backendApi for STT
+  speechRecognitionMode: 'browser' as const, // use Web Speech API (webkitSpeechRecognition)
   enableTenantScoping: true,
 };
 

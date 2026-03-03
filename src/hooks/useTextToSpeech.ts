@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 
 // 计算 UTF-8 字节数的辅助函数
 function getByteLength(str: string): number {
@@ -483,6 +483,31 @@ export function useTextToSpeech(
       audioRef.current = null;
       setIsPlaying(false);
     }
+  }, []);
+
+  // 离开页面（切 tab、关 tab、路由离开）时立即停止语音
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        playRequestIdRef.current += 1;
+        if (audioRef.current) {
+          audioRef.current.pause();
+          audioRef.current.currentTime = 0;
+          audioRef.current = null;
+          setIsPlaying(false);
+        }
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      playRequestIdRef.current += 1;
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current.currentTime = 0;
+        audioRef.current = null;
+      }
+    };
   }, []);
 
   const pause = useCallback(() => {

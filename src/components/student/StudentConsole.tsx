@@ -8,7 +8,7 @@ import {
   Characteristic,
   ObjectiveMetrics,
 } from '@/types/backend';
-import { sendChatMessage, generateTaskAsset, generateExitTicket, getSpeechVoices, trackProductEvent } from '@/lib/backendApi';
+import { sendChatMessage, generateTaskAsset, generateExitTicket, trackProductEvent } from '@/lib/backendApi';
 import { upsertStudentCourseProgress } from '@/lib/studentProgressApi';
 import { useAuth } from '../AuthContext';
 import { FontSizeSelector } from '../shared/FontSizeSelector';
@@ -457,17 +457,6 @@ const StudentConsole: React.FC<StudentConsoleProps> = ({ plan, onComplete, onApi
   const [autoPlayVoice, setAutoPlayVoice] = useState(false);
   const [voiceServiceAvailable, setVoiceServiceAvailable] = useState(true);
   const [inputMode, setInputMode] = useState<'text' | 'voice'>('text');
-  const [ttsVoices, setTtsVoices] = useState<Array<{ name: string; ssmlGender?: string }>>([]);
-  const [ttsVoicesLoaded, setTtsVoicesLoaded] = useState(false);
-  const [ttsRecommended, setTtsRecommended] = useState<string | null>(null);
-  const [selectedVoiceName, setSelectedVoiceName] = useState<string>(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('ttsVoiceName');
-      if (saved) return saved;
-    }
-    return 'cmn-CN-Chirp3-HD-Despina';
-  });
-  const prevVoiceForDemoRef = useRef<string | null>(null);
 
   // Autoplay unlock (browsers block audio.play() before first user gesture)
   const [hasUserInteracted, setHasUserInteracted] = useState(false);
@@ -482,27 +471,6 @@ const StudentConsole: React.FC<StudentConsoleProps> = ({ plan, onComplete, onApi
       window.removeEventListener('keydown', unlock);
     };
   }, []);
-
-  // Fetch TTS voices when voice service is available (via backend API)
-  useEffect(() => {
-    if (!voiceServiceAvailable) return;
-    let cancelled = false;
-    getSpeechVoices()
-      .then((data) => {
-        if (cancelled) return;
-        const list = data.voices ?? [];
-        setTtsVoices(list.filter((v) => v.name).map((v) => ({ name: v.name, ssmlGender: v.ssmlGender })));
-        if (data.recommended) setTtsRecommended(data.recommended);
-        setTtsVoicesLoaded(true);
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setTtsVoices([]);
-          setTtsVoicesLoaded(true);
-        }
-      });
-    return () => { cancelled = true; };
-  }, [voiceServiceAvailable]);
 
   // Speech recognition hook
   const {
@@ -537,7 +505,7 @@ const StudentConsole: React.FC<StudentConsoleProps> = ({ plan, onComplete, onApi
     stop: stopVoice,
   } = useTextToSpeech({
     language: contentLanguage === 'en' ? 'en-US' : 'cmn-CN',
-    voiceName: selectedVoiceName,
+    voiceName: 'cmn-CN-Chirp3-HD-Despina',
     onPlayStart: () => {
       setAvatarState('speaking');
     },
@@ -553,20 +521,6 @@ const StudentConsole: React.FC<StudentConsoleProps> = ({ plan, onComplete, onApi
       }
     },
   });
-
-  const TTS_DEMO_SENTENCE = '你好呀，我会用这个声音陪你学习，听听看喜不喜欢';
-
-  useEffect(() => {
-    prevVoiceForDemoRef.current = selectedVoiceName;
-  }, []);
-
-  useEffect(() => {
-    if (prevVoiceForDemoRef.current === null) return;
-    if (prevVoiceForDemoRef.current !== selectedVoiceName) {
-      prevVoiceForDemoRef.current = selectedVoiceName;
-      playVoice(TTS_DEMO_SENTENCE).catch((err) => console.warn('Voice demo failed:', err));
-    }
-  }, [selectedVoiceName, playVoice]);
 
   // If we have pending auto-speak text, play it once after user interaction unlocks autoplay
   useEffect(() => {
@@ -968,21 +922,22 @@ const StudentConsole: React.FC<StudentConsoleProps> = ({ plan, onComplete, onApi
              }
           
           } else if (viewType === 'table_editor') {
+             const emptyFallback = { columns: ['', ''], rows: [['', ''], ['', '']] };
              if (preGenerated) {
                  try {
                      const data = JSON.parse(preGenerated);
-                     if (data && data.columns && data.rows) {
-                         const emptyRows = Array(data.rows).fill(null).map(() => Array(data.columns.length).fill(''));
+                     if (data && data.columns && data.rows !== undefined) {
+                         const rowCount = typeof data.rows === 'number' ? data.rows : (Array.isArray(data.rows) ? data.rows.length : 2);
+                         const emptyRows = Array(rowCount).fill(null).map(() => Array(data.columns.length).fill(''));
                          setTableData({ columns: data.columns, rows: emptyRows });
                      } else {
                         throw new Error("无效的表格数据");
                      }
                  } catch (e) {
-                     setTableData({ columns: ['列A', '列B'], rows: [['', ''], ['', '']] });
+                     setTableData(emptyFallback);
                  }
              } else {
-                 // Simple Fallback
-                 setTableData({ columns: ['概念', '定义', '举例'], rows: [['', '', ''], ['', '', '']] });
+                 setTableData(emptyFallback);
              }
 
           } else if (viewType === 'text_editor') {
@@ -3036,7 +2991,21 @@ CRITICAL: Output language must be 简体中文 only.
                             <thead className="text-xs text-slate-700 uppercase bg-slate-100 border-b border-slate-200">
                                 <tr>
                                     {tableData.columns.map((col, i) => (
-                                        <th key={i} className="px-6 py-4 font-bold tracking-wider">{col}</th>
+                                        <th key={i} className="px-3 py-3 border-r border-slate-200 last:border-r-0">
+                                            <input
+                                                type="text"
+                                                value={col}
+                                                onChange={(e) => {
+                                                    const newCols = [...tableData.columns];
+                                                    newCols[i] = e.target.value;
+                                                    setTableData({ ...tableData, columns: newCols });
+                                                    setEditCounts(prev => ({ ...prev, table: prev.table + 1 }));
+                                                    if (lastDoneClickTime !== null) setHasEditAfterDone(true);
+                                                }}
+                                                placeholder="列名"
+                                                className="w-full min-w-[80px] px-2 py-1.5 font-bold bg-white border border-slate-200 rounded focus:outline-none focus:ring-2 focus:ring-cyan-200 text-slate-700"
+                                            />
+                                        </th>
                                     ))}
                                 </tr>
                             </thead>
@@ -3066,15 +3035,55 @@ CRITICAL: Output language must be 简体中文 only.
                                 ))}
                             </tbody>
                         </table>
-                        <div className="bg-slate-50 p-2 text-center">
-                            <button 
+                        <div className="bg-slate-50 p-2 flex flex-wrap items-center justify-center gap-4">
+                            <button
+                                type="button"
                                 onClick={() => {
                                     const newRow = Array(tableData.columns.length).fill('');
-                                    setTableData({...tableData, rows: [...tableData.rows, newRow]});
+                                    setTableData({ ...tableData, rows: [...tableData.rows, newRow] });
+                                    setEditCounts(prev => ({ ...prev, table: prev.table + 1 }));
                                 }}
-                                className="text-xs text-slate-500 hover:text-cyan-600 font-bold py-2 w-full flex items-center justify-center gap-1"
+                                className="text-xs text-slate-600 hover:text-cyan-600 font-bold py-2 px-3 rounded border border-slate-300 hover:border-cyan-400 transition-colors"
                             >
                                 + 添加行
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    if (tableData.rows.length <= 1) return;
+                                    setTableData({ ...tableData, rows: tableData.rows.slice(0, -1) });
+                                    setEditCounts(prev => ({ ...prev, table: prev.table + 1 }));
+                                }}
+                                disabled={tableData.rows.length <= 1}
+                                className="text-xs text-slate-600 hover:text-cyan-600 font-bold py-2 px-3 rounded border border-slate-300 hover:border-cyan-400 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                            >
+                                - 删除行
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    const newCols = [...tableData.columns, ''];
+                                    const newRows = tableData.rows.map(row => [...row, '']);
+                                    setTableData({ columns: newCols, rows: newRows });
+                                    setEditCounts(prev => ({ ...prev, table: prev.table + 1 }));
+                                }}
+                                className="text-xs text-slate-600 hover:text-cyan-600 font-bold py-2 px-3 rounded border border-slate-300 hover:border-cyan-400 transition-colors"
+                            >
+                                + 添加列
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    if (tableData.columns.length <= 1) return;
+                                    const newCols = tableData.columns.slice(0, -1);
+                                    const newRows = tableData.rows.map(row => row.slice(0, -1));
+                                    setTableData({ columns: newCols, rows: newRows });
+                                    setEditCounts(prev => ({ ...prev, table: prev.table + 1 }));
+                                }}
+                                disabled={tableData.columns.length <= 1}
+                                className="text-xs text-slate-600 hover:text-cyan-600 font-bold py-2 px-3 rounded border border-slate-300 hover:border-cyan-400 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                            >
+                                - 删除列
                             </button>
                         </div>
                     </div>
@@ -3480,6 +3489,51 @@ CRITICAL: Output language must be 简体中文 only.
             </div>
         </div>
 
+        {/* 请帮我读题 - 绿色按钮 */}
+        {voiceServiceAvailable && (
+          <div className="shrink-0 px-4 py-3 border-b border-slate-200 bg-white">
+            <button
+              type="button"
+              onClick={() => {
+                const stripMath = (s: string) => s.replace(/\[[\s\S]*?\]|\$\$[\s\S]*?\$\$|\$[^$]*\$/g, ' ').replace(/\s+/g, ' ').trim();
+                let textToRead = '';
+                if (isGuidedVideoFlow) {
+                  if (guidedStep === 1) {
+                    const parts: string[] = [t('guidedStep1')];
+                    const obj = guidedPayload?.learningObjective || currentTask.outputGoal || t('learnObjectivePlaceholder');
+                    if (obj) parts.push(`${t('learningObjective')}：${stripMath(obj)}`);
+                    if (guidedPayload?.whyItMatters?.meaning_anchor) {
+                      parts.push(`${t('whyLearnThis')} ${stripMath(guidedPayload.whyItMatters.meaning_anchor)}`);
+                    }
+                    if (guidedPayload?.whyItMatters?.advance_organizer) {
+                      parts.push(`${t('whatToLearn')} ${stripMath(guidedPayload.whyItMatters.advance_organizer)}`);
+                    }
+                    textToRead = parts.join('。');
+                  } else if (guidedStep === 2) {
+                    const inst = guidedPayload?.customTextInstruction?.trim();
+                    const html = guidedPayload?.convertedHtml?.trim();
+                    if (inst) textToRead = stripMath(inst);
+                    else if (html) textToRead = stripMath(html.replace(/<[^>]+>/g, ' '));
+                  } else if (guidedStep === 3 && guidedKeyIdeas.length > 0) {
+                    textToRead = guidedKeyIdeas.map((i) => stripMath(i.text.replace(/__KEY__/g, '填空'))).filter(Boolean).join('。');
+                  } else if (guidedStep === 4 && guidedPractice.length > 0) {
+                    textToRead = guidedPractice.map((q) => stripMath(q.stem || q.question || '')).filter(Boolean).join('。');
+                  } else if (guidedStep === 5 && guidedExitTickets.length > 0) {
+                    textToRead = guidedExitTickets.map((q) => stripMath(q.question || q.stem || '')).filter(Boolean).join('。');
+                  }
+                } else {
+                  const desc = (currentTask.description || currentTask.contentPayload || '').trim();
+                  textToRead = stripMath(desc);
+                }
+                if (textToRead) playVoice(textToRead).catch(() => {});
+              }}
+              className="flex items-center justify-center gap-2 w-full py-2.5 px-4 rounded-lg text-sm font-semibold bg-emerald-500 hover:bg-emerald-600 text-white border border-emerald-600 transition-colors shadow-sm"
+            >
+              <Volume2 size={18} /> {t('readTaskAloud')}
+            </button>
+          </div>
+        )}
+
         {/* Workspace Content */}
         <div className="student-console-content flex-1 overflow-y-auto overflow-x-hidden relative bg-slate-50/10 min-h-0 custom-scrollbar">
             {renderLeftWorkspace()}
@@ -3561,40 +3615,11 @@ CRITICAL: Output language must be 简体中文 only.
           </div>
         </div>
 
-        {/* TTS Global Toggle + Voice Selector */}
+        {/* TTS Global Toggle */}
         {voiceServiceAvailable && (
           <div className="px-4 py-2 border-b border-slate-200 bg-white/95 backdrop-blur-sm shrink-0 flex items-center justify-between gap-3 flex-wrap">
             <span className="text-xs text-slate-500">{t('voiceBroadcast')}</span>
-            <div className="flex items-center gap-2">
-              <label htmlFor="tts-voice-select" className="sr-only">{t('selectVoice')}</label>
-              <select
-                id="tts-voice-select"
-                value={selectedVoiceName}
-                onChange={(e) => {
-                  const next = e.target.value;
-                  setSelectedVoiceName(next);
-                  if (typeof window !== 'undefined') localStorage.setItem('ttsVoiceName', next);
-                }}
-                className="rounded-md border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-cyan-200 max-w-[180px]"
-                title={t('selectVoice')}
-              >
-                {!ttsVoicesLoaded ? (
-                  <option value={selectedVoiceName}>{t('loadingVoices')}</option>
-                ) : ttsVoices.length === 0 ? (
-                  <option value={selectedVoiceName}>{t('noVoices')}</option>
-                ) : (
-                  (() => {
-                    const hasCurrent = ttsVoices.some((v) => v.name === selectedVoiceName);
-                    const options = hasCurrent ? ttsVoices : [{ name: selectedVoiceName }, ...ttsVoices];
-                    return options.map((v) => (
-                      <option key={v.name} value={v.name}>
-                        {v.name.replace(/^cmn-CN-/, '')}{v.ssmlGender === 'FEMALE' ? ` ${t('voiceFemale')}` : v.ssmlGender === 'MALE' ? ` ${t('voiceMale')}` : ''}
-                      </option>
-                    ));
-                  })()
-                )}
-              </select>
-              <button
+            <button
                 type="button"
                 onClick={() => {
                   const next = !voiceEnabled;
@@ -3605,13 +3630,12 @@ CRITICAL: Output language must be 简体中文 only.
                 className={`px-3 py-1 rounded-full text-xs border transition-colors ${
                   voiceEnabled
                     ? 'bg-emerald-50 border-emerald-300 text-emerald-700'
-                    : 'bg-white border-slate-300 text-slate-600'
+                    : 'bg-red-50 border-red-300 text-red-700'
                 }`}
                 title={voiceEnabled ? t('voiceTurnOff') : t('voiceTurnOn')}
               >
                 {voiceEnabled ? t('voiceOn') : t('voiceOff')}
               </button>
-            </div>
           </div>
         )}
 
@@ -3808,7 +3832,11 @@ CRITICAL: Output language must be 简体中文 only.
                      setInputMode(prev => (prev === 'text' ? 'voice' : 'text'));
                    }}
                    disabled={isProcessingSpeech || isTyping}
-                   className="w-10 h-10 rounded-full border border-slate-300 bg-white text-slate-600 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                   className={`w-10 h-10 rounded-full border transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
+                     inputMode === 'text'
+                       ? 'bg-emerald-500 border-emerald-600 text-white hover:bg-emerald-600'
+                       : 'border-slate-300 bg-white text-slate-600'
+                   }`}
                    title={inputMode === 'text' ? t('switchToVoice') : t('switchToKeyboard')}
                  >
                    {inputMode === 'text' ? (
