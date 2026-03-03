@@ -53,6 +53,8 @@ export const AITutorBubble: React.FC<AITutorBubbleProps> = ({
   const lastDragPosRef = useRef<{ top: number; left: number } | null>(null);
   const dragMovedRef = useRef(false);
   const closedOnPointerDownRef = useRef(false); // 气泡打开时 pointer down 会先收起，避免 pointer up 时误触 toggle
+  const rafRef = useRef<number | null>(null);
+  const pendingPosRef = useRef<{ top: number; left: number } | null>(null);
   const DRAG_THRESHOLD = 5;
 
   const getInitialStyle = useCallback((): React.CSSProperties => {
@@ -128,6 +130,20 @@ export const AITutorBubble: React.FC<AITutorBubbleProps> = ({
       const top = position?.top ?? window.innerHeight - defaultBottom - AVATAR_SIZE;
       dragStartRef.current = { x: e.clientX, y: e.clientY, left, top };
       dragMovedRef.current = false;
+      pendingPosRef.current = null;
+      if (rafRef.current !== null) {
+        cancelAnimationFrame(rafRef.current);
+        rafRef.current = null;
+      }
+      const el = containerRef.current;
+      if (el) {
+        el.style.willChange = 'transform';
+        el.style.bottom = 'auto';
+        el.style.right = 'auto';
+        el.style.left = `${left}px`;
+        el.style.top = `${top}px`;
+        el.style.transform = 'none';
+      }
       setIsDragging(false);
       (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
     },
@@ -153,12 +169,20 @@ export const AITutorBubble: React.FC<AITutorBubbleProps> = ({
       left: start.left + dx,
     });
 
-    lastDragPosRef.current = { top: newTop, left: newLeft };
-    const el = containerRef.current;
-    if (el) {
-      el.style.bottom = 'auto';
-      el.style.left = `${newLeft}px`;
-      el.style.top = `${newTop}px`;
+    pendingPosRef.current = { top: newTop, left: newLeft };
+
+    if (rafRef.current === null) {
+      rafRef.current = requestAnimationFrame(() => {
+        rafRef.current = null;
+        const start = dragStartRef.current;
+        const pending = pendingPosRef.current;
+        if (!start || !pending) return;
+        lastDragPosRef.current = pending;
+        const el = containerRef.current;
+        if (el) {
+          el.style.transform = `translate(${pending.left - start.left}px, ${pending.top - start.top}px)`;
+        }
+      });
     }
   }, []);
 
@@ -166,11 +190,23 @@ export const AITutorBubble: React.FC<AITutorBubbleProps> = ({
     (e: React.PointerEvent) => {
       (e.target as HTMLElement).releasePointerCapture?.(e.pointerId);
       const wasDragging = dragMovedRef.current;
+      if (rafRef.current !== null) {
+        cancelAnimationFrame(rafRef.current);
+        rafRef.current = null;
+      }
+      const toSave = pendingPosRef.current ?? lastDragPosRef.current ?? position;
+      pendingPosRef.current = null;
       dragStartRef.current = null;
 
-      if (wasDragging) {
-        const toSave = lastDragPosRef.current || position;
-        if (toSave) setPosition(toSave);
+      const el = containerRef.current;
+      if (el) el.style.willChange = '';
+      if (wasDragging && toSave) {
+        if (el) {
+          el.style.transform = 'none';
+          el.style.left = `${toSave.left}px`;
+          el.style.top = `${toSave.top}px`;
+        }
+        setPosition(toSave);
         lastDragPosRef.current = null;
       } else if (!closedOnPointerDownRef.current) {
         onOpenChange(!isOpen);
@@ -183,7 +219,14 @@ export const AITutorBubble: React.FC<AITutorBubbleProps> = ({
 
   const handlePointerCancel = useCallback((e: React.PointerEvent) => {
     (e.target as HTMLElement).releasePointerCapture?.(e.pointerId);
+    if (rafRef.current !== null) {
+      cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+    }
+    pendingPosRef.current = null;
     dragStartRef.current = null;
+    const el = containerRef.current;
+    if (el) el.style.willChange = '';
     closedOnPointerDownRef.current = false;
     setIsDragging(false);
   }, []);
