@@ -32,7 +32,7 @@ import { useTheme } from '@/hooks/useTheme';
 import type { EntryId, LanguageSpace } from '@/config/entryConfig';
 import { RoleBasedLayout } from '@/components/shared/RoleBasedLayout';
 import { useRuntimePolicy } from '@/hooks/useRuntimePolicy';
-import { shouldUseTenantCompat } from '@/config/tenantCompat';
+import { shouldUseStudentTabletCompat, getCompatViewportContent } from '@/config/tenantCompat';
 import { appConfig } from '@/config/appConfig';
 
 // Teacher platform components
@@ -82,16 +82,16 @@ function AppContent() {
       return null;
     };
     const tenantId = resolveTenantId();
-    if (shouldUseTenantCompat(tenantId)) {
+    if (shouldUseStudentTabletCompat(tenantId, user?.role)) {
       document.documentElement.setAttribute('data-tenant-compat', 'true');
       const vp = document.querySelector('meta[name=viewport]');
-      if (vp) vp.setAttribute('content', 'width=1280, user-scalable=yes, viewport-fit=cover');
+      if (vp) vp.setAttribute('content', getCompatViewportContent());
     } else {
       document.documentElement.removeAttribute('data-tenant-compat');
       const vp = document.querySelector('meta[name=viewport]');
       if (vp) vp.setAttribute('content', 'width=device-width, initial-scale=1.0, maximum-scale=5, minimum-scale=0.5, viewport-fit=cover, user-scalable=yes');
     }
-  }, [searchParams, user?.tenantId]);
+  }, [searchParams, user?.tenantId, user?.role]);
 
   // Read URL params for deep linking (e.g. ?section=course-design, ?section=courses&courseTab=shared)
   useEffect(() => {

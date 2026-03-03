@@ -16,7 +16,11 @@
             if (tenantId === 'tenant_cn_bamboo') {
               document.documentElement.setAttribute('data-tenant-compat', 'true');
               var vp = document.querySelector('meta[name=viewport]');
-              if (vp) vp.setAttribute('content', 'width=1280, user-scalable=yes, viewport-fit=cover');
+              if (vp) {
+                var cssW = window.screen.width / (window.devicePixelRatio || 1);
+                var w = Math.max(800, Math.min(1280, Math.round(cssW)));
+                vp.setAttribute('content', 'width=' + w + ', user-scalable=yes, viewport-fit=cover');
+              }
             }
           } catch (e) {}
         })();

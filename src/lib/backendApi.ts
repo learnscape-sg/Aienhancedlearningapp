@@ -1765,12 +1765,21 @@ export interface BatchCreateAccountsResult {
   message?: string;
 }
 
+export type BatchCreateEntry = {
+  name: string;
+  identifier: string;
+  subject?: string;
+  grade?: string;
+  employeeType?: string;
+  department?: string;
+};
+
 export async function batchCreateAccounts(
   params: {
     tenantId: string;
     role: 'teacher' | 'student' | 'parent';
     defaultPassword: string;
-    entries: Array<{ name: string; identifier: string }>;
+    entries: BatchCreateEntry[];
     classIds?: string[];
   },
   accessToken: string
@@ -2068,6 +2077,7 @@ export interface AdminBusinessAnalyticsResponse {
     courseCompleted: number;
     activeStudents: number;
   }>;
+  dailyPathwayUsage?: Array<{ day: string; taskPathwayUsers: number; coursePathwayUsers: number }>;
   teacherActivationFunnel: Array<{ stage: string; value: number }>;
   studentLearningFunnel: Array<{ stage: string; value: number }>;
   retention: {
@@ -2086,10 +2096,10 @@ export interface AdminBusinessAnalyticsResponse {
   };
   releaseAlerts: Array<{ level: 'info' | 'warn' | 'critical'; metric: string; value: number; threshold: number; message: string }>;
   weeklyReview: Array<{ metric: string; current: number; previous: number; deltaPct: number }>;
-  topTeachersByCourses: Array<{ teacherId: string; teacherName: string; courseCount: number }>;
-  topStudentsByCompletion: Array<{ studentId: string; studentName: string; completedCourses: number; avgProgress: number }>;
-  topSubjects: Array<{ subject: string; count: number }>;
-  topGrades: Array<{ grade: string; count: number }>;
+  topTeachersByCourses: Array<{ teacherId: string; teacherName: string; courseCount: number; taskCount: number }>;
+  topStudentsByCompletion: Array<{ studentId: string; studentName: string; completedCourses: number; avgProgress: number; taskCount: number }>;
+  topSubjects: Array<{ subject: string; count: number; taskCount: number }>;
+  topGrades: Array<{ grade: string; count: number; taskCount: number }>;
 }
 
 export async function getAdminBusinessAnalytics(

@@ -2,21 +2,31 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../utils/supabase/client';
 
-function parseNameIdentifierLines(text: string): Array<{ name: string; identifier: string }> {
+type ParsedEntry = { name: string; identifier: string; subject?: string; grade?: string; employeeType?: string; department?: string };
+
+function parseNameIdentifierLines(text: string, role: 'teacher' | 'student' | 'parent'): ParsedEntry[] {
   return text
     .split(/\n/)
     .map((line) => {
       const trimmed = line.trim();
       if (!trimmed) return null;
-      const sep = trimmed.match(/[,\t]/);
-      if (!sep) return null;
-      const idx = trimmed.indexOf(sep[0]);
-      const name = trimmed.slice(0, idx).trim();
-      const identifier = trimmed.slice(idx + 1).trim();
+      const parts = trimmed.split(/[,\t]/).map((p) => p.trim());
+      const name = parts[0] ?? '';
+      const identifier = parts[1] ?? '';
       if (!identifier) return null;
+      if (role === 'teacher' && parts.length >= 2) {
+        return {
+          name,
+          identifier,
+          subject: parts[2] || undefined,
+          grade: parts[3] || undefined,
+          employeeType: parts[4] || undefined,
+          department: parts[5] || undefined,
+        };
+      }
       return { name, identifier };
     })
-    .filter((e): e is { name: string; identifier: string } => e != null);
+    .filter((e): e is ParsedEntry => e != null);
 }
 import {
   listAdminTenants,
@@ -61,7 +71,6 @@ export function AdminDataPage() {
   const [importLookupResults, setImportLookupResults] = useState<ClassItem[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [importFileType, setImportFileType] = useState<'student_sheet' | 'teacher_sheet'>('student_sheet');
-  const [importPassword, setImportPassword] = useState('');
   const [importFile, setImportFile] = useState<File | null>(null);
   const [importClassIds, setImportClassIds] = useState<string[]>([]);
   const [importing, setImporting] = useState(false);
@@ -113,6 +122,25 @@ export function AdminDataPage() {
       cancelled = true;
     };
   }, [navigate]);
+
+  const TEACHER_SAMPLE = '张三,zhangsan@school.com,数学,高一,班主任,教务处\n李四,lisi@school.com,,,,\n王五,wangwu@school.com';
+  const STUDENT_SAMPLE = '张三,zhangsan@example.com\n李四,13800138000\n王五,student001';
+
+  useEffect(() => {
+    if (role === 'teacher') {
+      const trimmed = identifiersInput.trim();
+      if (!trimmed || trimmed === STUDENT_SAMPLE) {
+        setIdentifiersInput(TEACHER_SAMPLE);
+      }
+      setImportFileType('teacher_sheet');
+    } else if (role === 'student' || role === 'parent') {
+      const trimmed = identifiersInput.trim();
+      if (trimmed === TEACHER_SAMPLE) {
+        setIdentifiersInput(STUDENT_SAMPLE);
+      }
+      setImportFileType('student_sheet');
+    }
+  }, [role]);
 
   useEffect(() => {
     const needClasses = role === 'student' || importFileType === 'student_sheet';
@@ -256,11 +284,11 @@ export function AdminDataPage() {
     setImportResult(null);
 
     if (!tenantId.trim()) {
-      setError('请先选择 Tenant');
+      setError('请先在共用设定中选择 Tenant');
       return;
     }
-    if (!importPassword || importPassword.length < 6) {
-      setError('请填写导入默认密码（至少 6 位）');
+    if (!defaultPassword || defaultPassword.length < 6) {
+      setError('请先在共用设定中填写默认密码（至少 6 位）');
       return;
     }
     if (!importFile) {
@@ -279,7 +307,7 @@ export function AdminDataPage() {
           file: importFile,
           tenantId: tenantId.trim(),
           role: roleForImport,
-          defaultPassword: importPassword,
+          defaultPassword,
           fileType: importFileType,
           classIds: importFileType === 'student_sheet' && importClassIds.length > 0 ? importClassIds : undefined,
         },
@@ -302,7 +330,11 @@ export function AdminDataPage() {
     if (!token) return;
 
     if (!tenantId.trim()) {
-      setError('请选择 Tenant');
+      setError('请先在共用设定中选择 Tenant');
+      return;
+    }
+    if (!defaultPassword || defaultPassword.length < 6) {
+      setError('请先在共用设定中填写默认密码（至少 6 位）');
       return;
     }
     if (role === 'student' && classIds.length === 0) {
@@ -314,14 +346,16 @@ export function AdminDataPage() {
       return;
     }
 
-    const entries = parseNameIdentifierLines(identifiersInput);
+    const entries = parseNameIdentifierLines(identifiersInput, role);
     if (entries.length === 0) {
-      setError('请输入至少一行，格式：姓名,账号（如 张三,zhangsan@example.com）');
+      setError(role === 'teacher'
+        ? '请输入至少一行，格式：教师姓名,账号[,学科,年级,在校职务,部门]'
+        : '请输入至少一行，格式：姓名,账号（如 张三,zhangsan@example.com）');
       return;
     }
     const invalid = entries.find((e) => !e.name);
     if (invalid) {
-      setError('每行需同时提供姓名和账号，格式：姓名,账号');
+      setError(role === 'teacher' ? '每行需提供教师姓名和账号（前两列必填）' : '每行需提供学生姓名和账号（姓名、账号必填）');
       return;
     }
 
@@ -350,25 +384,21 @@ export function AdminDataPage() {
       <div className="max-w-4xl mx-auto space-y-4">
         <AdminTopNav />
         <div className="rounded-xl border bg-white p-6">
-          <h2 className="text-lg font-semibold text-slate-900">数据管理 · 批量生成账号</h2>
+          <h2 className="text-lg font-semibold text-slate-900">Users · 批量生成账号</h2>
           <p className="text-sm text-slate-500 mt-1">
-            每行格式：姓名,账号（如 张三,zhangsan@example.com）；选择租户和角色后批量创建，学生需选择班级。
+            通用：姓名（必填）、账号（必填）。教师可追加：学科、年级、在校职务、部门（均可留空）。选择租户和角色后批量创建，学生需选择班级。
           </p>
         </div>
 
-        {error ? (
-          <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</div>
-        ) : null}
-
-        <form onSubmit={handleSubmit} className="rounded-xl border bg-white p-6 space-y-5">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="rounded-xl border bg-white p-6 space-y-4">
+          <p className="text-sm font-medium text-slate-700">共用设定（批量生成与 Excel 导入共用，选定后无需重复填写）</p>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Tenant</label>
+              <label className="block text-sm font-medium text-slate-600 mb-1">Tenant</label>
               <select
                 value={tenantId}
                 onChange={(e) => setTenantId(e.target.value)}
                 className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-                required
               >
                 <option value="">-- 选择租户 --</option>
                 {tenants.map((t) => (
@@ -379,7 +409,7 @@ export function AdminDataPage() {
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">角色 (Role)</label>
+              <label className="block text-sm font-medium text-slate-600 mb-1">角色 (Role)</label>
               <select
                 value={role}
                 onChange={(e) => setRole(e.target.value as 'teacher' | 'student' | 'parent')}
@@ -390,8 +420,26 @@ export function AdminDataPage() {
                 <option value="parent">家长 (parent)</option>
               </select>
             </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-600 mb-1">默认密码 (至少 6 位)</label>
+              <input
+                type="password"
+                value={defaultPassword}
+                onChange={(e) => setDefaultPassword(e.target.value)}
+                placeholder="例如: ChangeMe123"
+                className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+                minLength={6}
+                autoComplete="new-password"
+              />
+            </div>
           </div>
+        </div>
 
+        {error ? (
+          <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</div>
+        ) : null}
+
+        <form onSubmit={handleSubmit} className="rounded-xl border bg-white p-6 space-y-5">
           {role === 'student' && (
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">班级（学生必选，可多选）</label>
@@ -501,27 +549,17 @@ export function AdminDataPage() {
           )}
 
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">默认密码 (至少 6 位)</label>
-            <input
-              type="password"
-              value={defaultPassword}
-              onChange={(e) => setDefaultPassword(e.target.value)}
-              placeholder="例如: ChangeMe123"
-              className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-              minLength={6}
-              required
-              autoComplete="new-password"
-            />
-          </div>
-
-          <div>
             <label className="block text-sm font-medium text-slate-700 mb-1">
-              姓名,账号（每行一个，逗号或 Tab 分隔）
+              {role === 'teacher'
+                ? '姓名（必填）,账号（必填）[,学科,年级,在校职务,部门]（每行一个，逗号或 Tab 分隔）'
+                : '姓名（必填）,账号（必填）（每行一个，逗号或 Tab 分隔）'}
             </label>
             <textarea
               value={identifiersInput}
               onChange={(e) => setIdentifiersInput(e.target.value)}
-              placeholder={'张三,zhangsan@example.com\n李四,13800138000\n王五,student001'}
+              placeholder={role === 'teacher'
+                ? TEACHER_SAMPLE
+                : STUDENT_SAMPLE}
               className="w-full min-h-[180px] rounded-md border border-slate-300 px-3 py-2 text-sm font-mono"
               required
             />
@@ -542,11 +580,11 @@ export function AdminDataPage() {
           <div>
             <h3 className="text-base font-semibold text-slate-900">Excel 导入账号（学生 / 教师）</h3>
             <p className="text-sm text-slate-500 mt-1">
-              先手动选择文件类型，再上传 xlsx。支持按班级名称自动关联学生-班级-老师，教师 profile 支持预填。
+              学生表：学生姓名（必填）、账号（必填）、班级、年级（除必填外可留空）。教师表：教师姓名（必填）、账号（必填）、学科、年级、在校职务、部门（除必填外可留空）。先手动选择文件类型，再上传 xlsx。支持按班级名称自动关联学生-班级-老师。
             </p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">文件类型</label>
               <select
@@ -563,18 +601,6 @@ export function AdminDataPage() {
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">导入默认密码</label>
-              <input
-                type="password"
-                value={importPassword}
-                onChange={(e) => setImportPassword(e.target.value)}
-                placeholder="至少 6 位"
-                className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-                minLength={6}
-                required
-              />
-            </div>
-            <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">选择文件 (.xlsx)</label>
               <input
                 type="file"
@@ -589,7 +615,7 @@ export function AdminDataPage() {
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">选择班级（可选，导入后加入所选班级）</label>
               {!tenantId.trim() ? (
-                <p className="text-sm text-slate-500">请先在「批量生成账号」上方选择 Tenant</p>
+                <p className="text-sm text-slate-500">请先在共用设定中选择 Tenant</p>
               ) : classesLoading ? (
                 <p className="text-sm text-slate-500">加载班级中...</p>
               ) : (
@@ -631,7 +657,7 @@ export function AdminDataPage() {
                     </div>
                   )}
                   {classes.length === 0 && importLookupResults.length === 0 ? (
-                    <p className="text-sm text-amber-600">该租户下暂无班级，可先在「批量生成账号」中新建班级，或上方查找添加。</p>
+                    <p className="text-sm text-amber-600">该租户下暂无班级，可先在「批量生成」中新建班级，或上方查找添加。</p>
                   ) : (
                     <div className="flex flex-wrap gap-2">
                       {classes.map((c) => {
@@ -666,8 +692,8 @@ export function AdminDataPage() {
 
           <div className="text-xs text-slate-500 rounded-md bg-slate-50 border p-3">
             <p>字段建议：</p>
-            <p>- 通用账号列（必填）：账号 / 用户名 / 邮箱 / 手机号</p>
-            <p>- 学生表：学生姓名、班级、年级（除账号外均可留空）</p>
+            <p>- 通用：姓名（必填）、账号 / 用户名 / 邮箱 / 手机号（必填）</p>
+            <p>- 学生表：学生姓名（必填）、账号（必填）、班级、年级（除必填外均可留空）</p>
             <p>- 教师表：教师姓名（必填）、账号（必填）、学科、年级、在校职务、部门（除必填外均可留空）</p>
           </div>
 

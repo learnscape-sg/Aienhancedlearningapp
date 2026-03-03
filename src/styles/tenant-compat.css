@@ -315,3 +315,15 @@
   flex-direction: row !important;
   display: flex !important;
 }
+
+/* ============================================
+ * Animation / transition reduction - lower CPU on tablets
+ * 关闭/弱化动画，降低平板 CPU 占用
+ * ============================================ */
+[data-tenant-compat="true"] *,
+[data-tenant-compat="true"] *::before,
+[data-tenant-compat="true"] *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+}

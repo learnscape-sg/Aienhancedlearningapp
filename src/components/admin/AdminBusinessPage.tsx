@@ -138,6 +138,20 @@ export function AdminBusinessPage() {
                 </LineChart>
               </ResponsiveContainer>
             </AdminChartCard>
+            {data.dailyPathwayUsage && data.dailyPathwayUsage.length > 0 && (
+              <AdminChartCard title="Task vs Course 链路日使用人数（教师）">
+                <ResponsiveContainer width="100%" height={300}>
+                  <LineChart data={data.dailyPathwayUsage}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="day" />
+                    <YAxis />
+                    <Tooltip />
+                    <Line type="monotone" dataKey="taskPathwayUsers" stroke="#8b5cf6" name="Task 链路人数" />
+                    <Line type="monotone" dataKey="coursePathwayUsers" stroke="#0ea5e9" name="Course 链路人数" />
+                  </LineChart>
+                </ResponsiveContainer>
+              </AdminChartCard>
+            )}
             <AdminChartCard title="留存趋势（D1/D7）">
               <ResponsiveContainer width="100%" height={300}>
                 <LineChart data={data.retention.byDay}>
@@ -155,28 +169,23 @@ export function AdminBusinessPage() {
 
             <AdminTableCard
               title={`教师 Top ${topN}（按创建课程）`}
-              headers={['Teacher', 'Course Count']}
-              rows={data.topTeachersByCourses.map((x) => [x.teacherName, String(x.courseCount)])}
+              headers={['Teacher', 'Course Count', 'Task Count']}
+              rows={data.topTeachersByCourses.map((x) => [x.teacherName, String(x.courseCount), String(x.taskCount)])}
             />
             <AdminTableCard
               title={`学生 Top ${topN}（按完成课程）`}
-              headers={['Student', 'Completed Courses', 'Avg Progress']}
-              rows={data.topStudentsByCompletion.map((x) => [x.studentName, String(x.completedCourses), `${x.avgProgress.toFixed(1)}%`])}
+              headers={['Student', 'Completed Courses', 'Avg Progress', 'Task Count']}
+              rows={data.topStudentsByCompletion.map((x) => [x.studentName, String(x.completedCourses), `${x.avgProgress.toFixed(1)}%`, String(x.taskCount)])}
             />
             <AdminTableCard
               title="热门学科"
-              headers={['Subject', 'Course Count']}
-              rows={data.topSubjects.map((x) => [x.subject, String(x.count)])}
+              headers={['Subject', 'Course Count', 'Task Count']}
+              rows={data.topSubjects.map((x) => [x.subject, String(x.count), String(x.taskCount)])}
             />
             <AdminTableCard
               title="热门年级"
-              headers={['Grade', 'Course Count']}
-              rows={data.topGrades.map((x) => [x.grade, String(x.count)])}
-            />
-            <AdminTableCard
-              title="学习质量代理（卡点 Top）"
-              headers={['Task Step', 'Stuck Count']}
-              rows={data.learningQualityProxy.topStuckSteps.map((x) => [x.step, String(x.count)])}
+              headers={['Grade', 'Course Count', 'Task Count']}
+              rows={data.topGrades.map((x) => [x.grade, String(x.count), String(x.taskCount)])}
             />
             <AdminTableCard
               title="发布阈值告警"
