@@ -892,7 +892,7 @@ export function TeachingResourcesPage() {
 
       {/* Entry Page (step 0) */}
       {step === 0 && (
-        <div className="max-w-2xl mx-auto w-full">
+        <div className="max-w-6xl mx-auto w-full">
         <Card className="border-2">
           <CardContent className="p-8">
             <div className="text-center mb-6">
@@ -901,7 +901,7 @@ export function TeachingResourcesPage() {
                 填写基础信息，两分钟内生成个性化学习与巩固活动
               </p>
             </div>
-            <div className="grid gap-4 max-w-xl mx-auto">
+            <div className="grid gap-4 max-w-4xl mx-auto">
               <div>
                 <label className="text-sm font-medium text-muted-foreground block mb-2">
                   任务类型
@@ -1074,7 +1074,7 @@ export function TeachingResourcesPage() {
         <div className="w-full">
           {!learningObjective.trim() ? (
             /* 引导页 - 小对话框效果（图标在对话框外） */
-            <div className="max-w-2xl mx-auto">
+            <div className="max-w-6xl mx-auto">
             <div className="flex items-start gap-3">
               <div className="flex-shrink-0 w-12 h-12 rounded-lg bg-amber-100 flex items-center justify-center">
                 <Target className="w-7 h-7 text-amber-600" />
@@ -1204,7 +1204,7 @@ export function TeachingResourcesPage() {
         <div className="w-full">
           {!videoStepIntroDismissed ? (
             /* 引导页 - 小对话框效果（图标在对话框外） */
-            <div className="max-w-2xl mx-auto">
+            <div className="max-w-6xl mx-auto">
             <div className="flex items-start gap-3">
               <div className="flex-shrink-0 w-12 h-12 rounded-lg bg-emerald-100 flex items-center justify-center">
                 <Video className="w-7 h-7 text-emerald-600" />
@@ -1392,7 +1392,7 @@ export function TeachingResourcesPage() {
               placeholder={'请打开洋葱APP学习（指定某单元某课），完成后进入下一步\n或者\n请学习课本内容（指定课本内容），完成后进入下一步'}
               value={customTextInstruction}
               onChange={(e) => setCustomTextInstruction(e.target.value)}
-              className="min-h-[80px] resize-y max-w-2xl"
+              className="min-h-[80px] resize-y max-w-6xl"
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && !e.shiftKey) {
                   e.preventDefault();
@@ -1447,7 +1447,7 @@ export function TeachingResourcesPage() {
         <div className="w-full">
           {!keyIdeasIntroDismissed ? (
             /* 引导页 - 小对话框效果（图标在对话框外） */
-            <div className="max-w-2xl mx-auto">
+            <div className="max-w-6xl mx-auto">
             <div className="flex items-start gap-3">
               <div className="flex-shrink-0 w-12 h-12 rounded-lg bg-emerald-100 flex items-center justify-center">
                 <ListOrdered className="w-7 h-7 text-emerald-600" />
@@ -1561,7 +1561,7 @@ export function TeachingResourcesPage() {
         <div className="w-full">
           {!practiceIntroDismissed ? (
             /* 引导页 - 小对话框效果（图标在对话框外） */
-            <div className="max-w-2xl mx-auto">
+            <div className="max-w-6xl mx-auto">
             <div className="flex items-start gap-3">
               <div className="flex-shrink-0 w-12 h-12 rounded-lg bg-emerald-100 flex items-center justify-center">
                 <FileQuestion className="w-7 h-7 text-emerald-600" />
@@ -1857,7 +1857,7 @@ export function TeachingResourcesPage() {
         <div className="w-full">
           {!exitTicketIntroDismissed ? (
             /* 引导页 - 小对话框效果（图标在对话框外） */
-            <div className="max-w-2xl mx-auto">
+            <div className="max-w-6xl mx-auto">
             <div className="flex items-start gap-3">
               <div className="flex-shrink-0 w-12 h-12 rounded-lg bg-emerald-100 flex items-center justify-center">
                 <Ticket className="w-7 h-7 text-emerald-600" />
@@ -1972,7 +1972,7 @@ export function TeachingResourcesPage() {
 
       {/* Step 6: Generating Task (引导页 - 生成中) */}
       {step === 6 && (
-        <div className="max-w-2xl mx-auto">
+        <div className="max-w-6xl mx-auto">
           <div className="flex items-start gap-3">
             <div className="flex-shrink-0 w-12 h-12 rounded-lg bg-indigo-100 flex items-center justify-center">
               <Sparkles className="w-7 h-7 text-indigo-600" />
@@ -2028,7 +2028,7 @@ export function TeachingResourcesPage() {
 
       {/* Step 7: Task Generated (完成页) */}
       {step === 7 && generatedTask && (
-        <div className="max-w-2xl mx-auto">
+        <div className="max-w-6xl mx-auto">
           <div className="flex items-start gap-3">
             <div className="flex-shrink-0 w-12 h-12 rounded-lg bg-indigo-100 flex items-center justify-center">
               <Sparkles className="w-7 h-7 text-indigo-600" />

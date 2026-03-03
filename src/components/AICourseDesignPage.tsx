@@ -522,7 +522,7 @@ export function AICourseDesignPage({ onNextStep }: AICourseDesignPageProps) {
         <Card>
           <CardHeader>
             <div className="flex items-center space-x-2">
-              <Layers className="w-5 h-5 text-cyan-600" />
+              <Layers className="w-5 h-5 text-primary" />
               <CardTitle className="text-lg">1. 基础信息</CardTitle>
             </div>
           </CardHeader>
@@ -615,7 +615,7 @@ export function AICourseDesignPage({ onNextStep }: AICourseDesignPageProps) {
             </div>
             <Button
               onClick={runGeneration}
-              className="w-full h-12 bg-cyan-600 hover:bg-cyan-700 text-white"
+              className="w-full h-12"
             >
               <Target className="w-5 h-5 mr-2" />
               开始生成课程设计
@@ -720,7 +720,7 @@ export function AICourseDesignPage({ onNextStep }: AICourseDesignPageProps) {
                             setPdfDownloading(null);
                           }
                         }}
-                        className="inline-flex items-center gap-1 text-xs text-cyan-600 hover:text-cyan-700 hover:underline disabled:opacity-50"
+                        className="inline-flex items-center gap-1 text-xs text-primary hover:text-primary/90 hover:underline disabled:opacity-50"
                       >
                         {pdfDownloading === 'task' ? <Loader2 className="w-3 h-3 animate-spin" /> : <Download className="w-3 h-3" />}
                         任务单 .pdf
@@ -733,7 +733,7 @@ export function AICourseDesignPage({ onNextStep }: AICourseDesignPageProps) {
                             `任务单-${topic || '课程'}-${Date.now()}.md`
                           )
                         }
-                        className="inline-flex items-center gap-1 text-xs text-cyan-600 hover:text-cyan-700 hover:underline"
+                        className="inline-flex items-center gap-1 text-xs text-primary hover:text-primary/90 hover:underline"
                       >
                         <Download className="w-3 h-3" />
                         任务单 .md
@@ -752,7 +752,7 @@ export function AICourseDesignPage({ onNextStep }: AICourseDesignPageProps) {
                             setPdfDownloading(null);
                           }
                         }}
-                        className="inline-flex items-center gap-1 text-xs text-cyan-600 hover:text-cyan-700 hover:underline disabled:opacity-50"
+                        className="inline-flex items-center gap-1 text-xs text-primary hover:text-primary/90 hover:underline disabled:opacity-50"
                       >
                         {pdfDownloading === 'guide' ? <Loader2 className="w-3 h-3 animate-spin" /> : <Download className="w-3 h-3" />}
                         教师指南 .pdf
@@ -765,7 +765,7 @@ export function AICourseDesignPage({ onNextStep }: AICourseDesignPageProps) {
                             `教师指南-${topic || '课程'}-${Date.now()}.md`
                           )
                         }
-                        className="inline-flex items-center gap-1 text-xs text-cyan-600 hover:text-cyan-700 hover:underline"
+                        className="inline-flex items-center gap-1 text-xs text-primary hover:text-primary/90 hover:underline"
                       >
                         <Download className="w-3 h-3" />
                         教师指南 .md
@@ -837,7 +837,7 @@ export function AICourseDesignPage({ onNextStep }: AICourseDesignPageProps) {
                         setPdfDownloading(null);
                       }
                     }}
-                    className="inline-flex items-center gap-1 px-3 py-1.5 text-sm text-cyan-600 hover:text-cyan-700 hover:underline border border-cyan-200 rounded-md disabled:opacity-50"
+                    className="inline-flex items-center gap-1 px-3 py-1.5 text-sm text-primary hover:text-primary/90 hover:underline border border-primary/30 rounded-md disabled:opacity-50"
                   >
                     {pdfDownloading === 'task' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
                     下载任务单 .pdf
@@ -850,7 +850,7 @@ export function AICourseDesignPage({ onNextStep }: AICourseDesignPageProps) {
                         `任务单-${topic || '课程'}-${Date.now()}.md`
                       )
                     }
-                    className="inline-flex items-center gap-1 px-3 py-1.5 text-sm text-cyan-600 hover:text-cyan-700 hover:underline border border-cyan-200 rounded-md"
+                    className="inline-flex items-center gap-1 px-3 py-1.5 text-sm text-primary hover:text-primary/90 hover:underline border border-primary/30 rounded-md"
                   >
                     <Download className="w-4 h-4" />
                     下载任务单 .md
@@ -869,7 +869,7 @@ export function AICourseDesignPage({ onNextStep }: AICourseDesignPageProps) {
                         setPdfDownloading(null);
                       }
                     }}
-                    className="inline-flex items-center gap-1 px-3 py-1.5 text-sm text-cyan-600 hover:text-cyan-700 hover:underline border border-cyan-200 rounded-md disabled:opacity-50"
+                    className="inline-flex items-center gap-1 px-3 py-1.5 text-sm text-primary hover:text-primary/90 hover:underline border border-primary/30 rounded-md disabled:opacity-50"
                   >
                     {pdfDownloading === 'guide' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
                     下载教师指南 .pdf
@@ -882,7 +882,7 @@ export function AICourseDesignPage({ onNextStep }: AICourseDesignPageProps) {
                         `教师指南-${topic || '课程'}-${Date.now()}.md`
                       )
                     }
-                    className="inline-flex items-center gap-1 px-3 py-1.5 text-sm text-cyan-600 hover:text-cyan-700 hover:underline border border-cyan-200 rounded-md"
+                    className="inline-flex items-center gap-1 px-3 py-1.5 text-sm text-primary hover:text-primary/90 hover:underline border border-primary/30 rounded-md"
                   >
                     <Download className="w-4 h-4" />
                     下载教师指南 .md
@@ -1035,7 +1035,7 @@ export function AICourseDesignPage({ onNextStep }: AICourseDesignPageProps) {
                               {(t.description?.length ?? 0) > 200 && (
                                 <button
                                   type="button"
-                                  className="flex items-center gap-1 text-cyan-600 hover:text-cyan-700 text-xs font-medium"
+                                  className="flex items-center gap-1 text-primary hover:text-primary/90 text-xs font-medium"
                                   onClick={() =>
                                     setExpandedDescIds((prev) => {
                                       const next = new Set(prev);
@@ -1206,7 +1206,6 @@ export function AICourseDesignPage({ onNextStep }: AICourseDesignPageProps) {
               <Button
                 onClick={handleCreateCourse}
                 disabled={createLoading}
-                className="bg-cyan-600 hover:bg-cyan-700"
               >
                 {createLoading ? (
                   <>
@@ -1249,7 +1248,7 @@ export function AICourseDesignPage({ onNextStep }: AICourseDesignPageProps) {
                 href={createdCourse.url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-cyan-600 hover:underline break-all"
+                className="text-primary hover:underline break-all"
               >
                 {createdCourse.url}
               </a>
