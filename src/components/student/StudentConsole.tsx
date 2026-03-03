@@ -3522,8 +3522,8 @@ CRITICAL: Output language must be 简体中文 only.
             {renderLeftWorkspace()}
         </div>
 
-        {/* Fixed Bottom: 导航 + hint text + 我卡住了 / 我做完了 */}
-        <div className="bg-white border-t border-slate-200 p-4 shrink-0 flex items-center justify-between gap-4">
+        {/* Fixed Bottom: 导航 + hint text + 我卡住了 / 我做完了 （z-50 高于气泡，确保气泡打开时仍可点击） */}
+        <div className="relative z-50 bg-white border-t border-slate-200 p-4 shrink-0 flex items-center justify-between gap-4">
             <div className="flex items-center gap-4 min-w-0">
                 {plan.tasks.length > 1 && (
                     <div className="flex items-center gap-2 shrink-0">
