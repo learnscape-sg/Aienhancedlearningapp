@@ -6,25 +6,46 @@ const BUBBLE_WIDTH = 360;
 const BUBBLE_GAP = 8;
 const BUBBLE_MAX_VH = 0.5;
 
+/** 获取视口信息（优先 visualViewport，兼容平板/横竖屏/缩放） */
+function getViewportBounds(): {
+  width: number;
+  height: number;
+  offsetLeft: number;
+  offsetTop: number;
+} {
+  const vv = window.visualViewport;
+  if (vv) {
+    return { width: vv.width, height: vv.height, offsetLeft: vv.offsetLeft, offsetTop: vv.offsetTop };
+  }
+  return {
+    width: window.innerWidth,
+    height: window.innerHeight,
+    offsetLeft: 0,
+    offsetTop: 0,
+  };
+}
+
 /** 仅头像：可拖到屏幕最边缘，不超出 */
 function clampAvatarOnly(pos: { top: number; left: number }): { top: number; left: number } {
-  const maxLeft = window.innerWidth - AVATAR_SIZE;
-  const maxTop = window.innerHeight - AVATAR_SIZE;
+  const { width, height, offsetLeft, offsetTop } = getViewportBounds();
+  const maxLeft = offsetLeft + width - AVATAR_SIZE;
+  const maxTop = offsetTop + height - AVATAR_SIZE;
   return {
-    top: Math.max(0, Math.min(maxTop, pos.top)),
-    left: Math.max(0, Math.min(maxLeft, pos.left)),
+    top: Math.max(offsetTop, Math.min(maxTop, pos.top)),
+    left: Math.max(offsetLeft, Math.min(maxLeft, pos.left)),
   };
 }
 
 /** 气泡打开时：保证头像+气泡都在屏内 */
 function clampWithBubble(pos: { top: number; left: number }): { top: number; left: number } {
-  const bubbleMaxH = window.innerHeight * BUBBLE_MAX_VH;
+  const { width, height, offsetLeft, offsetTop } = getViewportBounds();
+  const bubbleMaxH = height * BUBBLE_MAX_VH;
   const containerMinH = bubbleMaxH + BUBBLE_GAP + AVATAR_SIZE;
-  const maxLeft = Math.max(0, window.innerWidth - BUBBLE_WIDTH);
-  const maxTop = Math.max(0, window.innerHeight - containerMinH);
+  const maxLeft = offsetLeft + width - BUBBLE_WIDTH;
+  const maxTop = offsetTop + height - containerMinH;
   return {
-    top: Math.max(0, Math.min(maxTop, pos.top)),
-    left: Math.max(0, Math.min(maxLeft, pos.left)),
+    top: Math.max(offsetTop, Math.min(maxTop, pos.top)),
+    left: Math.max(offsetLeft, Math.min(maxLeft, pos.left)),
   };
 }
 
@@ -47,6 +68,7 @@ export const AITutorBubble: React.FC<AITutorBubbleProps> = ({
   const defaultRight = 16;
 
   const [position, setPosition] = useState<{ top: number; left: number } | null>(null); // 刷新时复位到 default（右下角）
+  const [, setViewportTick] = useState(0); // 触发重绘以响应 visualViewport 变化
   const [isDragging, setIsDragging] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const dragStartRef = useRef<{ x: number; y: number; left: number; top: number } | null>(null);
@@ -62,16 +84,25 @@ export const AITutorBubble: React.FC<AITutorBubbleProps> = ({
       const clamped = isOpen ? clampWithBubble(position) : clampAvatarOnly(position);
       return { top: clamped.top, left: clamped.left, bottom: 'auto', right: 'auto' };
     }
-    return { bottom: defaultBottom, right: defaultRight, top: 'auto', left: 'auto' };
+    const { width, height, offsetLeft, offsetTop } = getViewportBounds();
+    const containerH = isOpen ? height * BUBBLE_MAX_VH + BUBBLE_GAP + AVATAR_SIZE : AVATAR_SIZE;
+    const containerW = isOpen ? BUBBLE_WIDTH : AVATAR_SIZE;
+    return {
+      top: offsetTop + height - defaultBottom - containerH,
+      left: offsetLeft + width - defaultRight - containerW,
+      bottom: 'auto',
+      right: 'auto',
+    };
   }, [position, isOpen]);
 
   useEffect(() => {
     if (!isOpen) return;
-    const bubbleMaxH = window.innerHeight * BUBBLE_MAX_VH;
+    const { width, height, offsetLeft, offsetTop } = getViewportBounds();
+    const bubbleMaxH = height * BUBBLE_MAX_VH;
     const containerH = bubbleMaxH + BUBBLE_GAP + AVATAR_SIZE;
     const pos = position ?? {
-      left: window.innerWidth - defaultRight - BUBBLE_WIDTH,
-      top: window.innerHeight - defaultBottom - containerH,
+      left: offsetLeft + width - defaultRight - BUBBLE_WIDTH,
+      top: offsetTop + height - defaultBottom - containerH,
     };
     const clamped = clampWithBubble(pos);
     if (clamped.top !== pos.top || clamped.left !== pos.left) {
@@ -91,6 +122,7 @@ export const AITutorBubble: React.FC<AITutorBubbleProps> = ({
     const onPointerDownOutside = (e: PointerEvent) => {
       const el = containerRef.current;
       if (!el || el.contains(e.target as Node)) return;
+      setPosition(null);
       onOpenChange(false);
     };
     document.addEventListener('pointerdown', onPointerDownOutside);
@@ -98,23 +130,35 @@ export const AITutorBubble: React.FC<AITutorBubbleProps> = ({
   }, [isOpen, onOpenChange]);
 
   useEffect(() => {
-    const onResize = () => {
+    const onViewportChange = () => {
       if (dragStartRef.current) return;
-      if (!position) return;
-      const clamp = isOpen ? clampWithBubble : clampAvatarOnly;
-      const clamped = clamp(position);
-      if (clamped.top !== position.top || clamped.left !== position.left) {
-        setPosition(clamped);
-        const el = containerRef.current;
-        if (el) {
-          el.style.bottom = 'auto';
-          el.style.left = `${clamped.left}px`;
-          el.style.top = `${clamped.top}px`;
+      if (position) {
+        const clamp = isOpen ? clampWithBubble : clampAvatarOnly;
+        const clamped = clamp(position);
+        if (clamped.top !== position.top || clamped.left !== position.left) {
+          setPosition(clamped);
+          const el = containerRef.current;
+          if (el) {
+            el.style.bottom = 'auto';
+            el.style.left = `${clamped.left}px`;
+            el.style.top = `${clamped.top}px`;
+          }
         }
+      } else {
+        setViewportTick((t) => t + 1);
       }
     };
-    window.addEventListener('resize', onResize);
-    return () => window.removeEventListener('resize', onResize);
+    window.addEventListener('resize', onViewportChange);
+    const vv = window.visualViewport;
+    if (vv) {
+      vv.addEventListener('resize', onViewportChange);
+      vv.addEventListener('scroll', onViewportChange);
+    }
+    return () => {
+      window.removeEventListener('resize', onViewportChange);
+      vv?.removeEventListener('resize', onViewportChange);
+      vv?.removeEventListener('scroll', onViewportChange);
+    };
   }, [position, isOpen]);
 
   const handlePointerDown = useCallback(
@@ -126,8 +170,9 @@ export const AITutorBubble: React.FC<AITutorBubbleProps> = ({
       } else {
         closedOnPointerDownRef.current = false;
       }
-      const left = position?.left ?? window.innerWidth - defaultRight - AVATAR_SIZE;
-      const top = position?.top ?? window.innerHeight - defaultBottom - AVATAR_SIZE;
+      const { width, height, offsetLeft, offsetTop } = getViewportBounds();
+      const left = position?.left ?? offsetLeft + width - defaultRight - AVATAR_SIZE;
+      const top = position?.top ?? offsetTop + height - defaultBottom - AVATAR_SIZE;
       dragStartRef.current = { x: e.clientX, y: e.clientY, left, top };
       dragMovedRef.current = false;
       pendingPosRef.current = null;

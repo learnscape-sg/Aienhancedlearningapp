@@ -574,6 +574,7 @@ const StudentConsole: React.FC<StudentConsoleProps> = ({
   const guidedDoneInFlight = useRef(false); // 防止引导流 handleDone 双击重复请求
   // 进入步骤 5 时的消息数量，用于判断 [STEP_PASS] 是否来自步骤 5 的 AI 判定
   const messagesCountAtStep5EntryRef = useRef<number>(0);
+  const lastConsumedStepPassMessageIndexRef = useRef<number | null>(null);
   const currentTask = plan.tasks[currentTaskIndex] ?? plan.tasks[0];
   
   // Derived View Type
@@ -1820,8 +1821,9 @@ CRITICAL: Output language must be 简体中文 only.
     return `当前步骤「${currentStepTitle}」：学生已完成。`;
   };
 
-  // 引导流：进入下一步（由聊天区 [STEP_PASS] 按钮触发）
-  const handleGuidedAdvance = () => {
+  // 引导流：进入下一步（由聊天区 [STEP_PASS] 按钮触发，点击后按钮立即消失，防止多次点击）
+  const handleGuidedAdvance = (msgIdx: number) => {
+    lastConsumedStepPassMessageIndexRef.current = msgIdx;
     if (guidedStep < 5) {
       const next = guidedStep + 1;
       setMaxStepReached(prev => Math.max(prev, next));
@@ -3621,8 +3623,8 @@ CRITICAL: Output language must be 简体中文 only.
             const hasStepPass = msg.role === 'model' && msg.text.includes('[STEP_PASS]');
             const isLastMessage = idx === messages.length - 1;
 
-            // 引导流：当 AI 批准当前步骤时，显示"进入下一步"按钮
-            const showGuidedAdvanceButton = hasStepPass && isLastMessage && isGuidedVideoFlow && !isTyping;
+            // 引导流：当 AI 批准当前步骤时，显示"进入下一步"按钮（未被消费时才显示，点击后立即消失）
+            const showGuidedAdvanceButton = hasStepPass && isLastMessage && isGuidedVideoFlow && !isTyping && lastConsumedStepPassMessageIndexRef.current !== idx;
             // 剥离 [STEP_PASS] 标记，不展示给学生
             const displayText = msg.text.replace(/\s*\[STEP_PASS\]\s*/g, '').trim();
             
@@ -3711,7 +3713,7 @@ CRITICAL: Output language must be 简体中文 only.
                   <div className="flex justify-start animate-fade-in-up ml-0 gap-3 flex-wrap">
                     {guidedStep < 5 || currentTaskIndex < plan.tasks.length - 1 ? (
                       <button 
-                        onClick={handleGuidedAdvance}
+                        onClick={() => handleGuidedAdvance(idx)}
                         className="flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-bold transition-all shadow-lg hover:shadow-xl hover:translate-y-[-2px] active:translate-y-0 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white"
                       >
                         {guidedStep < 5 ? t('nextStep') : t('nextTask')} <ArrowRight size={16} />
