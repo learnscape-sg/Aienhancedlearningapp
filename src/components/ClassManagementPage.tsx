@@ -28,7 +28,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from './ui/dialog';
-import { Users, UserPlus, Search, MoreVertical, Loader2, X } from 'lucide-react';
+import { Users, UserPlus, Search, MoreVertical, Loader2, X, UsersRound } from 'lucide-react';
 import { Badge } from './ui/badge';
 import { Avatar, AvatarFallback } from './ui/avatar';
 import { useAuth } from './AuthContext';
@@ -41,8 +41,17 @@ import {
   teacherBatchCreateStudents,
   removeStudentFromClass,
   deleteClass,
+  listClassGroups,
+  createClassGroup,
+  updateClassGroup,
+  deleteClassGroup,
+  addStudentsToGroup,
+  removeStudentFromGroup,
+  getGroupStudents,
   type ClassItem,
+  type ClassGroup,
 } from '@/lib/backendApi';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from './ui/tabs';
 
 interface ClassWithCount extends ClassItem {
   studentCount: number;
@@ -93,6 +102,19 @@ export function ClassManagementPage() {
     summary: { created: number; updated: number; skipped: number; errors: number };
     results: Array<{ identifier: string; status: 'created' | 'updated' | 'skipped' | 'error'; userId?: string; message?: string }>;
   } | null>(null);
+
+  const [detailTab, setDetailTab] = useState<'students' | 'groups'>('students');
+  const [groups, setGroups] = useState<ClassGroup[]>([]);
+  const [groupsLoading, setGroupsLoading] = useState(false);
+  const [newGroupOpen, setNewGroupOpen] = useState(false);
+  const [newGroupName, setNewGroupName] = useState('');
+  const [creatingGroup, setCreatingGroup] = useState(false);
+  const [expandedGroupId, setExpandedGroupId] = useState<string | null>(null);
+  const [groupStudents, setGroupStudents] = useState<Record<string, Student[]>>({});
+  const [addToGroupOpen, setAddToGroupOpen] = useState(false);
+  const [addToGroupId, setAddToGroupId] = useState<string | null>(null);
+  const [selectedStudentsForGroup, setSelectedStudentsForGroup] = useState<string[]>([]);
+  const [addingToGroup, setAddingToGroup] = useState(false);
 
   const loadClasses = async () => {
     if (!user?.id) return;
@@ -146,6 +168,23 @@ export function ClassManagementPage() {
       setClassDetail(null);
     }
   }, [selectedClassId]);
+
+  useEffect(() => {
+    if (selectedClassId && user?.id && detailTab === 'groups') {
+      setGroupsLoading(true);
+      listClassGroups(selectedClassId, user.id)
+        .then((res) => setGroups(res.groups ?? []))
+        .catch((err) => {
+          console.error('Failed to load groups:', err);
+          setGroups([]);
+        })
+        .finally(() => setGroupsLoading(false));
+    } else {
+      setGroups([]);
+      setGroupStudents({});
+      setExpandedGroupId(null);
+    }
+  }, [selectedClassId, user?.id, detailTab]);
 
   const handleCreateClass = async () => {
     if (!user?.id || !newClassName.trim()) return;
@@ -264,6 +303,105 @@ export function ClassManagementPage() {
       console.error('Failed to delete class:', err);
       alert(err instanceof Error ? err.message : '删除失败');
     }
+  };
+
+  const handleCreateGroup = async () => {
+    if (!selectedClassId || !user?.id || !newGroupName.trim()) return;
+    setCreatingGroup(true);
+    try {
+      await createClassGroup(selectedClassId, newGroupName.trim());
+      setNewGroupOpen(false);
+      setNewGroupName('');
+      const res = await listClassGroups(selectedClassId, user.id);
+      setGroups(res.groups ?? []);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : '创建分组失败');
+    } finally {
+      setCreatingGroup(false);
+    }
+  };
+
+  const handleDeleteGroup = async (groupId: string) => {
+    if (!selectedClassId || !window.confirm('确定删除该分组？分组内学生不会被移出班级。')) return;
+    try {
+      await deleteClassGroup(selectedClassId, groupId);
+      setGroups((prev) => prev.filter((g) => g.id !== groupId));
+      setExpandedGroupId((id) => (id === groupId ? null : id));
+      setGroupStudents((prev) => {
+        const next = { ...prev };
+        delete next[groupId];
+        return next;
+      });
+    } catch (err) {
+      alert(err instanceof Error ? err.message : '删除分组失败');
+    }
+  };
+
+  const handleExpandGroup = async (groupId: string) => {
+    if (!selectedClassId || !user?.id) return;
+    if (expandedGroupId === groupId) {
+      setExpandedGroupId(null);
+      return;
+    }
+    setExpandedGroupId(groupId);
+    if (!groupStudents[groupId]) {
+      try {
+        const res = await getGroupStudents(selectedClassId, groupId, user.id);
+        setGroupStudents((prev) => ({ ...prev, [groupId]: res.students ?? [] }));
+      } catch (err) {
+        console.error('Failed to load group students:', err);
+        setGroupStudents((prev) => ({ ...prev, [groupId]: [] }));
+      }
+    }
+  };
+
+  const handleRemoveFromGroup = async (groupId: string, studentId: string) => {
+    if (!selectedClassId) return;
+    if (!window.confirm('确定将该学生移出分组？')) return;
+    try {
+      await removeStudentFromGroup(selectedClassId, groupId, studentId);
+      setGroupStudents((prev) => ({
+        ...prev,
+        [groupId]: (prev[groupId] ?? []).filter((s) => s.id !== studentId),
+      }));
+      setGroups((prev) =>
+        prev.map((g) => (g.id === groupId ? { ...g, studentCount: (g.studentCount ?? 1) - 1 } : g))
+      );
+    } catch (err) {
+      alert(err instanceof Error ? err.message : '移出失败');
+    }
+  };
+
+  const openAddToGroup = (groupId: string) => {
+    setAddToGroupId(groupId);
+    setSelectedStudentsForGroup([]);
+    setAddToGroupOpen(true);
+  };
+
+  const handleAddStudentsToGroup = async () => {
+    if (!selectedClassId || !addToGroupId || selectedStudentsForGroup.length === 0) return;
+    setAddingToGroup(true);
+    try {
+      await addStudentsToGroup(selectedClassId, addToGroupId, selectedStudentsForGroup);
+      const res = await getGroupStudents(selectedClassId, addToGroupId, user!.id);
+      setGroupStudents((prev) => ({ ...prev, [addToGroupId]: res.students ?? [] }));
+      setGroups((prev) =>
+        prev.map((g) =>
+          g.id === addToGroupId ? { ...g, studentCount: (res.students ?? []).length } : g
+        )
+      );
+      setAddToGroupOpen(false);
+      setAddToGroupId(null);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : '添加失败');
+    } finally {
+      setAddingToGroup(false);
+    }
+  };
+
+  const studentsNotInGroup = (groupId: string): Student[] => {
+    const inGroup = new Set((groupStudents[groupId] ?? []).map((s) => s.id));
+    return (classDetail?.students ?? []).filter((s) => !inGroup.has(s.id));
   };
 
   const filteredStudents = (classDetail?.students ?? []).filter(
@@ -397,12 +535,12 @@ export function ClassManagementPage() {
           <CardHeader>
             <div className="flex items-center justify-between">
               <div>
-                <CardTitle>学生列表</CardTitle>
+                <CardTitle>{selectedClass ? selectedClass.name : '班级详情'}</CardTitle>
                 <CardDescription>
-                  {selectedClass ? `${selectedClass.name} 的学生` : '选择班级查看学生'}
+                  {selectedClass ? (detailTab === 'students' ? '学生列表' : '分组管理') : '选择班级查看详情'}
                 </CardDescription>
               </div>
-              {selectedClassId && canManageSelectedClass && (
+              {selectedClassId && canManageSelectedClass && detailTab === 'students' && (
                 <div className="flex items-center gap-2">
                   <Button
                     size="sm"
@@ -421,66 +559,157 @@ export function ClassManagementPage() {
                   </Button>
                 </div>
               )}
+              {selectedClassId && canManageSelectedClass && detailTab === 'groups' && (
+                <Button size="sm" onClick={() => setNewGroupOpen(true)}>
+                  <UsersRound className="w-4 h-4 mr-1" />
+                  新建分组
+                </Button>
+              )}
             </div>
           </CardHeader>
           <CardContent>
             {!selectedClassId ? (
               <div className="text-center py-12 text-muted-foreground">
                 <Users className="w-12 h-12 mx-auto mb-4 text-gray-300" />
-                <p>请从左侧选择一个班级查看学生列表</p>
+                <p>请从左侧选择一个班级查看学生列表或分组管理</p>
               </div>
             ) : detailLoading ? (
               <div className="flex justify-center py-12">
                 <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
               </div>
             ) : (
-              <>
-                <div className="mb-4">
-                  <div className="relative">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                    <Input
-                      placeholder="搜索学生姓名或邮箱..."
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      className="pl-10"
-                    />
+              <Tabs value={detailTab} onValueChange={(v) => setDetailTab(v as 'students' | 'groups')}>
+                <TabsList className="mb-4">
+                  <TabsTrigger value="students">学生列表</TabsTrigger>
+                  <TabsTrigger value="groups">分组管理</TabsTrigger>
+                </TabsList>
+                <TabsContent value="students">
+                  <div className="mb-4">
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                      <Input
+                        placeholder="搜索学生姓名或邮箱..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className="pl-10"
+                      />
+                    </div>
                   </div>
-                </div>
-                <div className="space-y-3">
-                  {filteredStudents.length === 0 ? (
-                    <p className="text-muted-foreground py-6 text-center">暂无学生，点击添加学生通过邮箱邀请</p>
-                  ) : (
-                    filteredStudents.map((s) => (
-                      <div
-                        key={s.id}
-                        className="flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50"
-                      >
-                        <div className="flex items-center gap-4">
-                          <Avatar>
-                            <AvatarFallback className="bg-blue-600 text-white">
-                              {(s.name ?? s.email ?? '?').charAt(0)}
-                            </AvatarFallback>
-                          </Avatar>
-                          <div>
-                            <h4 className="font-medium">{s.name || '未设置姓名'}</h4>
-                            <p className="text-sm text-muted-foreground">{s.email || s.id}</p>
+                  <div className="space-y-3">
+                    {filteredStudents.length === 0 ? (
+                      <p className="text-muted-foreground py-6 text-center">暂无学生，点击添加学生通过邮箱邀请</p>
+                    ) : (
+                      filteredStudents.map((s) => (
+                        <div
+                          key={s.id}
+                          className="flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50"
+                        >
+                          <div className="flex items-center gap-4">
+                            <Avatar>
+                              <AvatarFallback className="bg-blue-600 text-white">
+                                {(s.name ?? s.email ?? '?').charAt(0)}
+                              </AvatarFallback>
+                            </Avatar>
+                            <div>
+                              <h4 className="font-medium">{s.name || '未设置姓名'}</h4>
+                              <p className="text-sm text-muted-foreground">{s.email || s.id}</p>
+                            </div>
                           </div>
+                          {canManageSelectedClass ? (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="text-destructive hover:text-destructive"
+                              onClick={() => handleRemoveStudent(s.id)}
+                            >
+                              移出
+                            </Button>
+                          ) : null}
                         </div>
-                        {canManageSelectedClass ? (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="text-destructive hover:text-destructive"
-                            onClick={() => handleRemoveStudent(s.id)}
+                      ))
+                    )}
+                  </div>
+                </TabsContent>
+                <TabsContent value="groups">
+                  {groupsLoading ? (
+                    <div className="flex justify-center py-12">
+                      <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+                    </div>
+                  ) : groups.length === 0 ? (
+                    <p className="text-muted-foreground py-6 text-center">暂无分组，点击右上角「新建分组」创建</p>
+                  ) : (
+                    <div className="space-y-3">
+                      {groups.map((g) => (
+                        <div key={g.id} className="border rounded-lg overflow-hidden">
+                          <div
+                            className="flex items-center justify-between p-4 hover:bg-gray-50 cursor-pointer"
+                            onClick={() => handleExpandGroup(g.id)}
                           >
-                            移出
-                          </Button>
-                        ) : null}
-                      </div>
-                    ))
+                            <div className="flex items-center gap-2">
+                              <UsersRound className="w-5 h-5 text-muted-foreground" />
+                              <span className="font-medium">{g.name}</span>
+                              <Badge variant="secondary">{g.studentCount ?? 0} 人</Badge>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              {canManageSelectedClass && (
+                                <>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      openAddToGroup(g.id);
+                                    }}
+                                  >
+                                    添加
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="text-destructive hover:text-destructive"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleDeleteGroup(g.id);
+                                    }}
+                                  >
+                                    <X className="w-4 h-4" />
+                                  </Button>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                          {expandedGroupId === g.id && (
+                            <div className="border-t bg-muted/20 p-4 space-y-2">
+                              {(groupStudents[g.id] ?? []).length === 0 ? (
+                                <p className="text-sm text-muted-foreground">暂无学生，点击「添加」从班级学生中加入</p>
+                              ) : (
+                                (groupStudents[g.id] ?? []).map((s) => (
+                                  <div
+                                    key={s.id}
+                                    className="flex items-center justify-between py-2 px-3 rounded bg-background"
+                                  >
+                                    <span className="text-sm">{s.name || s.email || s.id}</span>
+                                    {canManageSelectedClass && (
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="text-destructive hover:text-destructive h-7 text-xs"
+                                        onClick={() => handleRemoveFromGroup(g.id, s.id)}
+                                      >
+                                        移出
+                                      </Button>
+                                    )}
+                                  </div>
+                                ))
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
                   )}
-                </div>
-              </>
+                </TabsContent>
+              </Tabs>
             )}
           </CardContent>
         </Card>
@@ -725,6 +954,97 @@ export function ClassManagementPage() {
             <Button onClick={handleBulkCreateStudents} disabled={bulkCreating}>
               {bulkCreating && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
               批量创建并加入班级
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Add Students to Group Dialog */}
+      <Dialog
+        open={addToGroupOpen}
+        onOpenChange={(open) => {
+          if (!open) {
+            setAddToGroupOpen(false);
+            setAddToGroupId(null);
+            setSelectedStudentsForGroup([]);
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>添加学生到分组</DialogTitle>
+            <DialogDescription>从班级学生中选择要加入该分组的学生（可多选）</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            {addToGroupId && (() => {
+              const available = studentsNotInGroup(addToGroupId);
+              return available.length === 0 ? (
+                <p className="text-sm text-muted-foreground">班级内所有学生已在该分组中</p>
+              ) : (
+                <div className="space-y-2 max-h-60 overflow-y-auto">
+                  {available.map((s) => (
+                    <div
+                      key={s.id}
+                      className={`flex items-center p-2 rounded cursor-pointer ${selectedStudentsForGroup.includes(s.id) ? 'bg-blue-50 border border-blue-200' : 'hover:bg-gray-50 border border-transparent'}`}
+                      onClick={() =>
+                        setSelectedStudentsForGroup((prev) =>
+                          prev.includes(s.id) ? prev.filter((id) => id !== s.id) : [...prev, s.id]
+                        )
+                      }
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedStudentsForGroup.includes(s.id)}
+                        onChange={() => {}}
+                        className="mr-2"
+                      />
+                      <span className="text-sm">{s.name || s.email || s.id}</span>
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAddToGroupOpen(false)}>
+              取消
+            </Button>
+            <Button
+              onClick={handleAddStudentsToGroup}
+              disabled={selectedStudentsForGroup.length === 0 || addingToGroup}
+            >
+              {addingToGroup && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+              添加 {selectedStudentsForGroup.length > 0 ? `(${selectedStudentsForGroup.length})` : ''}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* New Group Dialog */}
+      <Dialog open={newGroupOpen} onOpenChange={setNewGroupOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>新建分组</DialogTitle>
+            <DialogDescription>为当前班级创建一个分组，用于个性化任务推荐</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="group-name">分组名称</Label>
+              <Input
+                id="group-name"
+                placeholder="如：进阶组、巩固组"
+                value={newGroupName}
+                onChange={(e) => setNewGroupName(e.target.value)}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setNewGroupOpen(false)}>
+              取消
+            </Button>
+            <Button onClick={handleCreateGroup} disabled={!newGroupName.trim() || creatingGroup}>
+              {creatingGroup && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+              创建
             </Button>
           </DialogFooter>
         </DialogContent>

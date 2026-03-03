@@ -37,6 +37,7 @@ import {
   createCourseShare,
   deleteCourseShare,
   searchTeachers,
+  listClassGroups,
   type ClassItem,
   type TeacherSearchItem,
 } from '@/lib/backendApi';
@@ -119,7 +120,10 @@ export function CourseManagementPage({ initialCourseTab }: { initialCourseTab?: 
 
   // --- Shared dialog state ---
   const [selectedClasses, setSelectedClasses] = useState<string[]>([]);
+  const [selectedGroups, setSelectedGroups] = useState<string[]>([]);
   const [assignedClasses, setAssignedClasses] = useState<Array<{ id: string; name: string; grade?: string; studentCount: number }>>([]);
+  const [assignedGroups, setAssignedGroups] = useState<Array<{ id: string; name: string; classId: string; studentCount: number }>>([]);
+  const [allGroupsByClass, setAllGroupsByClass] = useState<Record<string, Array<{ id: string; name: string; studentCount: number }>>>({});
   const [assigning, setAssigning] = useState(false);
   const [publishMode, setPublishMode] = useState<'now' | 'schedule'>('now');
   const [scheduledPublishAt, setScheduledPublishAt] = useState('');
@@ -155,6 +159,29 @@ export function CourseManagementPage({ initialCourseTab }: { initialCourseTab?: 
       .catch((err) => console.error('Failed to load classes:', err))
       .finally(() => setClassesLoading(false));
   }, [user?.id, taskAssignDialogOpen, courseAssignDialogOpen]);
+
+  useEffect(() => {
+    if (!user?.id || !courseAssignDialogOpen || classes.length === 0) return;
+    const loadGroups = async () => {
+      const byClass: Record<string, Array<{ id: string; name: string; studentCount: number }>> = {};
+      await Promise.all(
+        classes.map(async (c) => {
+          try {
+            const res = await listClassGroups(c.id, user!.id);
+            byClass[c.id] = (res.groups ?? []).map((g) => ({
+              id: g.id,
+              name: g.name,
+              studentCount: g.studentCount ?? 0,
+            }));
+          } catch {
+            byClass[c.id] = [];
+          }
+        })
+      );
+      setAllGroupsByClass(byClass);
+    };
+    loadGroups();
+  }, [user?.id, courseAssignDialogOpen, classes]);
 
   useEffect(() => {
     if (!user?.id || courseView !== 'recycle') return;
@@ -340,15 +367,18 @@ export function CourseManagementPage({ initialCourseTab }: { initialCourseTab?: 
     if (!user?.id) return;
     setSelectedCourse(course);
     setSelectedClasses([]);
+    setSelectedGroups([]);
     setPublishMode('now');
     setScheduledPublishAt('');
     setCourseAssignDialogOpen(true);
     try {
-      const { classes: assigned } = await getCourseAssignments(course.id, user.id);
-      setAssignedClasses(assigned.map((c) => ({ id: c.id, name: c.name, grade: c.grade, studentCount: c.studentCount })));
+      const res = await getCourseAssignments(course.id, user.id);
+      setAssignedClasses((res.classes ?? []).map((c) => ({ id: c.id, name: c.name, grade: c.grade, studentCount: c.studentCount })));
+      setAssignedGroups((res.groups ?? []).map((g) => ({ id: g.id, name: g.name, classId: g.classId, studentCount: g.studentCount })));
     } catch (err) {
       console.error('Failed to load assigned classes:', err);
       setAssignedClasses([]);
+      setAssignedGroups([]);
     }
   };
 
@@ -356,11 +386,20 @@ export function CourseManagementPage({ initialCourseTab }: { initialCourseTab?: 
     setSelectedClasses((prev) => (prev.includes(classId) ? prev.filter((id) => id !== classId) : [...prev, classId]));
   };
 
-  const handleRemoveAssignment = async (classId: string) => {
+  const handleGroupToggle = (groupId: string) => {
+    setSelectedGroups((prev) => (prev.includes(groupId) ? prev.filter((id) => id !== groupId) : [...prev, groupId]));
+  };
+
+  const handleRemoveAssignment = async (options: { classId?: string; groupId?: string }) => {
     if (!user?.id || !selectedCourse) return;
     try {
-      await removeCourseAssignment(selectedCourse.id, classId, user.id);
-      setAssignedClasses((prev) => prev.filter((c) => c.id !== classId));
+      await removeCourseAssignment(selectedCourse.id, user.id, options);
+      if (options.classId) {
+        setAssignedClasses((prev) => prev.filter((c) => c.id !== options.classId));
+      }
+      if (options.groupId) {
+        setAssignedGroups((prev) => prev.filter((g) => g.id !== options.groupId));
+      }
       await refreshCourses();
     } catch (err) {
       console.error('Remove assignment failed:', err);
@@ -369,26 +408,45 @@ export function CourseManagementPage({ initialCourseTab }: { initialCourseTab?: 
   };
 
   const handleCourseConfirmAssign = async () => {
-    if (!user?.id || !selectedCourse || selectedClasses.length === 0) return;
+    if (!user?.id || !selectedCourse || (selectedClasses.length === 0 && selectedGroups.length === 0)) return;
     setAssigning(true);
     try {
-      const result = await assignCourseToClasses(selectedCourse.id, selectedClasses, user.id);
+      const result = await assignCourseToClasses(
+        selectedCourse.id,
+        selectedClasses,
+        user.id,
+        selectedGroups.length > 0 ? selectedGroups : undefined
+      );
       if (publishMode === 'schedule') {
         if (!scheduledPublishAt) throw new Error('请选择定时发布时间');
         await updateCourseVisibility(selectedCourse.id, user.id, 'schedule', new Date(scheduledPublishAt).toISOString());
       } else {
         await updateCourseVisibility(selectedCourse.id, user.id, 'publish');
       }
-      const classNames = classes.filter((c) => selectedClasses.includes(c.id)).map((c) => c.name).join('、');
-      const message =
-        result.skippedCount && result.skippedCount > 0
-          ? `成功将"${selectedCourse.title}"分配给 ${result.assignedCount} 个班级，${result.skippedCount} 个班级已分配过`
-          : `成功将"${selectedCourse.title}"分配给：${classNames}`;
-      alert(message);
+      const parts: string[] = [];
+      if (result.assignedClassCount && result.assignedClassCount > 0) {
+        const classNames = classes.filter((c) => selectedClasses.includes(c.id)).map((c) => c.name).join('、');
+        parts.push(`${classNames}`);
+      }
+      if (result.assignedGroupCount && result.assignedGroupCount > 0) {
+        const groupNames = selectedGroups
+          .map((gid) => {
+            for (const groups of Object.values(allGroupsByClass)) {
+              const g = groups.find((x) => x.id === gid);
+              if (g) return g.name;
+            }
+            return gid;
+          })
+          .join('、');
+        parts.push(`分组：${groupNames}`);
+      }
+      alert(`成功将"${selectedCourse.title}"分配给：${parts.join('；')}`);
       setCourseAssignDialogOpen(false);
       setSelectedClasses([]);
+      setSelectedGroups([]);
       setSelectedCourse(null);
       setAssignedClasses([]);
+      setAssignedGroups([]);
       await refreshCourses();
     } catch (err) {
       console.error('Assign failed:', err);
@@ -960,7 +1018,27 @@ export function CourseManagementPage({ initialCourseTab }: { initialCourseTab?: 
                           <span className="font-medium">{c.name}</span>
                           <span className="text-muted-foreground ml-2">{c.grade || '未设年级'} · {c.studentCount} 人</span>
                         </div>
-                        <Button variant="ghost" size="sm" onClick={() => handleRemoveAssignment(c.id)} className="text-red-600 hover:text-red-700">
+                        <Button variant="ghost" size="sm" onClick={() => handleRemoveAssignment({ classId: c.id })} className="text-red-600 hover:text-red-700">
+                          移除
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div>
+                <p className="text-sm font-medium mb-2">已推荐分组（可移除）</p>
+                {assignedGroups.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">当前暂无已推荐分组</p>
+                ) : (
+                  <div className="space-y-2">
+                    {assignedGroups.map((g) => (
+                      <div key={g.id} className="flex items-center justify-between border rounded-md p-2">
+                        <div className="text-sm">
+                          <span className="font-medium">{g.name}</span>
+                          <span className="text-muted-foreground ml-2">· {g.studentCount} 人</span>
+                        </div>
+                        <Button variant="ghost" size="sm" onClick={() => handleRemoveAssignment({ groupId: g.id })} className="text-red-600 hover:text-red-700">
                           移除
                         </Button>
                       </div>
@@ -1007,12 +1085,53 @@ export function CourseManagementPage({ initialCourseTab }: { initialCourseTab?: 
                   </div>
                 )}
               </div>
+              <div>
+                <p className="text-sm font-medium mb-2">或推荐给分组（可多选）</p>
+                {Object.keys(allGroupsByClass).length === 0 ? (
+                  <p className="text-sm text-muted-foreground">暂无分组，请先在班级管理页创建分组</p>
+                ) : (
+                  <div className="space-y-2">
+                    {classes.map((c) => {
+                      const classGroups = allGroupsByClass[c.id] ?? [];
+                      if (classGroups.length === 0) return null;
+                      return (
+                        <div key={c.id} className="space-y-1">
+                          <p className="text-xs text-muted-foreground font-medium">{c.name}</p>
+                          <div className="flex flex-wrap gap-2">
+                            {classGroups.map((g) => {
+                              const alreadyAssigned = assignedGroups.some((a) => a.id === g.id);
+                              return (
+                                <div
+                                  key={g.id}
+                                  className={`flex items-center gap-1 px-2 py-1 rounded border cursor-pointer text-sm ${alreadyAssigned ? 'bg-gray-50 opacity-70' : 'hover:bg-gray-50'} ${selectedGroups.includes(g.id) ? 'bg-blue-50 border-blue-300' : ''}`}
+                                  onClick={() => !alreadyAssigned && handleGroupToggle(g.id)}
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={selectedGroups.includes(g.id)}
+                                    disabled={alreadyAssigned}
+                                    onChange={() => !alreadyAssigned && handleGroupToggle(g.id)}
+                                    className="w-3 h-3"
+                                  />
+                                  <span>{g.name}</span>
+                                  <span className="text-muted-foreground">({g.studentCount})</span>
+                                  {alreadyAssigned && <Badge variant="outline" className="text-xs ml-1">已推荐</Badge>}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             </CardContent>
             <div className="border-t p-4 flex justify-end gap-3 bg-gray-50">
               <Button variant="outline" onClick={() => setCourseAssignDialogOpen(false)}>取消</Button>
               <Button
                 onClick={handleCourseConfirmAssign}
-                disabled={selectedClasses.length === 0 || assigning || (publishMode === 'schedule' && !scheduledPublishAt)}
+                disabled={(selectedClasses.length === 0 && selectedGroups.length === 0) || assigning || (publishMode === 'schedule' && !scheduledPublishAt)}
               >
                 {assigning ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <UserPlus className="w-4 h-4 mr-2" />}
                 确认分配

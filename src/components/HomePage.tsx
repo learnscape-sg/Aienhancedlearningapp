@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import type { StudentCourseItem } from '@/lib/backendApi';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Progress } from './ui/progress';
 import { Button } from './ui/button';
@@ -27,7 +28,7 @@ export function HomePage({ onStartChapter }: HomePageProps) {
   const navigate = useNavigate();
   const { progressData } = useProgressTracker();
   const { analytics } = useAnalytics();
-  const [assignedCourses, setAssignedCourses] = useState<{ courseId: string; topic?: string; teacherName?: string }[]>([]);
+  const [assignedCourses, setAssignedCourses] = useState<StudentCourseItem[]>([]);
   const [coursesLoading, setCoursesLoading] = useState(true);
 
   useEffect(() => {
@@ -122,7 +123,13 @@ export function HomePage({ onStartChapter }: HomePageProps) {
                           <div className="flex items-center justify-between">
                             <Button
                               size="sm"
-                              onClick={() => navigate(`/course/${course.courseId}`)}
+                              onClick={() => {
+                                const params = new URLSearchParams();
+                                if (course.groupId) params.set('groupId', course.groupId);
+                                if (course.classId) params.set('classId', course.classId);
+                                if (course.assignmentSource) params.set('assignmentSource', course.assignmentSource);
+                                navigate(`/course/${course.courseId}${params.toString() ? `?${params.toString()}` : ''}`);
+                              }}
                               className="bg-primary hover:bg-primary-hover text-primary-foreground"
                             >
                               <Play className="w-4 h-4 mr-1" />

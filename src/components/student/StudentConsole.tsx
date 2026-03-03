@@ -81,6 +81,10 @@ interface StudentConsoleProps {
   onApiKeyError?: () => void;
   /** Content language (from tenant/market/space + policy or URL ?lang=). Used for API calls and TTS/STT. */
   contentLanguage?: 'zh' | 'en';
+  /** Assignment source for product events (from course list navigation) */
+  assignmentSource?: 'class' | 'group';
+  groupId?: string;
+  classId?: string;
 }
 
 interface GuidedKeyIdea {
@@ -275,7 +279,15 @@ const TextEditorPreview = ({ content, onEditClick }: { content: string; onEditCl
   );
 };
 
-const StudentConsole: React.FC<StudentConsoleProps> = ({ plan, onComplete, onApiKeyError, contentLanguage = 'zh' }) => {
+const StudentConsole: React.FC<StudentConsoleProps> = ({
+  plan,
+  onComplete,
+  onApiKeyError,
+  contentLanguage = 'zh',
+  assignmentSource,
+  groupId,
+  classId,
+}) => {
   const { user } = useAuth();
   const params = useParams();
   const { t } = useTranslation('studentConsole');
@@ -312,6 +324,15 @@ const StudentConsole: React.FC<StudentConsoleProps> = ({ plan, onComplete, onApi
     return 0;
   });
 
+  const assignmentEventProps = useMemo(
+    () => ({
+      ...(assignmentSource && { assignmentSource }),
+      ...(groupId && { groupId }),
+      ...(classId && { classId }),
+    }),
+    [assignmentSource, groupId, classId]
+  );
+
   const emitEvent = useCallback(
     async (
       eventName: 'step_entered' | 'step_completed' | 'stuck_clicked' | 'course_completed',
@@ -326,12 +347,12 @@ const StudentConsole: React.FC<StudentConsoleProps> = ({ plan, onComplete, onApi
           courseId,
           taskId: plan.tasks[currentTaskIndex]?.id,
           studentId: user?.id,
-          properties: { taskIndex: currentTaskIndex, ...properties },
+          properties: { taskIndex: currentTaskIndex, ...assignmentEventProps, ...properties },
         },
         sessionData.session?.access_token
       );
     },
-    [contentLanguage, courseId, currentTaskIndex, plan.tasks, user?.id]
+    [contentLanguage, courseId, currentTaskIndex, plan.tasks, user?.id, assignmentEventProps]
   );
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -2069,6 +2090,9 @@ CRITICAL: Output language must be 简体中文 only.
         taskCount: plan.tasks.length,
         hasObjectiveMetrics: Boolean(objectiveMetrics),
         sessionDurationSec,
+        ...(assignmentSource && { assignmentSource }),
+        ...(groupId && { groupId }),
+        ...(classId && { classId }),
       },
     }).catch(() => undefined);
     
@@ -2091,6 +2115,9 @@ CRITICAL: Output language must be 简体中文 only.
           source: 'StudentConsole',
           hasData: Boolean(data),
           characteristicCount: Array.isArray(data?.characteristics) ? data.characteristics.length : 0,
+          ...(assignmentSource && { assignmentSource }),
+          ...(groupId && { groupId }),
+          ...(classId && { classId }),
         },
       }).catch(() => undefined);
       if (data && Array.isArray(data.characteristics) && data.characteristics.length > 0) {
@@ -2112,6 +2139,9 @@ CRITICAL: Output language must be 简体中文 only.
         properties: {
           source: 'StudentConsole',
           errorMessage: error instanceof Error ? error.message : String(error),
+          ...(assignmentSource && { assignmentSource }),
+          ...(groupId && { groupId }),
+          ...(classId && { classId }),
         },
       }).catch(() => undefined);
     }

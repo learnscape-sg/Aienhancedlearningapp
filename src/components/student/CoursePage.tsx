@@ -51,13 +51,21 @@ export function CoursePage() {
         setPlan(data.plan);
         const { data: sessionData } = await supabase.auth.getSession();
         const token = sessionData.session?.access_token;
+        const assignmentSource = searchParams.get('assignmentSource') as 'class' | 'group' | null;
+        const groupId = searchParams.get('groupId');
+        const classId = searchParams.get('classId');
         await trackProductEvent(
           {
             eventName: 'course_opened',
             role: 'student',
             language: contentLanguage,
             courseId,
-            properties: { source: 'CoursePage' },
+            properties: {
+              source: 'CoursePage',
+              ...(assignmentSource && { assignmentSource }),
+              ...(groupId && { groupId }),
+              ...(classId && { classId }),
+            },
           },
           token
         );
@@ -69,7 +77,7 @@ export function CoursePage() {
       }
     };
     loadCourse();
-  }, [courseId, t]);
+  }, [courseId, t, contentLanguage, searchParams]);
 
   const handleComplete = (_log: string, _finalMindMap?: string) => {
     // StudentConsole handles exit ticket internally; callback for optional analytics
@@ -137,12 +145,19 @@ export function CoursePage() {
     );
   }
 
+  const assignmentSource = searchParams.get('assignmentSource') as 'class' | 'group' | null;
+  const groupId = searchParams.get('groupId') || undefined;
+  const classId = searchParams.get('classId') || undefined;
+
   return (
     <StudentConsole
       plan={plan}
       onComplete={handleComplete}
       onApiKeyError={handleApiKeyError}
       contentLanguage={contentLanguage}
+      assignmentSource={assignmentSource ?? undefined}
+      groupId={groupId}
+      classId={classId}
     />
   );
 }

@@ -475,46 +475,154 @@ export async function addExistingClassForTeacher(classId: string): Promise<{ suc
   return apiCall(`/api/classes/${encodeURIComponent(classId)}/teachers`, { method: 'POST' });
 }
 
+// --- Class Groups ---
+export interface ClassGroup {
+  id: string;
+  classId: string;
+  name: string;
+  teacherId: string;
+  createdAt?: string;
+  studentCount?: number;
+}
+
+export async function listClassGroups(
+  classId: string,
+  teacherId?: string
+): Promise<{ groups: ClassGroup[] }> {
+  const qs = teacherId ? `?teacherId=${encodeURIComponent(teacherId)}` : '';
+  const res = await apiCall<{ groups: ClassGroup[] }>(`/api/classes/${encodeURIComponent(classId)}/groups${qs}`, {
+    method: 'GET',
+  });
+  return res;
+}
+
+export async function createClassGroup(classId: string, name: string): Promise<ClassGroup> {
+  return apiCall(`/api/classes/${encodeURIComponent(classId)}/groups`, {
+    method: 'POST',
+    body: JSON.stringify({ name }),
+  });
+}
+
+export async function updateClassGroup(classId: string, groupId: string, name: string): Promise<{ id: string; name: string }> {
+  return apiCall(`/api/classes/${encodeURIComponent(classId)}/groups/${encodeURIComponent(groupId)}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ name }),
+  });
+}
+
+export async function deleteClassGroup(classId: string, groupId: string): Promise<void> {
+  await apiCall(`/api/classes/${encodeURIComponent(classId)}/groups/${encodeURIComponent(groupId)}`, {
+    method: 'DELETE',
+  });
+}
+
+export async function addStudentsToGroup(
+  classId: string,
+  groupId: string,
+  studentIds: string[]
+): Promise<{ success: boolean; addedCount: number; studentIds: string[] }> {
+  return apiCall(`/api/classes/${encodeURIComponent(classId)}/groups/${encodeURIComponent(groupId)}/students`, {
+    method: 'POST',
+    body: JSON.stringify({ studentIds }),
+  });
+}
+
+export async function getGroupStudents(
+  classId: string,
+  groupId: string,
+  teacherId: string
+): Promise<{ students: { id: string; name?: string; email?: string }[] }> {
+  return apiCall(
+    `/api/classes/${encodeURIComponent(classId)}/groups/${encodeURIComponent(groupId)}/students?teacherId=${encodeURIComponent(teacherId)}`,
+    { method: 'GET' }
+  );
+}
+
+export async function removeStudentFromGroup(
+  classId: string,
+  groupId: string,
+  studentId: string
+): Promise<{ success: boolean }> {
+  return apiCall(
+    `/api/classes/${encodeURIComponent(classId)}/groups/${encodeURIComponent(groupId)}/students?studentId=${encodeURIComponent(studentId)}`,
+    { method: 'DELETE' }
+  );
+}
+
 // --- Assignments (Phase 2) ---
 export async function assignCourseToClasses(
   courseId: string,
   classIds: string[],
-  teacherId: string
-): Promise<{ success: boolean; assignedCount: number; skippedCount?: number }> {
-  return apiCall<{ success: boolean; assignedCount: number; skippedCount?: number }>(
+  teacherId: string,
+  groupIds?: string[]
+): Promise<{ success: boolean; assignedCount: number; assignedClassCount?: number; assignedGroupCount?: number; skippedCount?: number }> {
+  return apiCall(
     '/api/assignments',
     {
       method: 'POST',
-      body: JSON.stringify({ courseId, classIds, teacherId }),
+      body: JSON.stringify({
+        courseId,
+        classIds: classIds?.length ? classIds : undefined,
+        groupIds: groupIds?.length ? groupIds : undefined,
+        teacherId,
+      }),
     }
   );
+}
+
+export interface CourseAssignmentClass {
+  id: string;
+  name: string;
+  grade?: string;
+  teacherId: string;
+  studentCount: number;
+  assignmentType?: 'class';
+}
+
+export interface CourseAssignmentGroup {
+  id: string;
+  name: string;
+  classId: string;
+  studentCount: number;
+  assignmentType?: 'group';
 }
 
 export async function getCourseAssignments(
   courseId: string,
   teacherId: string
 ): Promise<{
-  classes: { id: string; name: string; grade?: string; teacherId: string; studentCount: number }[];
+  classes: CourseAssignmentClass[];
+  groups: CourseAssignmentGroup[];
 }> {
-  return apiCall(`/api/assignments?courseId=${encodeURIComponent(courseId)}&teacherId=${encodeURIComponent(teacherId)}`, {
-    method: 'GET',
-  });
+  return apiCall(
+    `/api/assignments?courseId=${encodeURIComponent(courseId)}&teacherId=${encodeURIComponent(teacherId)}`,
+    { method: 'GET' }
+  );
 }
 
 export async function removeCourseAssignment(
   courseId: string,
-  classId: string,
-  teacherId: string
+  teacherId: string,
+  options: { classId?: string; groupId?: string }
 ): Promise<{ success: boolean }> {
-  return apiCall(
-    `/api/assignments?courseId=${encodeURIComponent(courseId)}&classId=${encodeURIComponent(classId)}&teacherId=${encodeURIComponent(teacherId)}`,
-    { method: 'DELETE' }
-  );
+  const params = new URLSearchParams({ courseId, teacherId });
+  if (options.classId) params.set('classId', options.classId);
+  if (options.groupId) params.set('groupId', options.groupId);
+  return apiCall(`/api/assignments?${params.toString()}`, { method: 'DELETE' });
+}
+
+export interface StudentCourseItem {
+  courseId: string;
+  topic?: string;
+  teacherName?: string;
+  assignmentSource?: 'class' | 'group';
+  classId?: string;
+  groupId?: string;
 }
 
 export async function getStudentCourses(studentId: string): Promise<{
   courseIds: string[];
-  courses: { courseId: string; topic?: string; teacherName?: string }[];
+  courses: StudentCourseItem[];
 }> {
   return apiCall<{ courseIds: string[]; courses: { courseId: string; topic?: string; teacherName?: string }[] }>(
     `/api/assignments?studentId=${encodeURIComponent(studentId)}`,
