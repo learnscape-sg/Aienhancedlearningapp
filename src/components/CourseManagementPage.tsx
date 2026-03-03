@@ -14,6 +14,7 @@ import {
   ExternalLink,
   Share2,
   Link2,
+  Pencil,
 } from 'lucide-react';
 import { useAuth } from './AuthContext';
 import { usePublishedCourses } from './PublishedCoursesContext';
@@ -28,19 +29,26 @@ import {
   restoreTask,
   listTeacherCoursesWithStats,
   updateCourseVisibility,
+  updateCoursePlan,
+  updateTask,
+  getTask,
+  getCourse,
   listSharedCourses,
   deleteCourse,
   restoreCourse,
+  listClassGroups,
   getCourseAssignments,
   removeCourseAssignment,
   listCourseShares,
   createCourseShare,
   deleteCourseShare,
   searchTeachers,
-  listClassGroups,
+  generateTaskAsset,
   type ClassItem,
   type TeacherSearchItem,
 } from '@/lib/backendApi';
+import type { SystemTask, SystemTaskPlan } from '@/types/backend';
+import { TaskPreviewEdit } from './TaskPreviewEdit';
 
 const TASK_TYPE_LABELS: Record<string, string> = {
   mastery: '掌握型任务',
@@ -117,6 +125,17 @@ export function CourseManagementPage({ initialCourseTab }: { initialCourseTab?: 
   const shareTeacherSearchRef = useRef<HTMLDivElement>(null);
   const [sharePermission, setSharePermission] = useState<'view' | 'edit'>('view');
   const [shareItems, setShareItems] = useState<CourseShareItem[]>([]);
+
+  // --- Edit task/course state ---
+  const [editMode, setEditMode] = useState<'task' | 'course' | null>(null);
+  const [editTaskId, setEditTaskId] = useState<string | null>(null);
+  const [editCourseId, setEditCourseId] = useState<string | null>(null);
+  const [editPlan, setEditPlan] = useState<SystemTaskPlan | null>(null);
+  const [editPreviewTaskIndex, setEditPreviewTaskIndex] = useState(0);
+  const [editRegeneratingTaskId, setEditRegeneratingTaskId] = useState<string | null>(null);
+  const [editLoading, setEditLoading] = useState(false);
+  const [editSaving, setEditSaving] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
 
   // --- Shared dialog state ---
   const [selectedClasses, setSelectedClasses] = useState<string[]>([]);
@@ -594,6 +613,121 @@ export function CourseManagementPage({ initialCourseTab }: { initialCourseTab?: 
     }
   };
 
+  const handleTaskEdit = async (taskId: string) => {
+    if (!user?.id) return;
+    setEditMode('task');
+    setEditTaskId(taskId);
+    setEditPlan(null);
+    setEditError(null);
+    setEditLoading(true);
+    try {
+      const { task } = await getTask(taskId);
+      setEditPlan({ tasks: [task] });
+      setEditPreviewTaskIndex(0);
+    } catch (err) {
+      setEditError(err instanceof Error ? err.message : '加载任务失败');
+    } finally {
+      setEditLoading(false);
+    }
+  };
+
+  const handleCourseEdit = async (courseId: string) => {
+    if (!user?.id) return;
+    setEditMode('course');
+    setEditCourseId(courseId);
+    setEditTaskId(null);
+    setEditPlan(null);
+    setEditError(null);
+    setEditLoading(true);
+    try {
+      const { plan } = await getCourse(courseId);
+      setEditPlan(plan);
+      setEditPreviewTaskIndex(0);
+    } catch (err) {
+      setEditError(err instanceof Error ? err.message : '加载课程失败');
+    } finally {
+      setEditLoading(false);
+    }
+  };
+
+  const handleCloseEdit = () => {
+    setEditMode(null);
+    setEditTaskId(null);
+    setEditCourseId(null);
+    setEditPlan(null);
+    setEditPreviewTaskIndex(0);
+    setEditRegeneratingTaskId(null);
+    setEditError(null);
+    refreshTasks();
+    refreshCourses();
+  };
+
+  const handleEditUpdateTask = (taskIndex: number, updates: Partial<SystemTask>) => {
+    if (!editPlan) return;
+    const newTasks = [...editPlan.tasks];
+    if (!newTasks[taskIndex]) return;
+    newTasks[taskIndex] = { ...newTasks[taskIndex], ...updates };
+    setEditPlan({ ...editPlan, tasks: newTasks });
+  };
+
+  const handleEditRegenerateAsset = async (taskIndex: number) => {
+    if (!editPlan || !user?.id) return;
+    const task = editPlan.tasks[taskIndex];
+    if (!task || (task.assetType === 'editable_text') || (task.assetType === 'math_editable') || !task.assetPrompt?.trim()) return;
+    setEditRegeneratingTaskId(task.id);
+    try {
+      const assetResult = await generateTaskAsset(
+        task.assetType,
+        task.assetPrompt,
+        editCourseId ?? undefined,
+        task.id,
+        'zh'
+      );
+      if (assetResult != null) {
+        handleEditUpdateTask(taskIndex, {
+          generatedAssetContent:
+            typeof assetResult === 'object' ? JSON.stringify(assetResult) : String(assetResult),
+        });
+      }
+    } catch (e) {
+      console.error('Regenerate asset failed:', e);
+    } finally {
+      setEditRegeneratingTaskId(null);
+    }
+  };
+
+  const handleEditNavigate = (index: number) => {
+    if (!editPlan) return;
+    const clamped = Math.max(0, Math.min(index, editPlan.tasks.length - 1));
+    setEditPreviewTaskIndex(clamped);
+  };
+
+  const handleEditDeleteTask = () => {
+    if (!editPlan || editPlan.tasks.length <= 1) return;
+    const nextTasks = editPlan.tasks.filter((_, i) => i !== editPreviewTaskIndex);
+    setEditPlan({ ...editPlan, tasks: nextTasks });
+    setEditPreviewTaskIndex((prev) => Math.min(prev, nextTasks.length - 1));
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editPlan || !user?.id || editPlan.tasks.length === 0) return;
+    setEditSaving(true);
+    setEditError(null);
+    try {
+      if (editMode === 'task' && editTaskId) {
+        await updateTask(editTaskId, user.id, editPlan.tasks[0]);
+        handleCloseEdit();
+      } else if (editMode === 'course' && editCourseId) {
+        await updateCoursePlan(editCourseId, user.id, editPlan);
+        handleCloseEdit();
+      }
+    } catch (err) {
+      setEditError(err instanceof Error ? err.message : '保存失败');
+    } finally {
+      setEditSaving(false);
+    }
+  };
+
   const renderTaskRow = (task: TaskItem, opts: { canManage: boolean; selectable: boolean; assignable: boolean }) => {
     const selected = selectedTaskIds.includes(task.taskId);
     return (
@@ -629,6 +763,12 @@ export function CourseManagementPage({ initialCourseTab }: { initialCourseTab?: 
             <ExternalLink className="w-4 h-4 mr-1" />
             预览
           </Button>
+          {opts.canManage && myTaskView === 'active' && (
+            <Button variant="outline" size="sm" onClick={() => handleTaskEdit(task.taskId)}>
+              <Pencil className="w-4 h-4 mr-1" />
+              编辑
+            </Button>
+          )}
           {opts.assignable ? (
             <Button variant="ghost" size="sm" onClick={() => openTaskAssignDialog([task.taskId])}>
               <UserPlus className="w-4 h-4 mr-1" />
@@ -707,6 +847,12 @@ export function CourseManagementPage({ initialCourseTab }: { initialCourseTab?: 
           <ExternalLink className="w-4 h-4 mr-1" />
           预览
         </Button>
+        {canManage && courseView === 'active' && (
+          <Button variant="outline" size="sm" onClick={() => handleCourseEdit(course.id)}>
+            <Pencil className="w-4 h-4 mr-1" />
+            编辑
+          </Button>
+        )}
         {courseView === 'shared' ? (
           <Button variant="ghost" size="sm" onClick={() => openCourseAssignDialog(course)}>
             <UserPlus className="w-4 h-4 mr-1" />
@@ -1243,6 +1389,62 @@ export function CourseManagementPage({ initialCourseTab }: { initialCourseTab?: 
                 )}
               </div>
             </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* 任务/课程编辑层 */}
+      {editMode && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+          <Card className="w-full max-w-3xl max-h-[90vh] flex flex-col overflow-hidden">
+            <CardHeader className="border-b shrink-0">
+              <div className="flex items-center justify-between">
+                <CardTitle>
+                  {editMode === 'task' ? '编辑任务' : '编辑课程'}
+                </CardTitle>
+                <Button variant="ghost" size="sm" onClick={handleCloseEdit} className="h-8 w-8 p-0">
+                  <X className="w-4 h-4" />
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent className="p-6 overflow-y-auto flex-1 min-h-0">
+              {editLoading ? (
+                <div className="flex flex-col items-center justify-center py-16 gap-4">
+                  <Loader2 className="w-10 h-10 animate-spin text-muted-foreground" />
+                  <p className="text-sm text-muted-foreground">加载中…</p>
+                </div>
+              ) : editError ? (
+                <div className="py-8 text-center">
+                  <p className="text-red-600 mb-4">{editError}</p>
+                  <Button variant="outline" onClick={handleCloseEdit}>关闭</Button>
+                </div>
+              ) : editPlan && editPlan.tasks.length > 0 ? (
+                <TaskPreviewEdit
+                  key={editPlan.tasks[editPreviewTaskIndex]?.id}
+                  task={editPlan.tasks[editPreviewTaskIndex]}
+                  taskIndex={editPreviewTaskIndex}
+                  totalTasks={editPlan.tasks.length}
+                  onUpdate={(updates) => handleEditUpdateTask(editPreviewTaskIndex, updates)}
+                  onNavigate={editPlan.tasks.length > 1 ? handleEditNavigate : undefined}
+                  onDelete={editMode === 'course' && editPlan.tasks.length > 1 ? handleEditDeleteTask : undefined}
+                  mode="edit"
+                  regeneratingTaskId={editRegeneratingTaskId}
+                  onRegenerate={() => handleEditRegenerateAsset(editPreviewTaskIndex)}
+                  language="zh"
+                />
+              ) : null}
+            </CardContent>
+            {editPlan && editPlan.tasks.length > 0 && !editLoading && !editError && (
+              <div className="border-t p-4 flex justify-end gap-3 bg-gray-50 shrink-0">
+                <Button variant="outline" onClick={handleCloseEdit}>
+                  取消
+                </Button>
+                <Button onClick={handleSaveEdit} disabled={editSaving}>
+                  {editSaving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+                  保存
+                </Button>
+              </div>
+            )}
           </Card>
         </div>
       )}

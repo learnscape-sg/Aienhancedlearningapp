@@ -362,6 +362,18 @@ export async function restoreTask(taskId: string, teacherId: string): Promise<{ 
   });
 }
 
+export async function updateTask(
+  taskId: string,
+  teacherId: string,
+  task: SystemTask
+): Promise<{ success: boolean }> {
+  const res = await apiCall<{ data?: { success?: boolean } }>('/api/tasks', {
+    method: 'PATCH',
+    body: JSON.stringify({ id: taskId, teacherId, action: 'update', task }),
+  });
+  return { success: res?.data?.success ?? true };
+}
+
 export async function listPublicTasks(params?: {
   q?: string;
   subject?: string;
@@ -632,10 +644,11 @@ export async function getStudentCourses(studentId: string): Promise<{
 
 export async function getCourse(
   courseId: string
-): Promise<{ plan: SystemTaskPlan }> {
-  return apiCall<{ plan: SystemTaskPlan }>(`/api/courses?id=${encodeURIComponent(courseId)}`, {
-    method: 'GET',
-  });
+): Promise<{ plan: SystemTaskPlan; sourceTaskIds?: string | null }> {
+  return apiCall<{ plan: SystemTaskPlan; sourceTaskIds?: string | null }>(
+    `/api/courses?id=${encodeURIComponent(courseId)}`,
+    { method: 'GET' }
+  );
 }
 
 export interface TeacherStats {
@@ -747,6 +760,18 @@ export async function updateCourseVisibility(
     method: 'PATCH',
     body: JSON.stringify({ id: courseId, teacherId, action, ...(scheduledPublishAt ? { scheduledPublishAt } : {}) }),
   });
+}
+
+export async function updateCoursePlan(
+  courseId: string,
+  teacherId: string,
+  plan: SystemTaskPlan
+): Promise<{ success: boolean }> {
+  const res = await apiCall<{ success?: boolean }>('/api/courses', {
+    method: 'PATCH',
+    body: JSON.stringify({ id: courseId, teacherId, action: 'update_plan', plan }),
+  });
+  return { success: res?.success ?? true };
 }
 
 export async function restoreCourse(courseId: string, teacherId: string): Promise<{ success: boolean }> {
