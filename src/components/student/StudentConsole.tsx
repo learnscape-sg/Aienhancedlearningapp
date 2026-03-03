@@ -80,6 +80,8 @@ interface StudentConsoleProps {
   plan: SystemTaskPlan;
   onComplete: (log: string, finalMindMap?: string) => void;
   onApiKeyError?: () => void;
+  /** 返回上一页（如不传则不显示返回按钮） */
+  onBack?: () => void;
   /** Content language (from tenant/market/space + policy or URL ?lang=). Used for API calls and TTS/STT. */
   contentLanguage?: 'zh' | 'en';
   /** Assignment source for product events (from course list navigation) */
@@ -286,6 +288,7 @@ const StudentConsole: React.FC<StudentConsoleProps> = ({
   plan,
   onComplete,
   onApiKeyError,
+  onBack,
   contentLanguage = 'zh',
   assignmentSource,
   groupId,
@@ -3441,6 +3444,17 @@ CRITICAL: Output language must be 简体中文 only.
         {/* ENHANCED TASK HEADER - Single Row */}
         <div className="bg-white border-b border-slate-200 p-3 shrink-0 z-20 shadow-sm">
             <div className="flex justify-between items-center gap-4 overflow-hidden">
+                {onBack && (
+                  <button
+                    type="button"
+                    onClick={onBack}
+                    className="shrink-0 flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-800 transition-colors border border-transparent hover:border-slate-200"
+                    aria-label={t('back')}
+                  >
+                    <ArrowLeft size={16} />
+                    <span className="hidden sm:inline">{t('back')}</span>
+                  </button>
+                )}
                 <div className="flex items-center gap-3 overflow-hidden min-w-0 flex-1">
                     {/* Title */}
                     <div className="flex flex-col shrink-0">

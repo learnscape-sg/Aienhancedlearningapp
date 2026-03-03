@@ -154,6 +154,7 @@ export function CoursePage() {
       plan={plan}
       onComplete={handleComplete}
       onApiKeyError={handleApiKeyError}
+      onBack={() => navigate('/')}
       contentLanguage={contentLanguage}
       assignmentSource={assignmentSource ?? undefined}
       groupId={groupId}
