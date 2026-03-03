@@ -90,6 +90,7 @@ interface StudentConsoleProps {
 interface GuidedKeyIdea {
   text: string;
   blanks?: string[];
+  imageUrl?: string;
 }
 
 interface GuidedQuestion {
@@ -97,6 +98,7 @@ interface GuidedQuestion {
   options?: string[];
   correctAnswer?: string;
   questionType?: 'multiple_choice' | 'short_answer' | 'true_false';
+  imageUrl?: string;
 }
 
 interface GuidedPayload {
@@ -2736,6 +2738,13 @@ CRITICAL: Output language must be 简体中文 only.
                           {idx + 1}
                         </div>
                         <div className="flex-1 rounded-lg border border-slate-200 p-4 bg-white shadow-sm">
+                          {idea.imageUrl && (
+                            <img
+                              src={idea.imageUrl}
+                              alt=""
+                              className="mb-3 max-h-48 w-auto max-w-full rounded border object-contain bg-slate-50"
+                            />
+                          )}
                           {(() => {
                             const parts = idea.text.split('__KEY__');
                             const blankCount = Math.max(0, parts.length - 1);
@@ -2813,6 +2822,13 @@ CRITICAL: Output language must be 简体中文 only.
                     return (
                       <div className="space-y-4">
                         <div className="rounded-lg border border-slate-200 p-4 bg-slate-50/60">
+                          {q.imageUrl && (
+                            <img
+                              src={q.imageUrl}
+                              alt=""
+                              className="mb-3 max-h-48 w-auto max-w-full rounded border object-contain bg-white"
+                            />
+                          )}
                           <div className="text-sm font-semibold text-slate-800 mb-3 flex gap-1">
                             <span>{idx + 1}.</span>
                             <MathTextPreview text={parsed.stem} className="text-sm font-semibold text-slate-800 [&_p]:mb-0" />
@@ -2962,6 +2978,13 @@ CRITICAL: Output language must be 简体中文 only.
                   {(guidedExitTickets.length > 0 ? guidedExitTickets : [{ question: '请用1-2句话总结本节课你最重要的收获。' }]).map((ticket, idx) => (
                     <div key={`exit-ticket-${idx}`} className="mb-4 last:mb-0">
                       <p className="text-xs text-slate-500 mb-1">题目 {idx + 1}</p>
+                      {ticket.imageUrl && (
+                        <img
+                          src={ticket.imageUrl}
+                          alt=""
+                          className="mb-3 max-h-48 w-auto max-w-full rounded border object-contain bg-slate-50"
+                        />
+                      )}
                       <MathTextPreview text={ticket.question} className="text-sm text-slate-800 mb-2 [&_p]:mb-0" />
                       <textarea
                         value={exitTicketAnswers[idx] ?? (idx === 0 ? exitTicketAnswer : '')}

@@ -111,12 +111,16 @@ export interface GeneratedQuestion {
   explanation?: string;
   /** multiple_choice | short_answer | true_false */
   questionType?: 'multiple_choice' | 'short_answer' | 'true_false';
+  /** Optional image URL (e.g. for 语文/历史/地理 - maps, charts, passages) */
+  imageUrl?: string;
 }
 
 /** Key idea for guided notes (fill-in-the-blank). */
 export interface KeyIdea {
   text: string;
   blanks: string[];
+  /** Optional image URL to enrich the key idea */
+  imageUrl?: string;
 }
 
 // --- StudentConsole: Chat, Exit Ticket, Visualization ---

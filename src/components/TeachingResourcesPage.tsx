@@ -215,12 +215,18 @@ function keyIdeasToText(ideas: KeyIdea[]): string {
   return ideas.map((idea) => keyIdeaToRaw(idea)).join('\n');
 }
 
-function textToKeyIdeas(text: string): KeyIdea[] {
-  return text
+/** Convert text to KeyIdeas, optionally preserving imageUrls by index from previous ideas */
+function textToKeyIdeas(text: string, preserveFrom?: KeyIdea[]): KeyIdea[] {
+  const parsed = text
     .split('\n')
     .map((line) => line.trim())
     .filter(Boolean)
     .map((line) => parseKeyPointToKeyIdea(line));
+  if (!preserveFrom?.length) return parsed;
+  return parsed.map((idea, idx) => ({
+    ...idea,
+    imageUrl: preserveFrom[idx]?.imageUrl ?? idea.imageUrl,
+  }));
 }
 
 /** Parse task-design practice/exit_ticket item (question/answer or q/a) into GeneratedQuestion */
@@ -245,6 +251,7 @@ function parseTaskDesignQuestion(item: Record<string, unknown>): GeneratedQuesti
     }
   }
 
+  const imageUrl = (item?.imageUrl ?? item?.image_url) as string | undefined;
   return {
     question: question.trim(),
     options,
@@ -252,6 +259,7 @@ function parseTaskDesignQuestion(item: Record<string, unknown>): GeneratedQuesti
     correctAnswer: answer != null ? String(answer).trim() : undefined,
     explanation: rubric != null ? String(rubric).trim() : undefined,
     questionType,
+    imageUrl: imageUrl?.trim() || undefined,
   };
 }
 
@@ -391,9 +399,18 @@ export function TeachingResourcesPage() {
   const [customTextInstruction, setCustomTextInstruction] = useState(DEFAULT_TEXT_INSTRUCTION);
   const [loading, setLoading] = useState(false);
   const [uploadingResource, setUploadingResource] = useState(false);
+  const [uploadingKeyIdeaIndex, setUploadingKeyIdeaIndex] = useState<number | null>(null);
+  const [uploadingPracticeImageIndex, setUploadingPracticeImageIndex] = useState<number | null>(null);
+  const [uploadingExitTicketImageIndex, setUploadingExitTicketImageIndex] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [objectiveLoading, setObjectiveLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const keyIdeaImageInputRef = useRef<HTMLInputElement>(null);
+  const keyIdeaImagePendingIndexRef = useRef<number>(0);
+  const practiceImageInputRef = useRef<HTMLInputElement>(null);
+  const practiceImagePendingIndexRef = useRef<number>(0);
+  const exitTicketImageInputRef = useRef<HTMLInputElement>(null);
+  const exitTicketImagePendingIndexRef = useRef<number>(0);
   const generateTaskDesignPromiseRef = useRef<Promise<{ objective: string; json?: Record<string, unknown>; markdown?: string }> | null>(null);
   const taskDesignJsonRef = useRef<Record<string, unknown> | null>(null);
   const taskDesignMarkdownRef = useRef<string | null>(null);
@@ -627,6 +644,72 @@ export function TeachingResourcesPage() {
       setError(e instanceof Error ? e.message : '上传失败，请改用粘贴视频链接');
     } finally {
       setUploadingResource(false);
+    }
+  };
+
+  const handleKeyIdeaImageUpload = async (idx: number, file: File) => {
+    if (!/^image\//i.test(file.type)) {
+      setError('请上传图片文件（PNG、JPG、GIF、WebP）');
+      return;
+    }
+    setUploadingKeyIdeaIndex(idx);
+    setError(null);
+    try {
+      const uploaded = await uploadMaterialResource(file);
+      setKeyIdeas((prev) => {
+        const next = [...prev];
+        if (!next[idx]) return prev;
+        next[idx] = { ...next[idx], imageUrl: uploaded.url };
+        return next;
+      });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '图片上传失败');
+    } finally {
+      setUploadingKeyIdeaIndex(null);
+    }
+  };
+
+  const handlePracticeImageUpload = async (idx: number, file: File) => {
+    if (!/^image\//i.test(file.type)) {
+      setError('请上传图片文件（PNG、JPG、GIF、WebP）');
+      return;
+    }
+    setUploadingPracticeImageIndex(idx);
+    setError(null);
+    try {
+      const uploaded = await uploadMaterialResource(file);
+      setPracticeQuestions((prev) => {
+        const next = [...prev];
+        if (!next[idx]) return prev;
+        next[idx] = { ...next[idx], imageUrl: uploaded.url };
+        return next;
+      });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '图片上传失败');
+    } finally {
+      setUploadingPracticeImageIndex(null);
+    }
+  };
+
+  const handleExitTicketImageUpload = async (idx: number, file: File) => {
+    if (!/^image\//i.test(file.type)) {
+      setError('请上传图片文件（PNG、JPG、GIF、WebP）');
+      return;
+    }
+    setUploadingExitTicketImageIndex(idx);
+    setError(null);
+    try {
+      const uploaded = await uploadMaterialResource(file);
+      setExitTicketQuestions((prev) => {
+        const next = [...prev];
+        if (!next[idx]) return prev;
+        next[idx] = { ...next[idx], imageUrl: uploaded.url };
+        return next;
+      });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '图片上传失败');
+    } finally {
+      setUploadingExitTicketImageIndex(null);
     }
   };
 
@@ -1479,7 +1562,7 @@ export function TeachingResourcesPage() {
               <CardContent className="p-6">
                 <h2 className="text-lg font-semibold mb-2">关键要点</h2>
                 <p className="text-sm text-muted-foreground mb-4">
-                  默认展示渲染结果，点击下方区域进入编辑模式；编辑时每行一个要点，方便增减条目。
+                  默认展示渲染结果，点击下方区域进入编辑模式；编辑时每行一个要点，方便增减条目。可为每条添加配图（如示意图、地图、课文插图等）。
                 </p>
                 {!restReady ? (
                   <div className="flex items-center gap-2 text-sm text-muted-foreground py-8">
@@ -1494,7 +1577,7 @@ export function TeachingResourcesPage() {
                       onChange={(e) => {
                         const nextText = e.target.value;
                         setKeyIdeasText(nextText);
-                        setKeyIdeas(textToKeyIdeas(nextText));
+                        setKeyIdeas(textToKeyIdeas(nextText, keyIdeas));
                       }}
                       autoFocus
                       placeholder={`每行一个关键要点，可自由增减条目。
@@ -1512,31 +1595,85 @@ export function TeachingResourcesPage() {
                     </Button>
                   </div>
                 ) : (
-                  <div
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => setKeyIdeasEditing(true)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' || e.key === ' ') {
-                        e.preventDefault();
-                        setKeyIdeasEditing(true);
-                      }
-                    }}
-                    className="min-h-[220px] mb-4 rounded-md border px-3 py-3 cursor-text hover:border-slate-300 hover:bg-slate-50/60 transition-colors"
-                  >
-                    {keyIdeas.length > 0 ? (
-                      <div className="space-y-3 text-sm">
-                        {keyIdeas.map((idea, idx) => (
-                          <div key={idx} className="flex gap-2">
-                            <span className="shrink-0 text-muted-foreground pt-0.5">{idx + 1}.</span>
-                            <MathTextPreview text={keyIdeaToRaw(idea)} className="flex-1 [&_p]:mb-0" />
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <p className="text-sm text-muted-foreground">暂无关键要点，点击此处开始编辑。</p>
-                    )}
-                  </div>
+                  <>
+                    <input
+                      ref={keyIdeaImageInputRef}
+                      type="file"
+                      accept="image/png,image/jpeg,image/jpg,image/gif,image/webp"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          const idx = keyIdeaImagePendingIndexRef.current;
+                          handleKeyIdeaImageUpload(idx, file);
+                        }
+                        e.target.value = '';
+                      }}
+                    />
+                    <div
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => setKeyIdeasEditing(true)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          setKeyIdeasEditing(true);
+                        }
+                      }}
+                      className="min-h-[220px] mb-4 rounded-md border px-3 py-3 cursor-text hover:border-slate-300 hover:bg-slate-50/60 transition-colors"
+                    >
+                      {keyIdeas.length > 0 ? (
+                        <div className="space-y-4 text-sm">
+                          {keyIdeas.map((idea, idx) => (
+                            <div key={idx} className="flex gap-3 items-start">
+                              <span className="shrink-0 text-muted-foreground pt-0.5">{idx + 1}.</span>
+                              <div className="flex-1 min-w-0">
+                                <MathTextPreview text={keyIdeaToRaw(idea)} className="[&_p]:mb-0" />
+                                <div className="mt-2 flex items-center gap-2">
+                                  {idea.imageUrl ? (
+                                    <>
+                                      <img
+                                        src={idea.imageUrl}
+                                        alt=""
+                                        className="h-20 w-auto max-w-[200px] rounded border object-contain bg-gray-50"
+                                      />
+                                      <Button
+                                        type="button"
+                                        size="sm"
+                                        variant="ghost"
+                                        className="h-8 text-xs"
+                                        onClick={(ev) => { ev.stopPropagation(); keyIdeaImagePendingIndexRef.current = idx; keyIdeaImageInputRef.current?.click(); }}
+                                      >
+                                        更换
+                                      </Button>
+                                    </>
+                                  ) : (
+                                    <Button
+                                      type="button"
+                                      size="sm"
+                                      variant="outline"
+                                      className="h-8 text-xs"
+                                      disabled={uploadingKeyIdeaIndex === idx}
+                                      onClick={(ev) => {
+                                        ev.stopPropagation();
+                                        keyIdeaImagePendingIndexRef.current = idx;
+                                        keyIdeaImageInputRef.current?.click();
+                                      }}
+                                    >
+                                      {uploadingKeyIdeaIndex === idx ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4 mr-1" />}
+                                      添加图片
+                                    </Button>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-sm text-muted-foreground">暂无关键要点，点击此处开始编辑。</p>
+                      )}
+                    </div>
+                  </>
                 )}
                 <div className="flex justify-end gap-2 mt-4">
                   <Button variant="outline" onClick={() => setStep(2)}>
@@ -1591,8 +1728,19 @@ export function TeachingResourcesPage() {
               <CardContent className="p-6">
                 <h2 className="text-xl font-semibold mb-1">练习题目</h2>
                 <p className="text-sm text-muted-foreground mb-6">
-                  点击题目进入编辑模式，或点击「显示答案」查看参考答案。
+                  点击题目进入编辑模式，或点击「显示答案」查看参考答案。可为每道题添加配图（如地图、图表、课文插图等）。
                 </p>
+                <input
+                  ref={practiceImageInputRef}
+                  type="file"
+                  accept="image/png,image/jpeg,image/jpg,image/gif,image/webp"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) handlePracticeImageUpload(practiceImagePendingIndexRef.current, file);
+                    e.target.value = '';
+                  }}
+                />
             {practiceQuestions.length > 0 && (
               <div className="space-y-5 mb-6">
                 {practiceQuestions.map((q, idx) => (
@@ -1622,6 +1770,39 @@ export function TeachingResourcesPage() {
                           placeholder="题目内容，公式用 $...$ 表示"
                           autoFocus
                         />
+                        <div className="flex items-center gap-2">
+                          {q.imageUrl ? (
+                            <>
+                              <img
+                                src={q.imageUrl}
+                                alt=""
+                                className="h-24 w-auto max-w-[240px] rounded border object-contain bg-gray-50"
+                              />
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => { practiceImagePendingIndexRef.current = idx; practiceImageInputRef.current?.click(); }}
+                              >
+                                更换图片
+                              </Button>
+                            </>
+                          ) : (
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              disabled={uploadingPracticeImageIndex === idx}
+                              onClick={() => {
+                                practiceImagePendingIndexRef.current = idx;
+                                practiceImageInputRef.current?.click();
+                              }}
+                            >
+                              {uploadingPracticeImageIndex === idx ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4 mr-1" />}
+                              添加题目配图
+                            </Button>
+                          )}
+                        </div>
                         {q.options?.length ? (
                           <div className="space-y-2" role="radiogroup" aria-label={`第 ${idx + 1} 题选项`}>
                             {q.options.map((opt, j) => {
@@ -1736,10 +1917,44 @@ export function TeachingResourcesPage() {
                           tabIndex={0}
                           onClick={() => setEditingPracticeIndex(idx)}
                           onKeyDown={(e) => e.key === 'Enter' && setEditingPracticeIndex(idx)}
-                          className="min-h-[44px] px-3 py-2 rounded-md border border-transparent hover:border-slate-200 hover:bg-slate-50/80 cursor-text transition-colors text-left mb-4"
+                          className="min-h-[44px] px-3 py-2 rounded-md border border-transparent hover:border-slate-200 hover:bg-slate-50/80 cursor-text transition-colors text-left mb-3"
                         >
                           <MathTextPreview text={q.question} className="font-medium text-gray-900 [&_p]:mb-0" />
                         </div>
+                        {q.imageUrl ? (
+                          <div className="mb-4 flex items-center gap-2">
+                            <img
+                              src={q.imageUrl}
+                              alt=""
+                              className="max-h-48 w-auto max-w-full rounded border object-contain bg-gray-50"
+                            />
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="ghost"
+                              className="shrink-0"
+                              onClick={(e) => { e.stopPropagation(); practiceImagePendingIndexRef.current = idx; practiceImageInputRef.current?.click(); }}
+                            >
+                              更换
+                            </Button>
+                          </div>
+                        ) : (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="mb-4"
+                            disabled={uploadingPracticeImageIndex === idx}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              practiceImagePendingIndexRef.current = idx;
+                              practiceImageInputRef.current?.click();
+                            }}
+                          >
+                            {uploadingPracticeImageIndex === idx ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4 mr-1" />}
+                            添加题目配图
+                          </Button>
+                        )}
                         {(q.questionType === 'true_false' || (!q.options?.length && /^(true|false)$/i.test((q.correctAnswer || '').trim()))) ? (
                           <div className="flex gap-3 mb-4" role="radiogroup" aria-label="对或错">
                             {[
@@ -1887,8 +2102,19 @@ export function TeachingResourcesPage() {
               <CardContent className="p-6">
                 <h2 className="text-lg font-semibold mb-2">离场券</h2>
                 <p className="text-sm text-muted-foreground mb-4">
-                  课程结束时用题目检验学习效果。点击题目进入编辑模式。
+                  课程结束时用题目检验学习效果。点击题目进入编辑模式。可为每道题添加配图（如地图、图表等）。
                 </p>
+                <input
+                  ref={exitTicketImageInputRef}
+                  type="file"
+                  accept="image/png,image/jpeg,image/jpg,image/gif,image/webp"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) handleExitTicketImageUpload(exitTicketImagePendingIndexRef.current, file);
+                    e.target.value = '';
+                  }}
+                />
                 {exitTicketQuestions.length > 0 && (
                   <div className="space-y-4 mb-4">
                     {exitTicketQuestions.map((q, idx) => (
@@ -1907,6 +2133,39 @@ export function TeachingResourcesPage() {
                               placeholder="题目内容，公式用 $...$ 表示"
                               autoFocus
                             />
+                            <div className="flex items-center gap-2">
+                              {q.imageUrl ? (
+                                <>
+                                  <img
+                                    src={q.imageUrl}
+                                    alt=""
+                                    className="h-24 w-auto max-w-[240px] rounded border object-contain bg-gray-50"
+                                  />
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="ghost"
+                                    onClick={() => { exitTicketImagePendingIndexRef.current = idx; exitTicketImageInputRef.current?.click(); }}
+                                  >
+                                    更换图片
+                                  </Button>
+                                </>
+                              ) : (
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  disabled={uploadingExitTicketImageIndex === idx}
+                                  onClick={() => {
+                                    exitTicketImagePendingIndexRef.current = idx;
+                                    exitTicketImageInputRef.current?.click();
+                                  }}
+                                >
+                                  {uploadingExitTicketImageIndex === idx ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4 mr-1" />}
+                                  添加题目配图
+                                </Button>
+                              )}
+                            </div>
                             <div>
                               <label className="text-sm font-medium text-gray-700">参考答案</label>
                               <Textarea
@@ -1935,6 +2194,40 @@ export function TeachingResourcesPage() {
                             >
                               <MathTextPreview text={q.question} className="font-medium text-gray-900 [&_p]:mb-0" />
                             </div>
+                            {q.imageUrl ? (
+                              <div className="mb-3 flex items-center gap-2">
+                                <img
+                                  src={q.imageUrl}
+                                  alt=""
+                                  className="max-h-48 w-auto max-w-full rounded border object-contain bg-gray-50"
+                                />
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="ghost"
+                                  className="shrink-0"
+                                  onClick={(e) => { e.stopPropagation(); exitTicketImagePendingIndexRef.current = idx; exitTicketImageInputRef.current?.click(); }}
+                                >
+                                  更换
+                                </Button>
+                              </div>
+                            ) : (
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                className="mb-3"
+                                disabled={uploadingExitTicketImageIndex === idx}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  exitTicketImagePendingIndexRef.current = idx;
+                                  exitTicketImageInputRef.current?.click();
+                                }}
+                              >
+                                {uploadingExitTicketImageIndex === idx ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4 mr-1" />}
+                                添加题目配图
+                              </Button>
+                            )}
                             <Button
                               variant="ghost"
                               size="sm"
