@@ -22,12 +22,16 @@ export function shouldUseTenantCompat(tenantId: string | null): boolean {
 /**
  * Apply tablet compat for bamboo tenant when user is unauthenticated or student.
  * Teachers/parents on bamboo get normal (non-compat) UI after login.
+ *
+ * Temporarily disabled (Option A): return false to test normal UI on Bamboo tablets.
+ * If test results are good, can keep this or remove COMPAT_TENANT_IDS for bamboo.
  */
 export function shouldUseStudentTabletCompat(
   tenantId: string | null,
   role?: string | null
 ): boolean {
-  if (!tenantId) return false;
-  if (role != null && role !== 'student') return false; // teacher/parent: no compat
-  return COMPAT_TENANT_IDS.includes(tenantId as (typeof COMPAT_TENANT_IDS)[number]);
+  return false; // Option A: disable compat, test normal state on bamboo tablets
+  // if (!tenantId) return false;
+  // if (role != null && role !== 'student') return false; // teacher/parent: no compat
+  // return COMPAT_TENANT_IDS.includes(tenantId as (typeof COMPAT_TENANT_IDS)[number]);
 }
