@@ -442,9 +442,9 @@ export async function addStudentToClassByEmail(
 export async function teacherBatchCreateStudents(params: {
   classId: string;
   defaultPassword: string;
-  identifiers: string[];
+  entries: Array<{ name: string; identifier: string }>;
 }): Promise<{
-  summary: { created: number; updated: number; skipped: number; errors: number };
+  summary: { created: number; updated: number; enrolled: number; skipped: number; errors: number };
   results: BatchCreateAccountsResult[];
 }> {
   return apiCall('/api/teacher/batch-create-students', {
@@ -452,7 +452,7 @@ export async function teacherBatchCreateStudents(params: {
     body: JSON.stringify({
       classId: params.classId,
       defaultPassword: params.defaultPassword,
-      identifiers: params.identifiers,
+      entries: params.entries,
     }),
   });
 }
@@ -1760,7 +1760,7 @@ export async function listAdminTenants(
 
 export interface BatchCreateAccountsResult {
   identifier: string;
-  status: 'created' | 'updated' | 'skipped' | 'error';
+  status: 'created' | 'updated' | 'enrolled' | 'skipped' | 'error';
   userId?: string;
   message?: string;
 }
@@ -1770,11 +1770,11 @@ export async function batchCreateAccounts(
     tenantId: string;
     role: 'teacher' | 'student' | 'parent';
     defaultPassword: string;
-    identifiers: string[];
+    entries: Array<{ name: string; identifier: string }>;
     classIds?: string[];
   },
   accessToken: string
-): Promise<{ summary: { created: number; updated: number; skipped: number; errors: number }; results: BatchCreateAccountsResult[] }> {
+): Promise<{ summary: { created: number; updated: number; enrolled?: number; skipped: number; errors: number }; results: BatchCreateAccountsResult[] }> {
   return apiCall('/api/admin/batch-create-accounts', {
     method: 'POST',
     headers: { Authorization: `Bearer ${accessToken}` },
@@ -1782,7 +1782,7 @@ export async function batchCreateAccounts(
       tenantId: params.tenantId,
       role: params.role,
       defaultPassword: params.defaultPassword,
-      identifiers: params.identifiers,
+      entries: params.entries,
       ...(params.classIds?.length ? { classIds: params.classIds } : {}),
     }),
   });

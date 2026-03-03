@@ -1,6 +1,23 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../utils/supabase/client';
+
+function parseNameIdentifierLines(text: string): Array<{ name: string; identifier: string }> {
+  return text
+    .split(/\n/)
+    .map((line) => {
+      const trimmed = line.trim();
+      if (!trimmed) return null;
+      const sep = trimmed.match(/[,\t]/);
+      if (!sep) return null;
+      const idx = trimmed.indexOf(sep[0]);
+      const name = trimmed.slice(0, idx).trim();
+      const identifier = trimmed.slice(idx + 1).trim();
+      if (!identifier) return null;
+      return { name, identifier };
+    })
+    .filter((e): e is { name: string; identifier: string } => e != null);
+}
 import {
   listAdminTenants,
   listAdminClasses,
@@ -297,12 +314,14 @@ export function AdminDataPage() {
       return;
     }
 
-    const lines = identifiersInput
-      .split(/[\n,]+/)
-      .map((s) => s.trim())
-      .filter(Boolean);
-    if (lines.length === 0) {
-      setError('请输入至少一个邮箱/手机号/账号名，每行一个');
+    const entries = parseNameIdentifierLines(identifiersInput);
+    if (entries.length === 0) {
+      setError('请输入至少一行，格式：姓名,账号（如 张三,zhangsan@example.com）');
+      return;
+    }
+    const invalid = entries.find((e) => !e.name);
+    if (invalid) {
+      setError('每行需同时提供姓名和账号，格式：姓名,账号');
       return;
     }
 
@@ -313,7 +332,7 @@ export function AdminDataPage() {
           tenantId: tenantId.trim(),
           role,
           defaultPassword,
-          identifiers: lines,
+          entries,
           ...(role === 'student' && classIds.length > 0 ? { classIds } : {}),
         },
         token
@@ -333,7 +352,7 @@ export function AdminDataPage() {
         <div className="rounded-xl border bg-white p-6">
           <h2 className="text-lg font-semibold text-slate-900">数据管理 · 批量生成账号</h2>
           <p className="text-sm text-slate-500 mt-1">
-            支持邮箱、手机号或简单账号名；选择租户和角色后批量创建，学生需选择班级。
+            每行格式：姓名,账号（如 张三,zhangsan@example.com）；选择租户和角色后批量创建，学生需选择班级。
           </p>
         </div>
 
@@ -497,12 +516,12 @@ export function AdminDataPage() {
 
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1">
-              邮箱 / 手机号 / 账号名（每行一个，支持逗号分隔）
+              姓名,账号（每行一个，逗号或 Tab 分隔）
             </label>
             <textarea
               value={identifiersInput}
               onChange={(e) => setIdentifiersInput(e.target.value)}
-              placeholder={'user1@example.com\n+8613800138000\nstudent001\nzhangsan'}
+              placeholder={'张三,zhangsan@example.com\n李四,13800138000\n王五,student001'}
               className="w-full min-h-[180px] rounded-md border border-slate-300 px-3 py-2 text-sm font-mono"
               required
             />
@@ -669,6 +688,9 @@ export function AdminDataPage() {
             <div className="flex gap-4 text-sm">
               <span className="text-green-600">新建: {lastResult.summary.created}</span>
               <span className="text-blue-600">更新: {lastResult.summary.updated}</span>
+              {'enrolled' in lastResult.summary && lastResult.summary.enrolled > 0 && (
+                <span className="text-indigo-600">加入班级: {lastResult.summary.enrolled}</span>
+              )}
               <span className="text-slate-500">跳过: {lastResult.summary.skipped}</span>
               {lastResult.summary.errors > 0 && (
                 <span className="text-red-600">失败: {lastResult.summary.errors}</span>
@@ -694,12 +716,14 @@ export function AdminDataPage() {
                               ? 'text-green-600'
                               : r.status === 'updated'
                                 ? 'text-blue-600'
-                                : r.status === 'error'
-                                  ? 'text-red-600'
-                                  : 'text-slate-500'
+                                : r.status === 'enrolled'
+                                  ? 'text-indigo-600'
+                                  : r.status === 'error'
+                                    ? 'text-red-600'
+                                    : 'text-slate-500'
                           }
                         >
-                          {r.status === 'created' ? '新建' : r.status === 'updated' ? '更新' : r.status === 'error' ? '失败' : '跳过'}
+                          {r.status === 'created' ? '新建' : r.status === 'updated' ? '更新' : r.status === 'enrolled' ? '加入班级' : r.status === 'error' ? '失败' : '跳过'}
                         </span>
                       </td>
                       <td className="px-3 py-2 text-slate-600">{r.message ?? (r.userId ? r.userId.slice(0, 8) + '...' : '')}</td>

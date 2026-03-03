@@ -1,5 +1,22 @@
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
+
+function parseNameIdentifierLines(text: string): Array<{ name: string; identifier: string }> {
+  return text
+    .split(/\n/)
+    .map((line) => {
+      const trimmed = line.trim();
+      if (!trimmed) return null;
+      const sep = trimmed.match(/[,\t]/);
+      if (!sep) return null;
+      const idx = trimmed.indexOf(sep[0]);
+      const name = trimmed.slice(0, idx).trim();
+      const identifier = trimmed.slice(idx + 1).trim();
+      if (!identifier) return null;
+      return { name, identifier };
+    })
+    .filter((e): e is { name: string; identifier: string } => e != null);
+}
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
@@ -181,12 +198,13 @@ export function ClassManagementPage() {
       return;
     }
 
-    const identifiers = bulkIdentifiersInput
-      .split(/[\n,]+/)
-      .map((s) => s.trim())
-      .filter(Boolean);
-    if (identifiers.length === 0) {
-      setBulkCreateError('请输入至少一个邮箱/手机号/账号名，每行一个');
+    const entries = parseNameIdentifierLines(bulkIdentifiersInput);
+    if (entries.length === 0) {
+      setBulkCreateError('请输入至少一行，格式：姓名,账号（如 张三,zhangsan@example.com）');
+      return;
+    }
+    if (entries.some((e) => !e.name)) {
+      setBulkCreateError('每行需同时提供姓名和账号，格式：姓名,账号');
       return;
     }
 
@@ -197,7 +215,7 @@ export function ClassManagementPage() {
       const result = await teacherBatchCreateStudents({
         classId: selectedClassId,
         defaultPassword: bulkDefaultPassword,
-        identifiers,
+        entries,
       });
       setBulkCreateResult(result);
       const res = await getClass(selectedClassId);
@@ -234,7 +252,7 @@ export function ClassManagementPage() {
   };
 
   const handleDeleteClass = async (classId: string) => {
-    if (!window.confirm('确定删除该班级？此操作不可恢复。')) return;
+    if (!window.confirm('确定删除该班级？此操作不可恢复。\n\n学生账号不会被删除，仅会从该班级中移出。此操作相当于「解散班级」，而不是「删除学生」。')) return;
     try {
       await deleteClass(classId);
       if (selectedClassId === classId) {
@@ -255,6 +273,7 @@ export function ClassManagementPage() {
   );
 
   const selectedClass = classes.find((c) => c.id === selectedClassId);
+  // 仅自建班级可管理学生；已添加班级只能分配课程和任务
   const canManageSelectedClass = !!selectedClass && selectedClass.teacherId === user?.id;
   const gradeOptions = Array.from(
     new Set(
@@ -662,12 +681,12 @@ export function ClassManagementPage() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="bulk-identifiers">邮箱 / 手机号 / 账号名（每行一个）</Label>
+              <Label htmlFor="bulk-identifiers">姓名,账号（每行一个，逗号或 Tab 分隔）</Label>
               <textarea
                 id="bulk-identifiers"
                 value={bulkIdentifiersInput}
                 onChange={(e) => setBulkIdentifiersInput(e.target.value)}
-                placeholder={'student1@example.com\n+8613800138000\nstudent001'}
+                placeholder={'张三,zhangsan@example.com\n李四,13800138000\n王五,student001'}
                 className="w-full min-h-[180px] rounded-md border border-slate-300 px-3 py-2 text-sm font-mono"
               />
             </div>
@@ -679,6 +698,7 @@ export function ClassManagementPage() {
                 <div className="flex gap-4 text-sm">
                   <span className="text-green-600">新建: {bulkCreateResult.summary.created}</span>
                   <span className="text-blue-600">更新: {bulkCreateResult.summary.updated}</span>
+                  <span className="text-indigo-600">加入班级: {bulkCreateResult.summary.enrolled ?? 0}</span>
                   <span className="text-slate-500">跳过: {bulkCreateResult.summary.skipped}</span>
                   {bulkCreateResult.summary.errors > 0 ? (
                     <span className="text-red-600">失败: {bulkCreateResult.summary.errors}</span>
