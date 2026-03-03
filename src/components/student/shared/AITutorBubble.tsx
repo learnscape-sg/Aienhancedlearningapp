@@ -1,7 +1,7 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { AnimatedAvatar, type AvatarState } from './AnimatedAvatar';
 
-const AVATAR_SIZE = 144;
+const AVATAR_SIZE = 72; // 144 缩小一倍
 const BUBBLE_WIDTH = 360;
 const BUBBLE_GAP = 8;
 const BUBBLE_MAX_VH = 0.5;
