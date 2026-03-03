@@ -52,15 +52,18 @@ function parsePreferences(prefs: unknown): ProfilePreferences {
   return {};
 }
 
+/** Load profile + admin in parallel, merge by priority (profile > admin > null) */
 async function loadProfileFromSupabase(
   userId: string,
   email: string
 ): Promise<{ user: User; preferences: ProfilePreferences } | null> {
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('id, name, user_type, preferences, tenant_id')
-    .eq('id', userId)
-    .maybeSingle();
+  const [profileResult, adminResult] = await Promise.all([
+    supabase.from('profiles').select('id, name, user_type, preferences, tenant_id').eq('id', userId).maybeSingle(),
+    supabase.from('admin_users').select('name').eq('user_id', userId).eq('active', true).maybeSingle(),
+  ]);
+
+  const profile = profileResult.data;
+  const adminRow = adminResult.data;
 
   if (profile) {
     const prefs = parsePreferences(profile.preferences);
@@ -78,13 +81,6 @@ async function loadProfileFromSupabase(
     };
   }
 
-  // Fallback: if user is in admin_users, treat as admin (allows admin to access teacher portal without profile)
-  const { data: adminRow } = await supabase
-    .from('admin_users')
-    .select('name')
-    .eq('user_id', userId)
-    .eq('active', true)
-    .maybeSingle();
   if (adminRow) {
     const defaultTenant = 'tenant_cn_bamboo';
     return {
@@ -148,14 +144,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (initDone) return;
 
         if (session?.user) {
+          // 先展示占位，profile 到达后再更新
+          setUser(createFallbackUser(session.user));
+          setPreferences({});
+          setLoading(false);
+
           const result = await loadProfileFromSupabase(session.user.id, session.user.email ?? '');
           if (initDone) return;
-
           if (result) {
             applyProfileResult(result);
-          } else {
-            setUser(createFallbackUser(session.user));
-            setPreferences({});
           }
         } else {
           setUser(null);
@@ -173,14 +170,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     };
 
-    // 8s 超时保护，避免无限 loading
+    // 8s 超时保护，避免无限 loading（仅结束 loading，不覆盖已展示的 fallback user）
     const timeoutId = setTimeout(() => {
       if (!initDone) {
         initDone = true;
         console.warn('[Auth] 初始化超时(8s)，强制结束 loading');
         setLoading(false);
-        setUser(null);
-        setPreferences({});
       }
     }, AUTH_TIMEOUT_MS);
 

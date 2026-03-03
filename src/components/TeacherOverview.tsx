@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { BookOpen, Users, FileText, TrendingUp, Clock, Award } from 'lucide-react';
 import { useAuth } from './AuthContext';
-import { getTeacherStats, listTeacherCoursesWithStats, getTeacherActivities, type TeacherActivity } from '@/lib/backendApi';
+import { getTeacherDashboard, type TeacherActivity } from '@/lib/backendApi';
 
 const ACTION_LABELS: Record<string, string> = {
   course_created: '课程创建',
@@ -39,20 +39,16 @@ export function TeacherOverview() {
       setLoading(false);
       return;
     }
-    Promise.all([
-      getTeacherStats(user.id),
-      listTeacherCoursesWithStats(user.id),
-      getTeacherActivities(user.id, 8),
-    ])
-      .then(([statsData, coursesData, activitiesData]) => {
+    getTeacherDashboard(user.id, { activitiesLimit: 8 })
+      .then(({ stats: statsData, courses: coursesData, activities: activitiesData }) => {
         setStats(statsData);
-        const courses = coursesData.courses
+        const courses = coursesData
           .filter((c) => c.assignmentStatus === 'assigned' || c.status === 'published')
           .sort((a, b) => b.students - a.students)
           .slice(0, 4)
           .map((c) => ({ name: c.title, students: c.students, completion: c.completion }));
         setTopCourses(courses);
-        setRecentActivities(activitiesData.activities);
+        setRecentActivities(activitiesData);
       })
       .catch((err) => console.error('[TeacherOverview] Failed to load:', err))
       .finally(() => setLoading(false));

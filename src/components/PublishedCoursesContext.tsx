@@ -1,6 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useState, ReactNode } from 'react';
 import { useAuth } from './AuthContext';
-import { listTeacherCoursesWithStats } from '../lib/backendApi';
+import { getTeacherDashboard } from '../lib/backendApi';
 
 interface PublishedCourse {
   id: string;
@@ -59,7 +59,7 @@ export function PublishedCoursesProvider({ children }: { children: ReactNode }) 
       return;
     }
     try {
-      const { courses } = await listTeacherCoursesWithStats(user.id);
+      const { courses } = await getTeacherDashboard(user.id);
       const mapped: PublishedCourse[] = courses.map((row) => ({
         id: row.id,
         title: row.title,

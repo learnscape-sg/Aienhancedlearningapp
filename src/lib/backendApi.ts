@@ -666,6 +666,29 @@ export async function getTeacherStats(teacherId: string): Promise<TeacherStats> 
   );
 }
 
+export interface TeacherDashboardData {
+  stats: TeacherStats;
+  courses: TeacherCourseItem[];
+  activities: TeacherActivity[];
+}
+
+/** Unified teacher dashboard API: stats + courses + activities in one request */
+export async function getTeacherDashboard(
+  teacherId: string,
+  options?: { activitiesLimit?: number; includeDeleted?: boolean; deletedOnly?: boolean; restorableOnly?: boolean }
+): Promise<TeacherDashboardData> {
+  const qs = new URLSearchParams({ teacherId });
+  if (options?.activitiesLimit != null) qs.set('activitiesLimit', String(options.activitiesLimit));
+  if (options?.includeDeleted) qs.set('includeDeleted', 'true');
+  if (options?.deletedOnly) qs.set('deletedOnly', 'true');
+  if (options?.restorableOnly) qs.set('restorableOnly', 'true');
+  const res = await apiCall<{ stats: TeacherStats; courses: TeacherCourseItem[]; activities: TeacherActivity[] }>(
+    `/api/teacher-dashboard?${qs.toString()}`,
+    { method: 'GET' }
+  );
+  return res;
+}
+
 export interface TeacherActivity {
   action_type: string;
   target_title: string;
