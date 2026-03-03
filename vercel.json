@@ -1,6 +1,6 @@
 {
-  "buildCommand": "npm run build",
-  "outputDirectory": "build",
+  "buildCommand": "npm run build:bamboo",
+  "outputDirectory": "build-bamboo",
   "rewrites": [
     {
       "source": "/((?!assets/|favicon).*)",

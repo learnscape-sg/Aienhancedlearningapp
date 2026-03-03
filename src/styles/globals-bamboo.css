@@ -1,0 +1,185 @@
+/* Tailwind v3.4 - bamboo tablet build (browser compat) */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import "./theme-colors.css";
+@import "katex/dist/katex.min.css";
+@import "./tenant-compat.css";
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+}
+
+@layer base {
+  h1 {
+    font-size: var(--text-2xl);
+    font-weight: var(--font-weight-medium);
+    line-height: 1.5;
+  }
+
+  h2 {
+    font-size: var(--text-xl);
+    font-weight: var(--font-weight-medium);
+    line-height: 1.5;
+  }
+
+  h3 {
+    font-size: var(--text-lg);
+    font-weight: var(--font-weight-medium);
+    line-height: 1.5;
+  }
+
+  h4 {
+    font-size: var(--text-base);
+    font-weight: var(--font-weight-medium);
+    line-height: 1.5;
+  }
+
+  p {
+    font-size: var(--text-base);
+    font-weight: var(--font-weight-normal);
+    line-height: 1.5;
+  }
+
+  label {
+    font-size: var(--text-base);
+    font-weight: var(--font-weight-medium);
+    line-height: 1.5;
+  }
+
+  button {
+    font-size: var(--text-base);
+    font-weight: var(--font-weight-medium);
+    line-height: 1.5;
+  }
+
+  input {
+    font-size: var(--text-base);
+    font-weight: var(--font-weight-normal);
+    line-height: 1.5;
+  }
+}
+
+/* v3 compat: add CSS vars for text sizes used above */
+:root {
+  --text-2xl: 1.5rem;
+  --text-xl: 1.25rem;
+  --text-lg: 1.125rem;
+  --text-base: 1rem;
+}
+
+html {
+  font-size: var(--font-size);
+}
+
+@layer utilities {
+  .color-google-blue {
+    color: #4285F4 !important;
+  }
+
+  .bg-google-blue {
+    background-color: #4285F4 !important;
+  }
+
+  .color-google-green {
+    color: #34A853 !important;
+  }
+
+  .bg-google-green {
+    background-color: #34A853 !important;
+  }
+
+  .color-google-yellow {
+    color: #FBBC05 !important;
+  }
+
+  .bg-google-yellow {
+    background-color: #FBBC05 !important;
+  }
+
+  .color-google-red {
+    color: #EA4335 !important;
+  }
+
+  .bg-google-red {
+    background-color: #EA4335 !important;
+  }
+
+  .recharts-wrapper {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  .recharts-surface {
+    overflow: visible !important;
+  }
+
+  @media (max-width: 768px) {
+    .recharts-text {
+      font-size: 11px !important;
+    }
+  }
+}
+
+@keyframes fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in-up {
+  animation: fade-in-up 0.3s ease-out;
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.animate-fade-in {
+  animation: fade-in 0.2s ease-out;
+}
+
+@keyframes float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-8px);
+  }
+}
+
+.animate-float {
+  animation: float 3s ease-in-out infinite;
+}
+
+html[data-font-size="s"] {
+  font-size: 14px;
+}
+html[data-font-size="m"],
+html:not([data-font-size]) {
+  font-size: 16px;
+}
+html[data-font-size="l"] {
+  font-size: 18px;
+}

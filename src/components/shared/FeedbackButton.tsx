@@ -3,6 +3,7 @@ import { useLocation } from 'react-router-dom';
 import { MessageSquare, X, Star, Loader2, CheckCircle, AlertCircle } from 'lucide-react';
 import { submitFeedback, trackProductEvent } from '@/lib/backendApi';
 import { supabase } from '@/utils/supabase/client';
+import { useAuth } from '@/components/AuthContext';
 
 type FeedbackType = 'bug' | 'suggestion' | 'other';
 
@@ -19,8 +20,14 @@ function getPageName(path: string): string {
 }
 
 export function FeedbackButton() {
+  const { user } = useAuth();
   const location = useLocation();
   const pathname = location.pathname;
+
+  // 教师、家长、Admin 可填写反馈；匿名用户和学生隐藏反馈按钮
+  const canShowFeedback =
+    user?.role === 'teacher' || user?.role === 'parent' || user?.role === 'admin';
+  if (!canShowFeedback) return null;
   const [isOpen, setIsOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitStatus, setSubmitStatus] = useState<'idle' | 'success' | 'error'>('idle');

@@ -75,12 +75,16 @@
             "@types/d3": "^7.4.3",
             "@types/node": "^20.10.0",
             "@vitejs/plugin-react-swc": "^3.10.2",
+            "autoprefixer": "^10.4.20",
             "tailwindcss": "^4.1.18",
+            "tailwindcss3": "npm:tailwindcss@3.4.16",
             "typescript": "^5.9.2",
             "vite": "6.3.5"
       },
       "scripts": {
             "dev": "vite",
-            "build": "vite build"
+            "build": "vite build",
+            "build:bamboo": "vite build --config vite.bamboo.config.ts && cp build-bamboo/index-bamboo.html build-bamboo/index.html",
+            "dev:bamboo": "vite --config vite.bamboo.config.ts --open /index-bamboo.html"
       }
 }
