@@ -66,6 +66,7 @@ import { MathTextPreview } from './shared/MathTextPreview';
 import { RealTimeProgressTracker } from './shared/RealTimeProgressTracker';
 import { VisualizationEditor } from './shared/VisualizationEditor';
 import { AnimatedAvatar, type AvatarState } from './shared/AnimatedAvatar';
+import { AITutorBubble } from './shared/AITutorBubble';
 import { FullscreenModal } from './shared/FullscreenModal';
 import { useSpeechRecognition } from '@/hooks/useSpeechRecognition';
 import { useTextToSpeech } from '@/hooks/useTextToSpeech';
@@ -362,12 +363,11 @@ const StudentConsole: React.FC<StudentConsoleProps> = ({
   const [isTyping, setIsTyping] = useState(false);
   const [studentLog, setStudentLog] = useState<string[]>([]);
   
-  // Layout State (Resizable Split - Three Columns)
-  const [leftPanelWidth, setLeftPanelWidth] = useState(60); // Default 60%
-  const [middlePanelWidth, setMiddlePanelWidth] = useState(25); // Default 25% (right panel will be 15%)
-  const [isResizingLeft, setIsResizingLeft] = useState(false);
-  const [isResizingRight, setIsResizingRight] = useState(false);
+  // Layout State - 80/20 split, no resizers
   const containerRef = useRef<HTMLDivElement>(null);
+
+  // AI Bubble mode: floating avatar + popup
+  const [bubbleOpen, setBubbleOpen] = useState(false);
 
   // Asset State
   const [assetData, setAssetData] = useState<any>(null);
@@ -632,70 +632,6 @@ const StudentConsole: React.FC<StudentConsoleProps> = ({
       }
   };
 
-  // --- Resizing Logic ---
-  const startResizingLeft = useCallback(() => setIsResizingLeft(true), []);
-  const startResizingRight = useCallback(() => setIsResizingRight(true), []);
-  const stopResizing = useCallback(() => {
-    setIsResizingLeft(false);
-    setIsResizingRight(false);
-  }, []);
-
-  const resizeLeft = useCallback(
-    (mouseMoveEvent: MouseEvent) => {
-      if (isResizingLeft && containerRef.current) {
-        const containerRect = containerRef.current.getBoundingClientRect();
-        const newWidth = ((mouseMoveEvent.clientX - containerRect.left) / containerRect.width) * 100;
-        // Limit left panel width between 25% and 60%
-        if (newWidth >= 25 && newWidth <= 60) {
-          const rightPanelWidth = 100 - leftPanelWidth - middlePanelWidth;
-          const maxMiddleWidth = 100 - newWidth - 15; // Keep right panel at least 15%
-          const adjustedMiddleWidth = Math.min(middlePanelWidth, maxMiddleWidth);
-          setLeftPanelWidth(newWidth);
-          if (adjustedMiddleWidth !== middlePanelWidth) {
-            setMiddlePanelWidth(adjustedMiddleWidth);
-          }
-        }
-      }
-    },
-    [isResizingLeft, leftPanelWidth, middlePanelWidth]
-  );
-
-  const resizeRight = useCallback(
-    (mouseMoveEvent: MouseEvent) => {
-      if (isResizingRight && containerRef.current) {
-        const containerRect = containerRef.current.getBoundingClientRect();
-        const newWidth = ((mouseMoveEvent.clientX - containerRect.left) / containerRect.width) * 100;
-        // Calculate middle panel width based on right resizer position
-        const newMiddleWidth = newWidth - leftPanelWidth;
-        // Limit middle panel width, keeping right panel between 15% and 35%
-        const rightPanelWidth = 100 - leftPanelWidth - newMiddleWidth;
-        if (rightPanelWidth >= 15 && rightPanelWidth <= 35 && newMiddleWidth >= 20) {
-          setMiddlePanelWidth(newMiddleWidth);
-        }
-      }
-    },
-    [isResizingRight, leftPanelWidth]
-  );
-
-  useEffect(() => {
-    // Only run on client side
-    if (typeof window === 'undefined') return;
-    
-    if (isResizingLeft) {
-      window.addEventListener("mousemove", resizeLeft);
-      window.addEventListener("mouseup", stopResizing);
-    }
-    if (isResizingRight) {
-      window.addEventListener("mousemove", resizeRight);
-      window.addEventListener("mouseup", stopResizing);
-    }
-    return () => {
-      window.removeEventListener("mousemove", resizeLeft);
-      window.removeEventListener("mousemove", resizeRight);
-      window.removeEventListener("mouseup", stopResizing);
-    };
-  }, [isResizingLeft, isResizingRight, resizeLeft, resizeRight, stopResizing]);
-
   useEffect(() => {
     setGuidedStep(1);
     setMaxStepReached(1);
@@ -711,14 +647,13 @@ const StudentConsole: React.FC<StudentConsoleProps> = ({
   // --- Effects ---
 
   useEffect(() => {
-    // Use requestAnimationFrame to ensure DOM is fully updated
+    // Use requestAnimationFrame to ensure DOM is fully updated (also when bubble opens)
     requestAnimationFrame(() => {
       if (chatContainerRef.current) {
-        // Scroll the container to bottom instead of using scrollIntoView
         chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
       }
     });
-  }, [messages]);
+  }, [messages, bubbleOpen]);
 
   // Update avatar state based on typing status and voice state
   useEffect(() => {
@@ -1039,6 +974,7 @@ const StudentConsole: React.FC<StudentConsoleProps> = ({
         const timestamp = Date.now();
         setMessages(prev => [...prev, ...greetingParts.map((text) => ({ role: 'model' as const, text, timestamp }))]);
         greetingSentRef.current.add(currentTaskIndex);
+        setBubbleOpen(true);
 
         const greetingFull = greetingParts.join('\n\n');
         if (currentTaskIndex === 0 && autoPlayVoice && voiceEnabled && voiceServiceAvailable) {
@@ -1484,6 +1420,7 @@ ${isMathOrScience
   };
 
   const handleStuck = () => {
+    setBubbleOpen(true);
     let answerJustRevealed = false;
     if (isGuidedVideoFlow && guidedStep === 3 && guidedKeyIdeas.length > 0) {
       const next = stuckClicksForKeyIdeas + 1;
@@ -1538,6 +1475,7 @@ CRITICAL: Give hints STEP BY STEP, not all at once.
   };
 
   const handleDone = () => {
+    setBubbleOpen(true);
     if (guidedDoneInFlight.current) return; // 防重复请求
     const now = Date.now();
     
@@ -3064,9 +3002,9 @@ CRITICAL: Output language must be 简体中文 only.
                             </thead>
                             <tbody>
                                 {tableData.rows.map((row, rIndex) => (
-                                    <tr key={rIndex} className="bg-white border-b border-slate-100 hover:bg-slate-50 transition-colors">
+                                    <tr key={rIndex} className="bg-white border-b border-slate-200 hover:bg-slate-50 transition-colors">
                                         {row.map((cell, cIndex) => (
-                                            <td key={cIndex} className="p-2 border-r border-slate-100 last:border-r-0">
+                                            <td key={cIndex} className="p-2 border-r border-slate-200 last:border-r-0">
                                                 <textarea 
                                                     className="w-full h-24 p-3 bg-transparent resize-none focus:outline-none focus:bg-cyan-50/50 rounded transition-colors text-slate-800 leading-relaxed placeholder-slate-300"
                                                     placeholder="..."
@@ -3494,12 +3432,11 @@ CRITICAL: Output language must be 简体中文 only.
       style={{ minHeight: '100vh', height: '100vh' }}
     >
       
-      {/* LEFT COLUMN: WORKSPACE */}
+      {/* LEFT COLUMN: WORKSPACE (80%) */}
       <div 
-        style={{ width: `${leftPanelWidth}%` }}
+        style={{ width: '80%' }}
         className="h-full flex flex-col bg-white relative shrink-0 border-r border-slate-200 min-h-0"
       >
-        {(isResizingLeft || isResizingRight) && <div className="absolute inset-0 z-50 bg-transparent" />} {/* Shield to prevent iframe capturing mouse */}
         
         {/* ENHANCED TASK HEADER - Single Row */}
         <div className="bg-white border-b border-slate-200 p-3 shrink-0 z-20 shadow-sm">
@@ -3521,6 +3458,28 @@ CRITICAL: Output language must be 简体中文 only.
                 </div>
                 <div className="flex items-center gap-4 shrink-0 ml-4">
                     <FontSizeSelector />
+                    {voiceServiceAvailable && (
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className="text-xs font-semibold text-slate-600 hidden sm:inline">{t('voiceBroadcast')}</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const next = !voiceEnabled;
+                            setVoiceEnabled(next);
+                            setAutoPlayVoice(next);
+                            if (!next && isPlayingVoice) stopVoice();
+                          }}
+                          className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors ${
+                            voiceEnabled
+                              ? 'bg-emerald-50 border-emerald-300 text-emerald-700'
+                              : 'bg-red-50 border-red-300 text-red-700'
+                          }`}
+                          title={voiceEnabled ? t('voiceTurnOff') : t('voiceTurnOn')}
+                        >
+                          {voiceEnabled ? t('voiceOn') : t('voiceOff')}
+                        </button>
+                      </div>
+                    )}
                     {/* Progress Dots - 可点击跳转 */}
                     <div className="flex gap-1.5 shrink-0">
                         {plan.tasks.map((_, idx) => (
@@ -3630,64 +3589,14 @@ CRITICAL: Output language must be 简体中文 only.
         </div>
       </div>
 
-      {/* LEFT RESIZER HANDLE */}
-      <div
-        className={`w-1.5 hover:w-2 bg-slate-200 hover:bg-cyan-400 cursor-col-resize transition-all z-30 flex items-center justify-center group shrink-0 relative ${isResizingLeft ? 'bg-cyan-500 w-2' : ''}`}
-        onMouseDown={startResizingLeft}
+      {/* AI TUTOR BUBBLE - Floating */}
+      <AITutorBubble
+        isOpen={bubbleOpen}
+        onOpenChange={setBubbleOpen}
+        avatarState={avatarState}
+        tutorName={tutorName || t('aiSystem')}
       >
-          <div className={`h-8 w-1 rounded-full transition-colors ${isResizingLeft ? 'bg-white' : 'bg-slate-300 group-hover:bg-white'}`} />
-      </div>
-
-      {/* MIDDLE COLUMN: AI TUTOR */}
-      <div 
-        style={{ width: `${middlePanelWidth}%` }}
-        className="h-full flex flex-col bg-slate-50 relative shrink-0 min-h-0"
-      >
-        {(isResizingLeft || isResizingRight) && <div className="absolute inset-0 z-50 bg-transparent" />}
-
-        {/* Header */}
-        <div className="h-14 border-b border-slate-200 flex items-center justify-between px-6 bg-white/90 backdrop-blur-md z-10 shrink-0">
-          <div className="flex items-center gap-3">
-            <AnimatedAvatar state={avatarState} size={40} />
-            <div className="flex flex-col">
-              <div className="flex items-center gap-2">
-                <div className="w-2 h-2 rounded-full bg-emerald-500 animate-[pulse_2s_infinite]" />
-                <span className="text-xs font-mono text-emerald-600 tracking-wider">{t('tutorOnline')}</span>
-              </div>
-              <span className="text-[10px] text-slate-500">
-                {tutorName || t('aiSystem')}
-              </span>
-            </div>
-            <span className="text-[10px] text-slate-500 border border-slate-200 px-1.5 py-0.5 rounded uppercase bg-slate-100">
-              {currentTask.tutorConfig.tone}
-            </span>
-          </div>
-        </div>
-
-        {/* TTS Global Toggle */}
-        {voiceServiceAvailable && (
-          <div className="px-4 py-2 border-b border-slate-200 bg-white/95 backdrop-blur-sm shrink-0 flex items-center justify-between gap-3 flex-wrap">
-            <span className="text-xs text-slate-500">{t('voiceBroadcast')}</span>
-            <button
-                type="button"
-                onClick={() => {
-                  const next = !voiceEnabled;
-                  setVoiceEnabled(next);
-                  setAutoPlayVoice(next);
-                  if (!next && isPlayingVoice) stopVoice();
-                }}
-                className={`px-3 py-1 rounded-full text-xs border transition-colors ${
-                  voiceEnabled
-                    ? 'bg-emerald-50 border-emerald-300 text-emerald-700'
-                    : 'bg-red-50 border-red-300 text-red-700'
-                }`}
-                title={voiceEnabled ? t('voiceTurnOff') : t('voiceTurnOn')}
-              >
-                {voiceEnabled ? t('voiceOn') : t('voiceOff')}
-              </button>
-          </div>
-        )}
-
+        <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
         {/* Chat Area */}
         <div 
           ref={chatContainerRef}
@@ -3931,33 +3840,14 @@ CRITICAL: Output language must be 简体中文 only.
              </div>
            )}
         </div>
-      </div>
+        </div>
+      </AITutorBubble>
 
-      {/* RIGHT RESIZER HANDLE */}
-      <div
-        className={`w-1.5 hover:w-2 bg-slate-200 hover:bg-cyan-400 cursor-col-resize transition-all z-30 flex items-center justify-center group shrink-0 relative ${isResizingRight ? 'bg-cyan-500 w-2' : ''}`}
-        onMouseDown={startResizingRight}
-      >
-          <div className={`h-8 w-1 rounded-full transition-colors ${isResizingRight ? 'bg-white' : 'bg-slate-300 group-hover:bg-white'}`} />
-      </div>
-
-      {/* RIGHT COLUMN: REAL-TIME PROGRESS */}
+      {/* RIGHT COLUMN: REAL-TIME PROGRESS (20%) */}
       <div 
-        style={{ width: `${100 - leftPanelWidth - middlePanelWidth}%` }}
+        style={{ width: '20%' }}
         className="h-full flex flex-col bg-slate-50 relative shrink-0 border-l border-slate-200 min-h-0"
       >
-        {/* AI动画头像 - 正方形框 */}
-        <div className="p-4 border-b border-slate-200 bg-gradient-to-br from-white to-cyan-50/30 shrink-0">
-          <div className="w-full aspect-square bg-white rounded-xl border-2 border-cyan-300 shadow-lg ring-2 ring-cyan-100 relative overflow-hidden">
-            {/* 背景光晕效果 */}
-            <div className="absolute inset-0 bg-gradient-to-br from-cyan-200/20 to-blue-200/20"></div>
-            {/* 头像 - 充满整个容器 */}
-            <div className="absolute inset-0 flex items-center justify-center z-10">
-              <AnimatedAvatar state={avatarState} size={1000} className="w-full h-full" />
-            </div>
-          </div>
-        </div>
-
         {/* 实时学习进度 */}
         <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">
           <RealTimeProgressTracker

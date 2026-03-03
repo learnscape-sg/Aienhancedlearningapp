@@ -13,9 +13,9 @@ export function FontSizeSelector() {
           key={size}
           type="button"
           onClick={() => setFontSize(size)}
-          className={`px-2 py-1 text-[11px] font-medium rounded transition-colors ${
+          className={`px-2.5 py-1.5 text-xs font-semibold rounded transition-colors ${
             fontSize === size
-              ? 'bg-cyan-100 text-cyan-800 border border-cyan-200'
+              ? 'bg-cyan-100 text-cyan-800 border border-cyan-300'
               : 'text-slate-500 hover:text-slate-700 hover:bg-slate-100'
           }`}
           title={size === 's' ? t('fontSizeSmall') : size === 'm' ? t('fontSizeMedium') : t('fontSizeLarge')}
