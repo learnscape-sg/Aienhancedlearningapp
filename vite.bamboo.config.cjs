@@ -1,8 +1,12 @@
-import { defineConfig } from 'vite';
-import react from '@vitejs/plugin-react-swc';
-import path from 'path';
+const { defineConfig } = require('vite');
+const react = require('@vitejs/plugin-react-swc');
+const path = require('path');
 
-export default defineConfig({
+// Tailwind v3.4 for bamboo - override root postcss.config.js (v4)
+const tailwindcss3 = require('tailwindcss3');
+const autoprefixer = require('autoprefixer');
+
+module.exports = defineConfig({
   plugins: [react()],
   root: '.',
   build: {
@@ -13,7 +17,12 @@ export default defineConfig({
     },
   },
   css: {
-    postcss: './postcss.bamboo.config.cjs',
+    postcss: {
+      plugins: [
+        tailwindcss3({ config: path.resolve(__dirname, 'tailwind.bamboo.config.js') }),
+        autoprefixer(),
+      ],
+    },
   },
   resolve: {
     extensions: ['.js', '.jsx', '.ts', '.tsx', '.json'],
