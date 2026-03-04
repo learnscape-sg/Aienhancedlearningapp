@@ -49,6 +49,10 @@ export function CoursePage() {
           throw new Error(t('dataFormatError'));
         }
         setPlan(data.plan);
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('lastLearningCourseId', courseId);
+          localStorage.setItem('lastLearningTimestamp', Date.now().toString());
+        }
         const { data: sessionData } = await supabase.auth.getSession();
         const token = sessionData.session?.access_token;
         const assignmentSource = searchParams.get('assignmentSource') as 'class' | 'group' | null;
@@ -154,7 +158,13 @@ export function CoursePage() {
       plan={plan}
       onComplete={handleComplete}
       onApiKeyError={handleApiKeyError}
-      onBack={() => navigate('/')}
+      onBack={() => {
+        if (typeof window !== 'undefined') {
+          localStorage.removeItem('lastLearningCourseId');
+          localStorage.removeItem('lastLearningTimestamp');
+        }
+        navigate('/');
+      }}
       contentLanguage={contentLanguage}
       assignmentSource={assignmentSource ?? undefined}
       groupId={groupId}

@@ -21,6 +21,7 @@ import {
   Upload,
   Link2,
   Target,
+  Video,
   ListOrdered,
   FileQuestion,
   Ticket,
@@ -270,89 +271,91 @@ export function TaskPreviewEdit({
                 placeholder="任务标题"
               />
             </div>
-            <div className="text-sm text-muted-foreground">
-              {editingDesc ? (
-                <div className="space-y-2">
-                  <Textarea
-                    value={task.description || ''}
-                    onChange={(e) => onUpdate({ description: e.target.value })}
-                    onBlur={() => setEditingDesc(false)}
-                    className="min-h-24 text-sm"
-                    placeholder="任务描述"
-                    autoFocus
-                  />
-                  <Button size="sm" variant="outline" onClick={() => setEditingDesc(false)}>
-                    完成编辑
-                  </Button>
-                </div>
-              ) : task.description ? (
-                <div className="space-y-1">
-                  <div className="prose prose-sm max-w-none text-slate-700">
-                    <ReactMarkdown
-                      remarkPlugins={[remarkMath, remarkGfm]}
-                      rehypePlugins={[rehypeKatex]}
-                      components={{
-                        p: ({ children }) => (
-                          <p className="mb-2 last:mb-0">{children}</p>
-                        ),
-                        strong: ({ children }) => (
-                          <strong className="font-semibold text-slate-800">{children}</strong>
-                        ),
-                        ul: ({ children }) => (
-                          <ul className="list-disc list-inside mb-2 ml-4">{children}</ul>
-                        ),
-                        ol: ({ children }) => (
-                          <ol className="list-decimal list-inside mb-2 ml-4">{children}</ol>
-                        ),
-                        li: ({ children }) => <li className="mb-1">{children}</li>,
-                      }}
-                    >
-                      {(task.description?.length ?? 0) > 200 && !expandedDesc
-                        ? `${task.description.slice(0, 200)}...`
-                        : task.description}
-                    </ReactMarkdown>
+            {!isGuidedTask && (
+              <div className="text-sm text-muted-foreground">
+                {editingDesc ? (
+                  <div className="space-y-2">
+                    <Textarea
+                      value={task.description || ''}
+                      onChange={(e) => onUpdate({ description: e.target.value })}
+                      onBlur={() => setEditingDesc(false)}
+                      className="min-h-24 text-sm"
+                      placeholder="任务描述"
+                      autoFocus
+                    />
+                    <Button size="sm" variant="outline" onClick={() => setEditingDesc(false)}>
+                      完成编辑
+                    </Button>
                   </div>
-                  {(task.description?.length ?? 0) > 200 && (
-                    <button
-                      type="button"
-                      className="flex items-center gap-1 text-primary hover:text-primary/90 text-xs font-medium"
-                      onClick={() => setExpandedDesc((prev) => !prev)}
+                ) : task.description ? (
+                  <div className="space-y-1">
+                    <div className="prose prose-sm max-w-none text-slate-700">
+                      <ReactMarkdown
+                        remarkPlugins={[remarkMath, remarkGfm]}
+                        rehypePlugins={[rehypeKatex]}
+                        components={{
+                          p: ({ children }) => (
+                            <p className="mb-2 last:mb-0">{children}</p>
+                          ),
+                          strong: ({ children }) => (
+                            <strong className="font-semibold text-slate-800">{children}</strong>
+                          ),
+                          ul: ({ children }) => (
+                            <ul className="list-disc list-inside mb-2 ml-4">{children}</ul>
+                          ),
+                          ol: ({ children }) => (
+                            <ol className="list-decimal list-inside mb-2 ml-4">{children}</ol>
+                          ),
+                          li: ({ children }) => <li className="mb-1">{children}</li>,
+                        }}
+                      >
+                        {(task.description?.length ?? 0) > 200 && !expandedDesc
+                          ? `${task.description.slice(0, 200)}...`
+                          : task.description}
+                      </ReactMarkdown>
+                    </div>
+                    {(task.description?.length ?? 0) > 200 && (
+                      <button
+                        type="button"
+                        className="flex items-center gap-1 text-primary hover:text-primary/90 text-xs font-medium"
+                        onClick={() => setExpandedDesc((prev) => !prev)}
+                      >
+                        {expandedDesc ? (
+                          <>
+                            <ChevronUp className="w-4 h-4" />
+                            收起
+                          </>
+                        ) : (
+                          <>
+                            <ChevronDown className="w-4 h-4" />
+                            展开全文
+                          </>
+                        )}
+                      </button>
+                    )}
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 px-2 text-xs text-slate-500 hover:text-slate-700 -ml-1"
+                      onClick={() => setEditingDesc(true)}
                     >
-                      {expandedDesc ? (
-                        <>
-                          <ChevronUp className="w-4 h-4" />
-                          收起
-                        </>
-                      ) : (
-                        <>
-                          <ChevronDown className="w-4 h-4" />
-                          展开全文
-                        </>
-                      )}
-                    </button>
-                  )}
+                      <Pencil className="w-3 h-3 mr-1" />
+                      编辑
+                    </Button>
+                  </div>
+                ) : (
                   <Button
                     size="sm"
                     variant="ghost"
-                    className="h-7 px-2 text-xs text-slate-500 hover:text-slate-700 -ml-1"
+                    className="h-7 text-xs text-slate-500"
                     onClick={() => setEditingDesc(true)}
                   >
                     <Pencil className="w-3 h-3 mr-1" />
-                    编辑
+                    添加描述
                   </Button>
-                </div>
-              ) : (
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="h-7 text-xs text-slate-500"
-                  onClick={() => setEditingDesc(true)}
-                >
-                  <Pencil className="w-3 h-3 mr-1" />
-                  添加描述
-                </Button>
-              )}
-            </div>
+                )}
+              </div>
+            )}
           </div>
           {needsAsset && (
             <div className="flex flex-wrap gap-2">
@@ -385,7 +388,7 @@ export function TaskPreviewEdit({
         </div>
 
         {isGuidedTask && guidedPayload && (
-          <Accordion type="multiple" defaultValue={['objective', 'keyIdeas', 'practice', 'exitTicket']} className="mt-4">
+          <Accordion type="multiple" defaultValue={['objective', 'material', 'keyIdeas', 'practice', 'exitTicket']} className="mt-4">
             <AccordionItem value="objective">
               <AccordionTrigger className="text-sm font-medium">
                 <Target className="w-4 h-4 mr-2" />
@@ -398,6 +401,32 @@ export function TaskPreviewEdit({
                   className="min-h-20 text-sm"
                   placeholder="学习目标…"
                 />
+              </AccordionContent>
+            </AccordionItem>
+            <AccordionItem value="material">
+              <AccordionTrigger className="text-sm font-medium">
+                <Video className="w-4 h-4 mr-2" />
+                素材选择
+              </AccordionTrigger>
+              <AccordionContent className="space-y-3">
+                <div>
+                  <Label className="text-xs font-medium text-slate-600">视频/资料链接</Label>
+                  <Input
+                    value={task.externalResourceUrl || ''}
+                    onChange={(e) => onUpdate({ externalResourceUrl: e.target.value })}
+                    placeholder="YouTube、Bilibili 或文档 URL"
+                    className="mt-1 text-sm"
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs font-medium text-slate-600">学习指引（纯文本材料时填写）</Label>
+                  <Textarea
+                    value={(guidedPayload.customTextInstruction as string) || ''}
+                    onChange={(e) => applyGuidedUpdate({ customTextInstruction: e.target.value })}
+                    className="mt-1 min-h-24 text-sm"
+                    placeholder="视频/文档任务可不填；纯文本学习指引时在此输入"
+                  />
+                </div>
               </AccordionContent>
             </AccordionItem>
             <AccordionItem value="keyIdeas">
@@ -555,7 +584,21 @@ export function TaskPreviewEdit({
                               applyGuidedUpdate({ practiceQuestions: next });
                             }}
                           />
-                          <Button size="sm" variant="outline" onClick={() => setEditingPracticeIdx(null)}>完成</Button>
+                          <div className="flex gap-2">
+                            <Button size="sm" variant="outline" onClick={() => setEditingPracticeIdx(null)}>完成</Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                              onClick={() => {
+                                const next = (guidedPayload.practiceQuestions ?? []).filter((_, i) => i !== idx);
+                                applyGuidedUpdate({ practiceQuestions: next });
+                                setEditingPracticeIdx(null);
+                              }}
+                            >
+                              <Trash2 className="w-3 h-3 mr-1" />删除
+                            </Button>
+                          </div>
                         </div>
                       ) : (
                         <>
@@ -578,6 +621,17 @@ export function TaskPreviewEdit({
                           <div className="flex gap-2">
                             <Button size="sm" variant="ghost" onClick={() => setEditingPracticeIdx(idx)}>
                               <Pencil className="w-3 h-3 mr-1" />编辑
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                              onClick={() => {
+                                const next = (guidedPayload.practiceQuestions ?? []).filter((_, i) => i !== idx);
+                                applyGuidedUpdate({ practiceQuestions: next });
+                              }}
+                            >
+                              <Trash2 className="w-3 h-3 mr-1" />删除
                             </Button>
                             {q.imageUrl ? (
                               <Button size="sm" variant="ghost" onClick={() => { practiceImagePendingIdx.current = idx; practiceImageInputRef.current?.click(); }}>更换图片</Button>
@@ -657,7 +711,21 @@ export function TaskPreviewEdit({
                               applyGuidedUpdate({ exitTicketItems: next });
                             }}
                           />
-                          <Button size="sm" variant="outline" onClick={() => setEditingExitTicketIdx(null)}>完成</Button>
+                          <div className="flex gap-2">
+                            <Button size="sm" variant="outline" onClick={() => setEditingExitTicketIdx(null)}>完成</Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                              onClick={() => {
+                                const next = (guidedPayload.exitTicketItems ?? []).filter((_, i) => i !== idx);
+                                applyGuidedUpdate({ exitTicketItems: next });
+                                setEditingExitTicketIdx(null);
+                              }}
+                            >
+                              <Trash2 className="w-3 h-3 mr-1" />删除
+                            </Button>
+                          </div>
                         </div>
                       ) : (
                         <>
@@ -680,6 +748,17 @@ export function TaskPreviewEdit({
                           <div className="flex gap-2">
                             <Button size="sm" variant="ghost" onClick={() => setEditingExitTicketIdx(idx)}>
                               <Pencil className="w-3 h-3 mr-1" />编辑
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                              onClick={() => {
+                                const next = (guidedPayload.exitTicketItems ?? []).filter((_, i) => i !== idx);
+                                applyGuidedUpdate({ exitTicketItems: next });
+                              }}
+                            >
+                              <Trash2 className="w-3 h-3 mr-1" />删除
                             </Button>
                             {q.imageUrl ? (
                               <Button size="sm" variant="ghost" onClick={() => { exitTicketImagePendingIdx.current = idx; exitTicketImageInputRef.current?.click(); }}>更换图片</Button>

@@ -316,12 +316,12 @@ const StudentConsole: React.FC<StudentConsoleProps> = ({
   );
 
   // --- State (currentTaskIndex must be before emitEvent which uses it) ---
+  const taskIndexStorageKey = `currentTaskIndex_${courseId || 'default'}`;
   const [currentTaskIndex, setCurrentTaskIndex] = useState(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('currentTaskIndex');
+    if (typeof window !== 'undefined' && courseId) {
+      const saved = localStorage.getItem(taskIndexStorageKey);
       if (saved !== null) {
         const index = parseInt(saved, 10);
-        // 确保索引在有效范围内
         if (!isNaN(index) && index >= 0 && index < plan.tasks.length) {
           return index;
         }
@@ -1616,7 +1616,7 @@ CRITICAL TASK COMPLETION PROTOCOL:
       const progressPct = Math.round(((currentTaskIndex + 1) / plan.tasks.length) * 100);
       reportProgress(progressPct, false, nextIndex);
       if (typeof window !== 'undefined') {
-        localStorage.setItem('currentTaskIndex', nextIndex.toString());
+        localStorage.setItem(taskIndexStorageKey, nextIndex.toString());
       }
       // 重置编辑计数（新任务开始）
       setEditCounts({ mindMap: 0, table: 0, text: 0, math: 0 });
@@ -1709,7 +1709,7 @@ CRITICAL: Output language must be 简体中文 only.
       const progressPct = Math.round(((prevIndex + 1) / plan.tasks.length) * 100);
       reportProgress(progressPct, false, prevIndex);
       if (typeof window !== 'undefined') {
-        localStorage.setItem('currentTaskIndex', prevIndex.toString());
+        localStorage.setItem(taskIndexStorageKey, prevIndex.toString());
       }
       setEditCounts({ mindMap: 0, table: 0, text: 0, math: 0 });
       setLastDoneClickTime(null);
@@ -1730,7 +1730,7 @@ CRITICAL: Output language must be 简体中文 only.
     const progressPct = Math.round(((targetIndex + 1) / plan.tasks.length) * 100);
     reportProgress(progressPct, false, targetIndex);
     if (typeof window !== 'undefined') {
-      localStorage.setItem('currentTaskIndex', targetIndex.toString());
+      localStorage.setItem(taskIndexStorageKey, targetIndex.toString());
     }
     setEditCounts({ mindMap: 0, table: 0, text: 0, math: 0 });
     setLastDoneClickTime(null);
@@ -2022,6 +2022,10 @@ CRITICAL: Output language must be 简体中文 only.
     }
     setShowReport(true);
     setExitData(null); // Reset to show loading screen
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('lastLearningCourseId');
+      localStorage.removeItem('lastLearningTimestamp');
+    }
 
     const sessionDurationSec = Math.round((Date.now() - sessionStartRef.current) / 1000);
     void trackProductEvent({
@@ -2101,7 +2105,7 @@ CRITICAL: Output language must be 简体中文 only.
     setCurrentTaskIndex(0);
     // 清除 localStorage 中的任务索引
     if (typeof window !== 'undefined') {
-      localStorage.removeItem('currentTaskIndex');
+      localStorage.removeItem(taskIndexStorageKey);
     }
     setMessages([]);
     setStudentLog([]);
@@ -2123,6 +2127,8 @@ CRITICAL: Output language must be 简体中文 only.
   const handleEndLearning = () => {
     // Close the current page/window
     if (typeof window !== 'undefined') {
+      localStorage.removeItem('lastLearningCourseId');
+      localStorage.removeItem('lastLearningTimestamp');
       window.close();
       // If window.close() doesn't work (e.g., tab wasn't opened by script), try to navigate away
       setTimeout(() => {

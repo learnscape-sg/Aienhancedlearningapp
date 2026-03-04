@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from './components/AuthContext';
 import { PublishedCoursesProvider } from './components/PublishedCoursesContext';
@@ -46,8 +46,11 @@ type AppState = 'login' | 'onboarding' | 'dashboard' | 'chapter' | 'quiz' | 'lea
 
 const TEACHER_SECTIONS = ['overview', 'course-design', 'courses', 'materials', 'classes', 'settings'];
 
+const LAST_LEARNING_TTL_MS = 24 * 60 * 60 * 1000;
+
 function AppContent() {
   const { user, loading, login } = useAuth();
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { i18n } = useTranslation();
   const forcedEntryId = (searchParams.get('entry') as EntryId | null) ?? null;
@@ -134,6 +137,25 @@ function AppContent() {
       }
     }
   }, [user?.role, activeSection, searchParams, setSearchParams]);
+
+  // Restore last learning session for students (within 24h); skip if onboarding
+  useEffect(() => {
+    if (!user || user.role !== 'student') return;
+    const needsOnboarding = !user.grade && (!user.interests || user.interests.length === 0);
+    if (needsOnboarding) return;
+    const courseId = typeof window !== 'undefined' ? localStorage.getItem('lastLearningCourseId') : null;
+    const ts = typeof window !== 'undefined' ? localStorage.getItem('lastLearningTimestamp') : null;
+    if (!courseId?.trim()) return;
+    const age = ts ? Date.now() - parseInt(ts, 10) : Infinity;
+    if (age > LAST_LEARNING_TTL_MS || age < 0) {
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('lastLearningCourseId');
+        localStorage.removeItem('lastLearningTimestamp');
+      }
+      return;
+    }
+    navigate(`/course/${courseId}`, { replace: true });
+  }, [user?.id, user?.role, user?.grade, user?.interests, navigate]);
 
   // Update app state based on user status
   useEffect(() => {

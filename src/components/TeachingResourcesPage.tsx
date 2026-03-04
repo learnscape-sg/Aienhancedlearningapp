@@ -23,6 +23,7 @@ import {
   RefreshCw,
   ExternalLink,
   FileText,
+  Trash2,
 } from 'lucide-react';
 import {
   searchVideos,
@@ -1906,11 +1907,45 @@ export function TeachingResourcesPage() {
                             />
                           </div>
                         </div>
-                        <Button size="sm" variant="outline" className="w-fit" onClick={() => setEditingPracticeIndex(null)}>
-                          完成编辑
-                        </Button>
-                      </div>
-                    ) : (
+                        <div className="flex gap-2">
+                            <Button size="sm" variant="outline" className="w-fit" onClick={() => setEditingPracticeIndex(null)}>
+                              完成编辑
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                              onClick={() => {
+                                const next = practiceQuestions.filter((_, i) => i !== idx);
+                                setPracticeQuestions(next);
+                                setEditingPracticeIndex(null);
+                                setShowAnswers((prev) => {
+                                  const r: Record<number, boolean> = {};
+                                  practiceQuestions.forEach((_, i) => {
+                                    if (i !== idx) {
+                                      const newIdx = i < idx ? i : i - 1;
+                                      if (prev[i] !== undefined) r[newIdx] = prev[i];
+                                    }
+                                  });
+                                  return r;
+                                });
+                                setUserSelections((prev) => {
+                                  const r: Record<number, number> = {};
+                                  practiceQuestions.forEach((_, i) => {
+                                    if (i !== idx) {
+                                      const newIdx = i < idx ? i : i - 1;
+                                      if (prev[i] !== undefined) r[newIdx] = prev[i];
+                                    }
+                                  });
+                                  return r;
+                                });
+                              }}
+                            >
+                              <Trash2 className="w-3 h-3 mr-1" />删除
+                            </Button>
+                          </div>
+                          </div>
+                        ) : (
                       <>
                         <div
                           role="button"
@@ -2024,14 +2059,48 @@ export function TeachingResourcesPage() {
                             })}
                           </div>
                         ) : null}
-                        <button
-                          type="button"
-                          className="flex items-center gap-1.5 text-sm text-gray-900 hover:text-gray-700"
-                          onClick={(e) => { e.stopPropagation(); setShowAnswers((prev) => ({ ...prev, [idx]: !prev[idx] })); }}
-                        >
-                          <Eye className="h-4 w-4" />
-                          {showAnswers[idx] ? '隐藏答案' : '显示答案'}
-                        </button>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            className="flex items-center gap-1.5 text-sm text-gray-900 hover:text-gray-700"
+                            onClick={(e) => { e.stopPropagation(); setShowAnswers((prev) => ({ ...prev, [idx]: !prev[idx] })); }}
+                          >
+                            <Eye className="h-4 w-4" />
+                            {showAnswers[idx] ? '隐藏答案' : '显示答案'}
+                          </button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="text-destructive hover:text-destructive hover:bg-destructive/10 h-auto py-0 px-1"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const next = practiceQuestions.filter((_, i) => i !== idx);
+                              setPracticeQuestions(next);
+                              setShowAnswers((prev) => {
+                                const r: Record<number, boolean> = {};
+                                practiceQuestions.forEach((_, i) => {
+                                  if (i !== idx) {
+                                    const newIdx = i < idx ? i : i - 1;
+                                    if (prev[i] !== undefined) r[newIdx] = prev[i];
+                                  }
+                                });
+                                return r;
+                              });
+                              setUserSelections((prev) => {
+                                const r: Record<number, number> = {};
+                                practiceQuestions.forEach((_, i) => {
+                                  if (i !== idx) {
+                                    const newIdx = i < idx ? i : i - 1;
+                                    if (prev[i] !== undefined) r[newIdx] = prev[i];
+                                  }
+                                });
+                                return r;
+                              });
+                            }}
+                          >
+                            <Trash2 className="w-3 h-3 mr-1" />删除
+                          </Button>
+                        </div>
                         {showAnswers[idx] && (
                           <div className="mt-3 rounded-lg bg-green-50 p-3 text-sm space-y-2">
                             <div>
@@ -2179,9 +2248,33 @@ export function TeachingResourcesPage() {
                                 placeholder="参考答案"
                               />
                             </div>
-                            <Button size="sm" variant="outline" className="w-fit" onClick={() => setEditingExitTicketIndex(null)}>
-                              完成编辑
-                            </Button>
+                            <div className="flex gap-2">
+                              <Button size="sm" variant="outline" className="w-fit" onClick={() => setEditingExitTicketIndex(null)}>
+                                完成编辑
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                                onClick={() => {
+                                  const next = exitTicketQuestions.filter((_, i) => i !== idx);
+                                  setExitTicketQuestions(next);
+                                  setEditingExitTicketIndex(null);
+                                  setShowExitAnswers((prev) => {
+                                    const r: Record<number, boolean> = {};
+                                    exitTicketQuestions.forEach((_, i) => {
+                                      if (i !== idx) {
+                                        const newIdx = i < idx ? i : i - 1;
+                                        if (prev[i] !== undefined) r[newIdx] = prev[i];
+                                      }
+                                    });
+                                    return r;
+                                  });
+                                }}
+                              >
+                                <Trash2 className="w-3 h-3 mr-1" />删除
+                              </Button>
+                            </div>
                           </div>
                         ) : (
                           <>
@@ -2228,14 +2321,38 @@ export function TeachingResourcesPage() {
                                 添加题目配图
                               </Button>
                             )}
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-auto py-0 text-xs"
-                              onClick={(e) => { e.stopPropagation(); setShowExitAnswers((prev) => ({ ...prev, [idx]: !prev[idx] })); }}
-                            >
-                              {showExitAnswers[idx] ? '隐藏答案' : '显示答案'}
-                            </Button>
+                            <div className="flex items-center gap-2">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-auto py-0 text-xs"
+                                onClick={(e) => { e.stopPropagation(); setShowExitAnswers((prev) => ({ ...prev, [idx]: !prev[idx] })); }}
+                              >
+                                {showExitAnswers[idx] ? '隐藏答案' : '显示答案'}
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="text-destructive hover:text-destructive hover:bg-destructive/10 h-auto py-0 px-1 text-xs"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  const next = exitTicketQuestions.filter((_, i) => i !== idx);
+                                  setExitTicketQuestions(next);
+                                  setShowExitAnswers((prev) => {
+                                    const r: Record<number, boolean> = {};
+                                    exitTicketQuestions.forEach((_, i) => {
+                                      if (i !== idx) {
+                                        const newIdx = i < idx ? i : i - 1;
+                                        if (prev[i] !== undefined) r[newIdx] = prev[i];
+                                      }
+                                    });
+                                    return r;
+                                  });
+                                }}
+                              >
+                                <Trash2 className="w-3 h-3 mr-1" />删除
+                              </Button>
+                            </div>
                             {showExitAnswers[idx] && (
                               <div className="mt-2">
                                 <label className="text-sm font-medium text-gray-700">参考答案</label>
