@@ -516,6 +516,7 @@ const StudentConsole: React.FC<StudentConsoleProps> = ({
   // Autoplay unlock (browsers block audio.play() before first user gesture)
   const [hasUserInteracted, setHasUserInteracted] = useState(false);
   const pendingAutoSpeakRef = useRef<string | null>(null);
+  const voiceReleaseHandledRef = useRef(false);
 
   useEffect(() => {
     const unlock = () => setHasUserInteracted(true);
@@ -3823,16 +3824,21 @@ CRITICAL: Output language must be 简体中文 only.
                  onPointerDown={(event) => {
                    event.preventDefault();
                    event.currentTarget.setPointerCapture(event.pointerId);
+                   voiceReleaseHandledRef.current = false;
                    if (isProcessingSpeech || isTyping) return;
                    if (!isRecording) startRecording();
                  }}
                  onPointerUp={(event) => {
                    event.preventDefault();
+                   if (voiceReleaseHandledRef.current) return;
+                   voiceReleaseHandledRef.current = true;
                    if (isRecording) stopRecording();
                  }}
                  onPointerLeave={(event) => {
                    event.preventDefault();
+                   if (voiceReleaseHandledRef.current) return;
                    if (!isRecording) return;
+                   voiceReleaseHandledRef.current = true;
                    const el = event.currentTarget as HTMLElement;
                    const rect = el.getBoundingClientRect();
                    const margin = 24;
@@ -3843,6 +3849,7 @@ CRITICAL: Output language must be 简体中文 only.
                      clientY < rect.top - margin ||
                      clientY > rect.bottom + margin;
                    if (outside) cancelRecording();
+                   else stopRecording();
                  }}
                  onPointerCancel={(event) => {
                    event.preventDefault();
