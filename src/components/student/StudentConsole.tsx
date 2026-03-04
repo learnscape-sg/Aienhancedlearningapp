@@ -3822,6 +3822,7 @@ CRITICAL: Output language must be 简体中文 only.
                <button
                  onPointerDown={(event) => {
                    event.preventDefault();
+                   event.currentTarget.setPointerCapture(event.pointerId);
                    if (isProcessingSpeech || isTyping) return;
                    if (!isRecording) startRecording();
                  }}
@@ -3848,7 +3849,8 @@ CRITICAL: Output language must be 简体中文 only.
                    if (isRecording) cancelRecording();
                  }}
                  disabled={!isRecording && (isProcessingSpeech || isTyping)}
-                 className={`flex-1 h-10 rounded-full border transition-all text-sm [touch-action:manipulation] ${
+                 style={{ touchAction: 'none', userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none' }}
+                 className={`flex-1 h-10 rounded-full border transition-all text-sm ${
                    isRecording
                      ? 'bg-red-500 border-red-500 text-white animate-pulse'
                      : 'bg-white border-slate-300 text-slate-700 hover:bg-slate-50'
