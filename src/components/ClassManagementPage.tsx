@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 
 function parseNameIdentifierLines(text: string): Array<{ name: string; identifier: string }> {
@@ -37,7 +37,8 @@ import {
   addExistingClassForTeacher,
   createClass,
   getClass,
-  addStudentToClassByEmail,
+  searchStudents,
+  addStudentToClass,
   teacherBatchCreateStudents,
   removeStudentFromClass,
   deleteClass,
@@ -90,7 +91,10 @@ export function ClassManagementPage() {
   const [addExistingError, setAddExistingError] = useState('');
 
   const [addStudentOpen, setAddStudentOpen] = useState(false);
-  const [addStudentEmail, setAddStudentEmail] = useState('');
+  const [addStudentSearchQuery, setAddStudentSearchQuery] = useState('');
+  const [addStudentSearchResults, setAddStudentSearchResults] = useState<Student[]>([]);
+  const [addStudentSearching, setAddStudentSearching] = useState(false);
+  const [addStudentSelected, setAddStudentSelected] = useState<Student | null>(null);
   const [addingStudent, setAddingStudent] = useState(false);
   const [addStudentError, setAddStudentError] = useState('');
   const [bulkCreateOpen, setBulkCreateOpen] = useState(false);
@@ -186,6 +190,31 @@ export function ClassManagementPage() {
     }
   }, [selectedClassId, user?.id, detailTab]);
 
+  const addStudentSearchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (!addStudentOpen) return;
+    const q = addStudentSearchQuery.trim();
+    if (!q) {
+      setAddStudentSearchResults([]);
+      return;
+    }
+    if (addStudentSearchTimerRef.current) clearTimeout(addStudentSearchTimerRef.current);
+    addStudentSearchTimerRef.current = setTimeout(async () => {
+      setAddStudentSearching(true);
+      try {
+        const { students } = await searchStudents(q);
+        setAddStudentSearchResults(students ?? []);
+      } catch {
+        setAddStudentSearchResults([]);
+      } finally {
+        setAddStudentSearching(false);
+      }
+    }, 300);
+    return () => {
+      if (addStudentSearchTimerRef.current) clearTimeout(addStudentSearchTimerRef.current);
+    };
+  }, [addStudentOpen, addStudentSearchQuery]);
+
   const handleCreateClass = async () => {
     if (!user?.id || !newClassName.trim()) return;
     setCreating(true);
@@ -204,13 +233,20 @@ export function ClassManagementPage() {
   };
 
   const handleAddStudent = async () => {
-    if (!selectedClassId || !addStudentEmail.trim()) return;
+    if (!selectedClassId) return;
+    const toAdd = addStudentSelected;
+    if (!toAdd?.id) {
+      setAddStudentError('请先搜索并选择要添加的学生');
+      return;
+    }
     setAddingStudent(true);
     setAddStudentError('');
     try {
-      await addStudentToClassByEmail(selectedClassId, addStudentEmail.trim());
+      await addStudentToClass(selectedClassId, { studentId: toAdd.id });
       setAddStudentOpen(false);
-      setAddStudentEmail('');
+      setAddStudentSearchQuery('');
+      setAddStudentSearchResults([]);
+      setAddStudentSelected(null);
       if (selectedClassId) {
         const res = await getClass(selectedClassId);
         setClassDetail({
@@ -222,9 +258,7 @@ export function ClassManagementPage() {
       }
       loadClasses();
     } catch (err) {
-      setAddStudentError(
-        err instanceof Error ? err.message : '添加失败，请确认学生已注册为学生账号'
-      );
+      setAddStudentError(err instanceof Error ? err.message : '添加失败');
     } finally {
       setAddingStudent(false);
     }
@@ -841,25 +875,77 @@ export function ClassManagementPage() {
       </Dialog>
 
       {/* Add Student Dialog */}
-      <Dialog open={addStudentOpen} onOpenChange={setAddStudentOpen}>
+      <Dialog
+        open={addStudentOpen}
+        onOpenChange={(open) => {
+          setAddStudentOpen(open);
+          if (!open) {
+            setAddStudentSearchQuery('');
+            setAddStudentSearchResults([]);
+            setAddStudentSelected(null);
+            setAddStudentError('');
+          }
+        }}
+      >
         <DialogContent>
           <DialogHeader>
             <DialogTitle>添加学生</DialogTitle>
             <DialogDescription>
-              输入学生注册时使用的邮箱，系统将查找该学生并加入班级
+              输入邮箱、手机号、账号或学生姓名进行搜索，选择学生后加入班级
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label htmlFor="student-email">学生邮箱</Label>
-              <Input
-                id="student-email"
-                type="email"
-                placeholder="student@example.com"
-                value={addStudentEmail}
-                onChange={(e) => setAddStudentEmail(e.target.value)}
-              />
+              <Label htmlFor="student-search">搜索学生</Label>
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Input
+                  id="student-search"
+                  type="text"
+                  placeholder="邮箱 / 手机号 / 账号 / 学生姓名"
+                  className="pl-9"
+                  value={addStudentSearchQuery}
+                  onChange={(e) => {
+                    setAddStudentSearchQuery(e.target.value);
+                    setAddStudentSelected(null);
+                  }}
+                />
+              </div>
             </div>
+            {addStudentSearching && (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                搜索中...
+              </div>
+            )}
+            {addStudentSearchQuery.trim() && !addStudentSearching && (
+              <div className="max-h-48 overflow-y-auto rounded-md border border-slate-200 divide-y">
+                {addStudentSearchResults.length === 0 ? (
+                  <p className="py-4 text-center text-sm text-muted-foreground">未找到匹配的学生</p>
+                ) : (
+                  addStudentSearchResults.map((s) => (
+                    <button
+                      key={s.id}
+                      type="button"
+                      className={`w-full flex items-center gap-3 px-3 py-2 text-left hover:bg-slate-50 ${
+                        addStudentSelected?.id === s.id ? 'bg-blue-50 border-l-2 border-l-blue-500' : ''
+                      }`}
+                      onClick={() => setAddStudentSelected(s)}
+                    >
+                      <Avatar className="h-8 w-8">
+                        <AvatarFallback className="bg-blue-600 text-white text-xs">
+                          {(s.name ?? s.email ?? '?').charAt(0)}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium truncate">{s.name || '未设置姓名'}</p>
+                        <p className="text-xs text-muted-foreground truncate">{s.email || s.id}</p>
+                      </div>
+                    </button>
+                  ))
+                )}
+              </div>
+            )}
             {addStudentError && (
               <p className="text-sm text-destructive">{addStudentError}</p>
             )}
@@ -868,7 +954,10 @@ export function ClassManagementPage() {
             <Button variant="outline" onClick={() => setAddStudentOpen(false)}>
               取消
             </Button>
-            <Button onClick={handleAddStudent} disabled={!addStudentEmail.trim() || addingStudent}>
+            <Button
+              onClick={handleAddStudent}
+              disabled={!addStudentSelected?.id || addingStudent}
+            >
               {addingStudent && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
               添加
             </Button>

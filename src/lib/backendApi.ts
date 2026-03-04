@@ -461,6 +461,17 @@ export async function getClass(classId: string): Promise<{
   return apiCall(`/api/classes/${encodeURIComponent(classId)}`, { method: 'GET' });
 }
 
+/** Search students by email, phone, account, or name (teacher only) */
+export async function searchStudents(q: string): Promise<{
+  students: { id: string; name?: string; email?: string }[];
+}> {
+  const params = new URLSearchParams({ q: q.trim() });
+  return apiCall<{ students: { id: string; name?: string; email?: string }[] }>(
+    `/api/teacher/students/search?${params}`,
+    { method: 'GET' }
+  );
+}
+
 export async function addStudentToClassByEmail(
   classId: string,
   email: string
@@ -468,6 +479,17 @@ export async function addStudentToClassByEmail(
   return apiCall(`/api/classes/${encodeURIComponent(classId)}/students`, {
     method: 'POST',
     body: JSON.stringify({ email }),
+  });
+}
+
+/** Add student by studentId (from search) or email */
+export async function addStudentToClass(
+  classId: string,
+  options: { email?: string; studentId?: string }
+): Promise<{ success: boolean; studentId: string }> {
+  return apiCall(`/api/classes/${encodeURIComponent(classId)}/students`, {
+    method: 'POST',
+    body: JSON.stringify(options),
   });
 }
 
@@ -1918,6 +1940,45 @@ export async function resolveAdminMarketPolicy(
     method: 'POST',
     headers: { Authorization: `Bearer ${accessToken}` },
     body: JSON.stringify(payload),
+  });
+}
+
+export interface AdminUserProfile {
+  id: string;
+  name: string | null;
+  email: string | null;
+  userType: string | null;
+  tenantId: string | null;
+  marketCode: string | null;
+  language: string | null;
+  preferences: Record<string, unknown> | null;
+  createdAt: string | null;
+  updatedAt: string | null;
+}
+
+export async function listAdminUsers(
+  params: {
+    tenantId?: string;
+    userType?: string;
+    marketCode?: string;
+    language?: string;
+    createdFrom?: string;
+    createdTo?: string;
+    limit?: number;
+  },
+  accessToken: string
+): Promise<{ users: AdminUserProfile[] }> {
+  const qs = new URLSearchParams();
+  if (params.tenantId) qs.set('tenantId', params.tenantId);
+  if (params.userType) qs.set('userType', params.userType);
+  if (params.marketCode) qs.set('marketCode', params.marketCode);
+  if (params.language) qs.set('language', params.language);
+  if (params.createdFrom) qs.set('createdFrom', params.createdFrom);
+  if (params.createdTo) qs.set('createdTo', params.createdTo);
+  if (params.limit != null) qs.set('limit', String(params.limit));
+  return apiCall<{ users: AdminUserProfile[] }>(`/api/admin/users${qs.toString() ? `?${qs}` : ''}`, {
+    method: 'GET',
+    headers: { Authorization: `Bearer ${accessToken}` },
   });
 }
 

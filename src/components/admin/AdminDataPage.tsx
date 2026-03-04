@@ -35,9 +35,11 @@ import {
   lookupAdminClasses,
   batchCreateAccounts,
   importAdminAccountsByFile,
+  listAdminUsers,
   type AdminTenantRow,
   type BatchCreateAccountsResult,
   type AdminImportRowResult,
+  type AdminUserProfile,
 } from '../../lib/backendApi';
 import { AdminTopNav } from './AdminTopNav';
 
@@ -82,6 +84,16 @@ export function AdminDataPage() {
     summary: { created: number; updated: number; skipped: number; errors: number };
     results: BatchCreateAccountsResult[];
   } | null>(null);
+
+  const [viewTenantId, setViewTenantId] = useState('');
+  const [viewUserType, setViewUserType] = useState('');
+  const [viewMarketCode, setViewMarketCode] = useState('');
+  const [viewLanguage, setViewLanguage] = useState('');
+  const [viewCreatedFrom, setViewCreatedFrom] = useState('');
+  const [viewCreatedTo, setViewCreatedTo] = useState('');
+  const [viewUsers, setViewUsers] = useState<AdminUserProfile[]>([]);
+  const [viewUsersLoading, setViewUsersLoading] = useState(false);
+  const [viewUsersError, setViewUsersError] = useState('');
 
   const getAccessToken = async () => {
     const { data: sessionData } = await supabase.auth.getSession();
@@ -379,10 +391,171 @@ export function AdminDataPage() {
     }
   };
 
+  const handleLoadViewUsers = async () => {
+    setViewUsersLoading(true);
+    setViewUsersError('');
+    try {
+      const token = await getAccessToken();
+      if (!token) return;
+      const { users } = await listAdminUsers(
+        {
+          tenantId: viewTenantId.trim() || undefined,
+          userType: viewUserType.trim() || undefined,
+          marketCode: viewMarketCode.trim() || undefined,
+          language: viewLanguage.trim() || undefined,
+          createdFrom: viewCreatedFrom.trim() || undefined,
+          createdTo: viewCreatedTo.trim() || undefined,
+          limit: 200,
+        },
+        token
+      );
+      setViewUsers(users ?? []);
+    } catch (err) {
+      setViewUsersError(err instanceof Error ? err.message : '加载失败');
+      setViewUsers([]);
+    } finally {
+      setViewUsersLoading(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-slate-50 p-6">
       <div className="max-w-4xl mx-auto space-y-4">
         <AdminTopNav />
+        <div className="rounded-xl border bg-white p-6">
+          <h2 className="text-lg font-semibold text-slate-900 mb-4">查看用户</h2>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+            <div>
+              <label className="block text-sm font-medium text-slate-600 mb-1">Tenant</label>
+              <select
+                value={viewTenantId}
+                onChange={(e) => setViewTenantId(e.target.value)}
+                className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+              >
+                <option value="">-- 全部 --</option>
+                <option value="__none__">无</option>
+                {tenants.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.market_code ?? 'N/A'} / {t.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-600 mb-1">角色 (Role)</label>
+              <select
+                value={viewUserType}
+                onChange={(e) => setViewUserType(e.target.value)}
+                className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+              >
+                <option value="">-- 全部 --</option>
+                <option value="teacher">教师</option>
+                <option value="student">学生</option>
+                <option value="parent">家长</option>
+                <option value="admin">管理员</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-600 mb-1">Market</label>
+              <select
+                value={viewMarketCode}
+                onChange={(e) => setViewMarketCode(e.target.value)}
+                className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+              >
+                <option value="">-- 全部 --</option>
+                <option value="CN">CN</option>
+                <option value="SG">SG</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-600 mb-1">Language</label>
+              <select
+                value={viewLanguage}
+                onChange={(e) => setViewLanguage(e.target.value)}
+                className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+              >
+                <option value="">-- 全部 --</option>
+                <option value="zh">zh</option>
+                <option value="en">en</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-600 mb-1">创建时间 From</label>
+              <input
+                type="date"
+                value={viewCreatedFrom}
+                onChange={(e) => setViewCreatedFrom(e.target.value)}
+                className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-600 mb-1">创建时间 To</label>
+              <input
+                type="date"
+                value={viewCreatedTo}
+                onChange={(e) => setViewCreatedTo(e.target.value)}
+                className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+              />
+            </div>
+          </div>
+          <div className="flex gap-2 mb-4">
+            <button
+              type="button"
+              onClick={handleLoadViewUsers}
+              disabled={viewUsersLoading || loading}
+              className="rounded-md bg-slate-900 text-white px-4 py-2 text-sm font-medium disabled:opacity-60"
+            >
+              {viewUsersLoading ? '查询中...' : '查询'}
+            </button>
+          </div>
+          {viewUsersError && (
+            <p className="text-sm text-red-600 mb-4">{viewUsersError}</p>
+          )}
+          <div className="overflow-x-auto">
+            {viewUsers.length === 0 && !viewUsersLoading ? (
+              <p className="text-sm text-slate-500 py-8 text-center">选择筛选条件后点击查询，或暂无匹配用户</p>
+            ) : (
+              <div className="space-y-3">
+                {viewUsers.map((u) => (
+                  <div
+                    key={u.id}
+                    className="rounded-lg border border-slate-200 p-4 text-sm space-y-2"
+                  >
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2 font-medium">
+                      <span className="text-slate-600">ID</span>
+                      <span className="col-span-1 md:col-span-3 font-mono text-xs break-all">{u.id}</span>
+                      <span className="text-slate-600">姓名</span>
+                      <span>{u.name ?? '—'}</span>
+                      <span className="text-slate-600">邮箱/账号</span>
+                      <span className="break-all">{u.email ?? '—'}</span>
+                      <span className="text-slate-600">角色</span>
+                      <span>{u.userType ?? '—'}</span>
+                      <span className="text-slate-600">Tenant</span>
+                      <span className="break-all">{u.tenantId ?? '—'}</span>
+                      <span className="text-slate-600">Market</span>
+                      <span>{u.marketCode ?? '—'}</span>
+                      <span className="text-slate-600">Language</span>
+                      <span>{u.language ?? '—'}</span>
+                      <span className="text-slate-600">创建时间</span>
+                      <span>{u.createdAt ? new Date(u.createdAt).toLocaleString() : '—'}</span>
+                      {u.preferences && Object.keys(u.preferences).length > 0 && (
+                        <>
+                          <span className="text-slate-600">Preferences</span>
+                          <span className="col-span-1 md:col-span-3">
+                            <pre className="text-xs bg-slate-50 p-2 rounded overflow-x-auto max-h-24 overflow-y-auto">
+                              {JSON.stringify(u.preferences, null, 2)}
+                            </pre>
+                          </span>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
         <div className="rounded-xl border bg-white p-6">
           <h2 className="text-lg font-semibold text-slate-900">Users · 批量生成账号</h2>
           <p className="text-sm text-slate-500 mt-1">

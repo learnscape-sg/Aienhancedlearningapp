@@ -3233,10 +3233,9 @@ CRITICAL: Output language must be 简体中文 only.
                         <div className="h-8 bg-slate-100 border-b border-slate-200 flex items-center justify-between px-4 text-[10px] text-slate-500 shrink-0">
                             <span className="font-bold flex items-center gap-1"><Sparkles size={12}/> 交互式实验室</span>
                             <div className="flex items-center gap-2">
-                                {assetData.trim().startsWith('http') ? 
-                                   <span className="text-cyan-600 flex items-center gap-1"><Globe size={12}/> PhET 来源</span> : 
-                                   <span className="text-purple-600 flex items-center gap-1"><Brain size={12}/> AI 生成</span>
-                                }
+                                {assetData.trim().startsWith('http') && (
+                                   <span className="text-cyan-600 flex items-center gap-1"><Globe size={12}/> PhET 来源</span>
+                                )}
                                 <button
                                     onClick={() => setIsFullscreenExperiment(true)}
                                     className="p-1.5 rounded-lg hover:bg-slate-200 transition-colors text-slate-600 hover:text-slate-800"
@@ -3285,9 +3284,6 @@ CRITICAL: Output language must be 简体中文 only.
                            )}
                            <div className="relative flex-1 min-h-[120px] flex items-center justify-center bg-black/5">
                                <img src={assetData} alt="AI Generated" className="max-w-full max-h-[70vh] object-contain" />
-                           </div>
-                           <div className="bg-white/90 backdrop-blur-sm p-2 text-[10px] text-slate-500 px-4 border-t border-slate-100">
-                               由 Gemini Imagen 3 生成
                            </div>
                        </div>
                     )}
@@ -3886,10 +3882,9 @@ CRITICAL: Output language must be 简体中文 only.
         {assetData && (
           <div className="w-full h-full flex flex-col">
             <div className="h-8 bg-slate-100 border-b border-slate-200 flex items-center justify-between px-4 text-[10px] text-slate-500 shrink-0">
-              {assetData.trim().startsWith('http') ? 
-                 <span className="text-cyan-600 flex items-center gap-1"><Globe size={12}/> PhET 来源</span> : 
-                 <span className="text-purple-600 flex items-center gap-1"><Brain size={12}/> AI 生成</span>
-              }
+              {assetData.trim().startsWith('http') && (
+                 <span className="text-cyan-600 flex items-center gap-1"><Globe size={12}/> PhET 来源</span>
+              )}
             </div>
             <iframe 
               src={assetData.trim().startsWith('http') ? assetData : undefined}
