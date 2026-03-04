@@ -298,10 +298,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const resetPasswordForEmail = async (email: string) => {
-    const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${typeof window !== 'undefined' ? window.location.origin : ''}/reset-password`,
-    });
-    if (error) throw new Error(error.message || '发送重置邮件失败');
+    const { requestPasswordReset } = await import('@/lib/backendApi');
+    await requestPasswordReset(email);
   };
 
   return (

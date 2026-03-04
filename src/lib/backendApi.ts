@@ -152,6 +152,26 @@ export async function resolveLogin(identifier: string): Promise<{ email: string 
   return { email: json.email };
 }
 
+/**
+ * 请求重置密码邮件。仅对已注册邮箱发送，未注册返回错误。
+ */
+export async function requestPasswordReset(email: string): Promise<void> {
+  const base = getBaseUrl();
+  const url = `${base}/api/auth/forgot-password`;
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...getExperienceHeaders(),
+    },
+    body: JSON.stringify({ email: email.trim().toLowerCase() }),
+  });
+  const json = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(json.error || '发送失败，请重试');
+  }
+}
+
 export async function generateCurriculumDesign(
   subject: string,
   grade: string,
