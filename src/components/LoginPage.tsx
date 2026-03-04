@@ -4,7 +4,6 @@ import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { useAuth } from './AuthContext';
 import { resolveRuntimeExperienceConfig } from '@/lib/entryDetector';
 import { resolveLogin } from '@/lib/backendApi';
@@ -18,11 +17,9 @@ export function LoginPage({ onSuccess }: LoginPageProps) {
   const [searchParams] = useSearchParams();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [name, setName] = useState('');
-  const [role, setRole] = useState<'student' | 'teacher' | 'parent'>('student');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
-  const { login, register } = useAuth();
+  const { login } = useAuth();
   const experience = resolveRuntimeExperienceConfig();
 
   const redirectTo = searchParams.get('redirect');
@@ -52,21 +49,6 @@ export function LoginPage({ onSuccess }: LoginPageProps) {
       setError(isEmailNotConfirmed
         ? '邮箱尚未验证，请先点击注册邮件中的确认链接，或联系管理员确认账号。'
         : msg);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleRegister = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsLoading(true);
-    setError('');
-    try {
-      await register(email, password, name, role);
-      handlePostAuth();
-    } catch (error: any) {
-      console.error('Registration failed:', error);
-      setError(error.message || 'Registration failed');
     } finally {
       setIsLoading(false);
     }
@@ -113,7 +95,7 @@ export function LoginPage({ onSuccess }: LoginPageProps) {
           </div>
         </div>
 
-        {/* Right side - Login/Register Form */}
+        {/* Right side - Login Form */}
         <div className="flex items-center justify-center p-8 bg-white">
           <div className="w-full max-w-md">
             <Card className="w-full shadow-xl border-gray-200">
@@ -123,8 +105,8 @@ export function LoginPage({ onSuccess }: LoginPageProps) {
               </CardTitle>
               <CardDescription>
                 {experience.entry.defaultLanguageSpace === 'zh'
-                  ? '登录或注册开始您的学习之旅'
-                  : 'Sign in or create an account to start learning'}
+                  ? '登录开始您的学习之旅'
+                  : 'Sign in to start learning'}
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -134,14 +116,7 @@ export function LoginPage({ onSuccess }: LoginPageProps) {
                 </div>
               )}
 
-              <Tabs defaultValue="login" className="w-full">
-                <TabsList className="grid w-full grid-cols-2 bg-gray-100 p-1 rounded-lg">
-                  <TabsTrigger value="login" className="data-[state=active]:bg-white data-[state=active]:text-[#1a73e8] data-[state=active]:shadow-sm">登录</TabsTrigger>
-                  <TabsTrigger value="register" className="data-[state=active]:bg-white data-[state=active]:text-[#1a73e8] data-[state=active]:shadow-sm">注册</TabsTrigger>
-                </TabsList>
-
-                <TabsContent value="login">
-                  <form onSubmit={handleLogin} className="space-y-4">
+              <form onSubmit={handleLogin} className="space-y-4">
                     <div className="space-y-2">
                       <Label htmlFor="email">邮箱 / 手机号 / 账号</Label>
                       <Input
@@ -180,68 +155,7 @@ export function LoginPage({ onSuccess }: LoginPageProps) {
                     >
                       {isLoading ? '登录中...' : '登录'}
                     </Button>
-                  </form>
-                </TabsContent>
-
-                <TabsContent value="register">
-                  <form onSubmit={handleRegister} className="space-y-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="name">姓名</Label>
-                      <Input
-                        id="name"
-                        type="text"
-                        placeholder="输入您的姓名"
-                        value={name}
-                        onChange={(e) => setName(e.target.value)}
-                        required
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="register-email">邮箱</Label>
-                      <Input
-                        id="register-email"
-                        type="email"
-                        placeholder="输入您的邮箱"
-                        value={email}
-                        onChange={(e) => setEmail(e.target.value)}
-                        required
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="register-password">密码</Label>
-                      <Input
-                        id="register-password"
-                        type="password"
-                        placeholder="创建密码"
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                        required
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="role">角色</Label>
-                      <select
-                        id="role"
-                        value={role}
-                        onChange={(e) => setRole(e.target.value as 'student' | 'teacher' | 'parent')}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#1a73e8] focus:border-[#1a73e8]"
-                      >
-                        <option value="student">学生</option>
-                        <option value="teacher">教师</option>
-                        <option value="parent">家长</option>
-                      </select>
-                    </div>
-                    <Button 
-                      type="submit" 
-                      variant="default"
-                      className="w-full !bg-[#1a73e8] hover:!bg-[#1557b0] !text-white"
-                      disabled={isLoading}
-                    >
-                      {isLoading ? '注册中...' : '注册'}
-                    </Button>
-                  </form>
-                </TabsContent>
-              </Tabs>
+              </form>
             </CardContent>
           </Card>
           </div>
