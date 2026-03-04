@@ -3779,14 +3779,24 @@ CRITICAL: Output language must be 简体中文 only.
                  }}
                  onPointerLeave={(event) => {
                    event.preventDefault();
-                   if (isRecording) cancelRecording();
+                   if (!isRecording) return;
+                   const el = event.currentTarget as HTMLElement;
+                   const rect = el.getBoundingClientRect();
+                   const margin = 24;
+                   const { clientX, clientY } = event;
+                   const outside =
+                     clientX < rect.left - margin ||
+                     clientX > rect.right + margin ||
+                     clientY < rect.top - margin ||
+                     clientY > rect.bottom + margin;
+                   if (outside) cancelRecording();
                  }}
                  onPointerCancel={(event) => {
                    event.preventDefault();
                    if (isRecording) cancelRecording();
                  }}
-                 disabled={isProcessingSpeech || isTyping}
-                 className={`flex-1 h-10 rounded-full border transition-all text-sm ${
+                 disabled={!isRecording && (isProcessingSpeech || isTyping)}
+                 className={`flex-1 h-10 rounded-full border transition-all text-sm [touch-action:manipulation] ${
                    isRecording
                      ? 'bg-red-500 border-red-500 text-white animate-pulse'
                      : 'bg-white border-slate-300 text-slate-700 hover:bg-slate-50'

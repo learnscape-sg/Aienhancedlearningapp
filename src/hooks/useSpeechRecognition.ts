@@ -95,7 +95,7 @@ export function useSpeechRecognition(
     if (!SpeechRecognition) return null;
     const recognition = new SpeechRecognition();
     recognition.lang = language;
-    recognition.continuous = false;
+    recognition.continuous = true; // hold-to-talk: 持续监听直至用户松手调用 stop()
     recognition.interimResults = false;
     return recognition;
   };
@@ -120,8 +120,14 @@ export function useSpeechRecognition(
       };
 
       recognition.onresult = (event: SpeechRecognitionEvent) => {
-        const result = event.results?.[0]?.[0]?.transcript?.trim();
-        if (result) onResult?.(result);
+        const results = event.results;
+        if (!results?.length) return;
+        let full = '';
+        for (let i = 0; i < results.length; i++) {
+          const t = results[i]?.[0]?.transcript?.trim();
+          if (t) full += (full ? ' ' : '') + t;
+        }
+        if (full) onResult?.(full);
       };
 
       recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
@@ -135,7 +141,7 @@ export function useSpeechRecognition(
         setIsProcessing(false);
       };
 
-      setIsProcessing(true);
+      // 不提前 setisProcessing，避免按钮在 onstart 前被禁用导致 pointerup 无法触发
       recognition.start();
     } catch (err) {
       const errorObj = err instanceof Error ? err : new Error('语音识别启动失败');
@@ -236,26 +242,29 @@ export function useSpeechRecognition(
   const stopRecording = useCallback(async () => {
     const mode = getSpeechMode();
     if (mode === 'browser') {
-      if (recognitionRef.current && isRecording) recognitionRef.current.stop();
+      if (recognitionRef.current) {
+        recognitionRef.current.stop();
+        // 不依赖 isRecording，解决 pointerup 早于 onstart 时的竞态
+      }
       return;
     }
-    if (mediaRecorderRef.current && isRecording) {
+    if (mediaRecorderRef.current) {
       mediaRecorderRef.current.stop();
       setIsRecording(false);
     }
-  }, [isRecording]);
+  }, []);
 
   const cancelRecording = useCallback(() => {
     const mode = getSpeechMode();
     if (mode === 'browser') {
-      if (recognitionRef.current && isRecording) recognitionRef.current.abort();
+      if (recognitionRef.current) recognitionRef.current.abort();
       setIsRecording(false);
       setIsProcessing(false);
       setError(null);
       return;
     }
 
-    if (mediaRecorderRef.current && isRecording) {
+    if (mediaRecorderRef.current) {
       mediaRecorderRef.current.stop();
       setIsRecording(false);
     }
@@ -267,7 +276,7 @@ export function useSpeechRecognition(
 
     audioChunksRef.current = [];
     setError(null);
-  }, [isRecording]);
+  }, []);
 
   return {
     isRecording,
