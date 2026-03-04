@@ -410,8 +410,37 @@ const StudentConsole: React.FC<StudentConsoleProps> = ({
   
   // Math Editor State
   const [mathEditorContent, setMathEditorContent] = useState<string>('');
-  const [guidedStep, setGuidedStep] = useState(1);
-  const [maxStepReached, setMaxStepReached] = useState(1);
+  const getGuidedProgressKey = (idx: number) => `guidedProgress_${courseId || 'default'}_${idx}`;
+  const [guidedStep, setGuidedStep] = useState(() => {
+    if (typeof window !== 'undefined' && courseId) {
+      const savedIdx = localStorage.getItem(taskIndexStorageKey);
+      const idx = savedIdx !== null && !isNaN(parseInt(savedIdx, 10)) ? parseInt(savedIdx, 10) : 0;
+      const saved = localStorage.getItem(getGuidedProgressKey(idx));
+      if (saved) {
+        try {
+          const { step, max } = JSON.parse(saved);
+          if (typeof step === 'number' && step >= 1 && step <= 5 && typeof max === 'number' && max >= 1 && max <= 5) {
+            return step;
+          }
+        } catch { /* ignore */ }
+      }
+    }
+    return 1;
+  });
+  const [maxStepReached, setMaxStepReached] = useState(() => {
+    if (typeof window !== 'undefined' && courseId) {
+      const savedIdx = localStorage.getItem(taskIndexStorageKey);
+      const idx = savedIdx !== null && !isNaN(parseInt(savedIdx, 10)) ? parseInt(savedIdx, 10) : 0;
+      const saved = localStorage.getItem(getGuidedProgressKey(idx));
+      if (saved) {
+        try {
+          const { max } = JSON.parse(saved);
+          if (typeof max === 'number' && max >= 1 && max <= 5) return max;
+        } catch { /* ignore */ }
+      }
+    }
+    return 1;
+  });
   const [keywordAnswers, setKeywordAnswers] = useState<Record<string, string>>({});
   const [practiceTextAnswers, setPracticeTextAnswers] = useState<Record<number, string>>({});
   const [practiceChoiceAnswers, setPracticeChoiceAnswers] = useState<Record<number, number>>({});
@@ -636,7 +665,14 @@ const StudentConsole: React.FC<StudentConsoleProps> = ({
       }
   };
 
+  const prevTaskIndexRef = useRef<number | null>(null);
   useEffect(() => {
+    if (prevTaskIndexRef.current === null) {
+      prevTaskIndexRef.current = currentTaskIndex;
+      return;
+    }
+    if (prevTaskIndexRef.current === currentTaskIndex) return;
+    prevTaskIndexRef.current = currentTaskIndex;
     setGuidedStep(1);
     setMaxStepReached(1);
     setKeywordAnswers({});
@@ -647,6 +683,13 @@ const StudentConsole: React.FC<StudentConsoleProps> = ({
     setExitTicketAnswers({});
     setShowExitTicketAnswer(false);
   }, [currentTaskIndex]);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined' && courseId && guidedStep >= 1 && guidedStep <= 5 && maxStepReached >= 1 && maxStepReached <= 5) {
+      const key = `guidedProgress_${courseId}_${currentTaskIndex}`;
+      localStorage.setItem(key, JSON.stringify({ step: guidedStep, max: maxStepReached }));
+    }
+  }, [currentTaskIndex, guidedStep, maxStepReached, courseId]);
 
   // --- Effects ---
 
@@ -2103,9 +2146,12 @@ CRITICAL: Output language must be 简体中文 only.
     setLearningLog('');
     setFinalMindMapCode(null);
     setCurrentTaskIndex(0);
-    // 清除 localStorage 中的任务索引
+    // 清除 localStorage 中的任务索引和步骤进度
     if (typeof window !== 'undefined') {
       localStorage.removeItem(taskIndexStorageKey);
+      for (let i = 0; i < plan.tasks.length; i++) {
+        localStorage.removeItem(`guidedProgress_${courseId}_${i}`);
+      }
     }
     setMessages([]);
     setStudentLog([]);
