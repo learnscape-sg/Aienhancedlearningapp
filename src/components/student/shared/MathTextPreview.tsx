@@ -8,11 +8,14 @@ import type { MarkdownComponentProps } from '@/utils/types';
 interface MathTextPreviewProps {
   text: string;
   className?: string;
+  /** 行内模式：根元素用 span，段落用 span，避免在 <p> 内嵌套块级元素 */
+  inline?: boolean;
 }
 
 export const MathTextPreview: React.FC<MathTextPreviewProps> = ({
   text,
   className = 'text-sm text-slate-700 leading-relaxed',
+  inline = false,
 }) => {
   const processedText = React.useMemo(() => {
     if (!text) return '';
@@ -22,34 +25,55 @@ export const MathTextPreview: React.FC<MathTextPreviewProps> = ({
       .join('\n\n');
   }, [text]);
 
+  const Root = inline ? 'span' : 'div';
+  const paragraphClass = 'text-slate-700 whitespace-pre-line' + (inline ? '' : ' mb-2 last:mb-0');
+
   return (
-    <div className={className}>
+    <Root className={className}>
       <ReactMarkdown
         remarkPlugins={[remarkMath, remarkGfm]}
         rehypePlugins={[rehypeKatex]}
         components={{
-          p: ({ ...props }: MarkdownComponentProps<'p'>) => (
-            <p className="mb-2 last:mb-0 text-slate-700 whitespace-pre-line" {...props} />
-          ),
-          h1: ({ ...props }: MarkdownComponentProps<'h1'>) => (
-            <h1 className="text-xl font-bold mb-2 text-slate-800" {...props} />
-          ),
-          h2: ({ ...props }: MarkdownComponentProps<'h2'>) => (
-            <h2 className="text-lg font-bold mb-2 text-slate-800" {...props} />
-          ),
-          h3: ({ ...props }: MarkdownComponentProps<'h3'>) => (
-            <h3 className="text-base font-bold mb-2 text-slate-800" {...props} />
-          ),
+          p: ({ ...props }: MarkdownComponentProps<'p'>) =>
+            inline ? (
+              <span className={paragraphClass} {...(props as React.HTMLAttributes<HTMLSpanElement>)} />
+            ) : (
+              <p className={paragraphClass} {...props} />
+            ),
+          h1: ({ ...props }: MarkdownComponentProps<'h1'>) =>
+            inline ? (
+              <span className="text-xl font-bold text-slate-800" {...(props as React.HTMLAttributes<HTMLSpanElement>)} />
+            ) : (
+              <h1 className="text-xl font-bold mb-2 text-slate-800" {...props} />
+            ),
+          h2: ({ ...props }: MarkdownComponentProps<'h2'>) =>
+            inline ? (
+              <span className="text-lg font-bold text-slate-800" {...(props as React.HTMLAttributes<HTMLSpanElement>)} />
+            ) : (
+              <h2 className="text-lg font-bold mb-2 text-slate-800" {...props} />
+            ),
+          h3: ({ ...props }: MarkdownComponentProps<'h3'>) =>
+            inline ? (
+              <span className="text-base font-bold text-slate-800" {...(props as React.HTMLAttributes<HTMLSpanElement>)} />
+            ) : (
+              <h3 className="text-base font-bold mb-2 text-slate-800" {...props} />
+            ),
           strong: ({ ...props }: MarkdownComponentProps<'strong'>) => (
             <strong className="font-semibold text-slate-800" {...props} />
           ),
           em: ({ ...props }: MarkdownComponentProps<'em'>) => <em className="italic" {...props} />,
-          ul: ({ ...props }: MarkdownComponentProps<'ul'>) => (
-            <ul className="list-disc list-inside mb-2 space-y-1 ml-4" {...props} />
-          ),
-          ol: ({ ...props }: MarkdownComponentProps<'ol'>) => (
-            <ol className="list-decimal list-inside mb-2 space-y-1 ml-4" {...props} />
-          ),
+          ul: ({ ...props }: MarkdownComponentProps<'ul'>) =>
+            inline ? (
+              <span className="list-disc list-inside ml-4" {...(props as React.HTMLAttributes<HTMLSpanElement>)} />
+            ) : (
+              <ul className="list-disc list-inside mb-2 space-y-1 ml-4" {...props} />
+            ),
+          ol: ({ ...props }: MarkdownComponentProps<'ol'>) =>
+            inline ? (
+              <span className="list-decimal list-inside ml-4" {...(props as React.HTMLAttributes<HTMLSpanElement>)} />
+            ) : (
+              <ol className="list-decimal list-inside mb-2 space-y-1 ml-4" {...props} />
+            ),
           li: ({ ...props }: MarkdownComponentProps<'li'>) => <li className="ml-2" {...props} />,
           code: ({ inline, ...props }: MarkdownComponentProps<'code'> & { inline?: boolean }) =>
             inline ? (
@@ -87,16 +111,22 @@ export const MathTextPreview: React.FC<MathTextPreviewProps> = ({
               {...props}
             />
           ),
-          blockquote: ({ ...props }: MarkdownComponentProps<'blockquote'>) => (
-            <blockquote
-              className="border-l-4 border-slate-300 pl-3 italic my-2 text-slate-600"
-              {...props}
-            />
-          ),
+          blockquote: ({ ...props }: MarkdownComponentProps<'blockquote'>) =>
+            inline ? (
+              <span
+                className="border-l-4 border-slate-300 pl-3 italic text-slate-600"
+                {...(props as React.HTMLAttributes<HTMLSpanElement>)}
+              />
+            ) : (
+              <blockquote
+                className="border-l-4 border-slate-300 pl-3 italic my-2 text-slate-600"
+                {...props}
+              />
+            ),
         }}
       >
         {processedText}
       </ReactMarkdown>
-    </div>
+    </Root>
   );
 };

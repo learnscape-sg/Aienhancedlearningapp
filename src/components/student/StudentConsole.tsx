@@ -2662,13 +2662,14 @@ CRITICAL: Output language must be 简体中文 only.
                       <MathTextPreview
                         text={guidedPayload?.learningObjective || currentTask.outputGoal || t('learnObjectivePlaceholder')}
                         className="inline [&_p]:inline [&_p]:mb-0"
+                        inline
                       />
                     </p>
                     {guidedPayload?.whyItMatters?.meaning_anchor && (
-                      <p><strong>{t('whyLearnThis')}</strong> <MathTextPreview text={guidedPayload.whyItMatters.meaning_anchor} className="inline [&_p]:inline [&_p]:mb-0" /></p>
+                      <p><strong>{t('whyLearnThis')}</strong> <MathTextPreview text={guidedPayload.whyItMatters.meaning_anchor} className="inline [&_p]:inline [&_p]:mb-0" inline /></p>
                     )}
                     {guidedPayload?.whyItMatters?.advance_organizer && (
-                      <p><strong>{t('whatToLearn')}</strong> <MathTextPreview text={guidedPayload.whyItMatters.advance_organizer} className="inline [&_p]:inline [&_p]:mb-0" /></p>
+                      <p><strong>{t('whatToLearn')}</strong> <MathTextPreview text={guidedPayload.whyItMatters.advance_organizer} className="inline [&_p]:inline [&_p]:mb-0" inline /></p>
                     )}
                   </div>
                 </div>
@@ -2680,8 +2681,8 @@ CRITICAL: Output language must be 简体中文 only.
                   <div className="rounded-lg overflow-hidden bg-black/80">
                     {guidedPayload?.customTextInstruction?.trim() && !source ? (
                       <div className="p-6 bg-slate-100 text-slate-800 min-h-[120px]">
-                        <p className="text-base leading-relaxed whitespace-pre-wrap">
-                          <MathTextPreview text={guidedPayload.customTextInstruction.trim()} />
+<p className="text-base leading-relaxed whitespace-pre-wrap">
+                        <MathTextPreview text={guidedPayload.customTextInstruction.trim()} inline />
                         </p>
                       </div>
                     ) : guidedPayload?.resourceKind === 'document' && guidedPayload?.convertedHtml?.trim() ? (
@@ -2762,7 +2763,7 @@ CRITICAL: Output language must be 简体中文 only.
                                 <div className="text-sm text-slate-700 leading-8 flex flex-wrap items-center">
                                   {parts.map((part, partIdx) => (
                                     <React.Fragment key={partIdx}>
-                                      <MathTextPreview text={part} className="inline text-sm text-slate-700 [&_p]:inline [&_p]:mb-0 [&>div]:inline" />
+                                      <MathTextPreview text={part} className="inline text-sm text-slate-700 [&_p]:inline [&_p]:mb-0 [&>div]:inline" inline />
                                       {partIdx < parts.length - 1 && (
                                         <input
                                           type="text"
@@ -2800,7 +2801,7 @@ CRITICAL: Output language must be 简体中文 only.
                           {idea.blanks && idea.blanks.length > 0 && showKeyIdeaBlanks && (
                             <div className="text-xs text-slate-500 mt-3 flex gap-1 items-start">
                               <span>参考关键词：</span>
-                              <MathTextPreview text={idea.blanks.join('、')} className="text-xs text-slate-500 [&_p]:mb-0 inline" />
+                              <MathTextPreview text={idea.blanks.join('、')} className="text-xs text-slate-500 [&_p]:mb-0 inline" inline />
                             </div>
                           )}
                         </div>
@@ -2881,7 +2882,7 @@ CRITICAL: Output language must be 简体中文 only.
                                 >
                                   <span className="flex gap-1 items-start">
                                     <span>{String.fromCharCode(65 + optionIdx)}.</span>
-                                    <MathTextPreview text={option} className="text-sm [&_p]:mb-0 inline" />
+                                    <MathTextPreview text={option} className="text-sm [&_p]:mb-0 inline" inline />
                                   </span>
                                 </button>
                               ))}
@@ -2952,7 +2953,7 @@ CRITICAL: Output language must be 简体中文 only.
                               {showPracticeSolutions[idx] && (
                                 <div className="text-xs text-emerald-700 mt-2 flex gap-1 items-start">
                                   <span>参考答案：</span>
-                                  <MathTextPreview text={q.correctAnswer} className="text-xs text-emerald-700 [&_p]:mb-0 inline" />
+                                  <MathTextPreview text={q.correctAnswer} className="text-xs text-emerald-700 [&_p]:mb-0 inline" inline />
                                 </div>
                               )}
                             </div>
@@ -3022,7 +3023,7 @@ CRITICAL: Output language must be 简体中文 only.
                           {guidedExitTickets.map((item, idx) => item.correctAnswer ? (
                             <div key={`exit-answer-${idx}`} className="flex gap-1 items-start">
                               <span>参考答案{idx + 1}：</span>
-                              <MathTextPreview text={item.correctAnswer} className="text-xs text-emerald-700 [&_p]:mb-0 inline" />
+                              <MathTextPreview text={item.correctAnswer} className="text-xs text-emerald-700 [&_p]:mb-0 inline" inline />
                             </div>
                           ) : null)}
                         </div>
