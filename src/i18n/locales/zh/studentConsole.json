@@ -53,6 +53,8 @@
   "send": "发送",
   "releaseToSend": "松开发送",
   "holdToSpeak": "按住说话",
+  "clickToSpeak": "点击说话",
+  "stopVoiceInput": "停止录音",
   "recording": "正在录音...",
   "recognizing": "正在识别语音...",
   "speechError": "语音识别错误",

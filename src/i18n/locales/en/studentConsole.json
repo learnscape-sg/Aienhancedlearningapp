@@ -53,6 +53,8 @@
   "send": "Send",
   "releaseToSend": "Release to send",
   "holdToSpeak": "Hold to speak",
+  "clickToSpeak": "Click to speak",
+  "stopVoiceInput": "Stop recording",
   "recording": "Recording...",
   "recognizing": "Recognizing...",
   "speechError": "Speech recognition error",

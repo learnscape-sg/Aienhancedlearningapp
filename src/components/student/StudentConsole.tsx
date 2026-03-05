@@ -516,10 +516,12 @@ const StudentConsole: React.FC<StudentConsoleProps> = ({
   // Autoplay unlock (browsers block audio.play() before first user gesture)
   const [hasUserInteracted, setHasUserInteracted] = useState(false);
   const pendingAutoSpeakRef = useRef<string | null>(null);
-  const voiceReleaseHandledRef = useRef(false);
   const voiceStartPromiseRef = useRef<Promise<void> | null>(null);
+  const [voiceInputActive, setVoiceInputActive] = useState(false);
   const readTaskPointerDownRef = useRef(false);
   const readTaskPointerLeftRef = useRef(false);
+  const voicePointerDownRef = useRef(false);
+  const voicePointerLeftRef = useRef(false);
 
   useEffect(() => {
     const unlock = () => setHasUserInteracted(true);
@@ -530,6 +532,10 @@ const StudentConsole: React.FC<StudentConsoleProps> = ({
       window.removeEventListener('keydown', unlock);
     };
   }, []);
+
+  useEffect(() => {
+    if (!isRecording) setVoiceInputActive(false);
+  }, [isRecording]);
 
   // Speech recognition hook
   const {
@@ -3854,64 +3860,55 @@ CRITICAL: Output language must be 简体中文 only.
                />
              ) : (
                <button
-                 onPointerDown={(event) => {
-                   event.preventDefault();
-                   event.currentTarget.setPointerCapture(event.pointerId);
-                   voiceReleaseHandledRef.current = false;
-                   if (isProcessingSpeech || isTyping) return;
-                   voiceStartPromiseRef.current = startRecording();
-                 }}
-                 onPointerUp={async (event) => {
-                   event.preventDefault();
-                   if (voiceReleaseHandledRef.current) return;
-                   voiceReleaseHandledRef.current = true;
-                   try {
-                     await (voiceStartPromiseRef.current ?? Promise.resolve());
-                   } catch {
-                     /* ignore */
-                   }
-                   await stopRecording();
-                 }}
-                 onPointerLeave={async (event) => {
-                   event.preventDefault();
-                   if (voiceReleaseHandledRef.current) return;
-                   voiceReleaseHandledRef.current = true;
-                   try {
-                     await (voiceStartPromiseRef.current ?? Promise.resolve());
-                   } catch {
-                     /* ignore */
-                   }
-                   const el = event.currentTarget as HTMLElement;
-                   const rect = el.getBoundingClientRect();
-                   const margin = 24;
-                   const { clientX, clientY } = event;
-                   const outside =
-                     clientX < rect.left - margin ||
-                     clientX > rect.right + margin ||
-                     clientY < rect.top - margin ||
-                     clientY > rect.bottom + margin;
-                   if (outside) cancelRecording();
-                   else await stopRecording();
-                 }}
-                 onPointerCancel={async (event) => {
-                   event.preventDefault();
-                   voiceReleaseHandledRef.current = true;
-                   try {
-                     await (voiceStartPromiseRef.current ?? Promise.resolve());
-                   } catch {
-                     /* ignore */
-                   }
-                   cancelRecording();
-                 }}
-                 disabled={!isRecording && (isProcessingSpeech || isTyping)}
-                 style={{ touchAction: 'none', userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none' }}
-                 className={`flex-1 h-10 rounded-full border transition-all text-sm ${
-                   isRecording
-                     ? 'bg-red-500 border-red-500 text-white animate-pulse'
-                     : 'bg-white border-slate-300 text-slate-700 hover:bg-slate-50'
+                 type="button"
+                 disabled={isProcessingSpeech || isTyping}
+                 className={`flex-1 h-10 rounded-full border transition-all text-sm font-semibold touch-none select-none ${
+                   voiceInputActive || isRecording
+                     ? 'bg-red-500 border-red-500 text-white hover:bg-red-600'
+                     : 'bg-emerald-500 border-emerald-600 text-white hover:bg-emerald-600'
                  }`}
+                 onPointerDown={(e) => {
+                   e.preventDefault();
+                   e.currentTarget.setPointerCapture(e.pointerId);
+                   voicePointerDownRef.current = true;
+                   voicePointerLeftRef.current = false;
+                 }}
+                 onPointerUp={async (e) => {
+                   e.preventDefault();
+                   const wasPressed = voicePointerDownRef.current;
+                   const didNotLeave = !voicePointerLeftRef.current;
+                   voicePointerDownRef.current = false;
+                   e.currentTarget.releasePointerCapture?.(e.pointerId);
+                   if (wasPressed && didNotLeave && !isProcessingSpeech && !isTyping) {
+                     if (voiceInputActive || isRecording) {
+                       setVoiceInputActive(false);
+                       try {
+                         await (voiceStartPromiseRef.current ?? Promise.resolve());
+                       } catch {
+                         /* ignore */
+                       }
+                       await stopRecording();
+                       voiceStartPromiseRef.current = null;
+                     } else {
+                       setVoiceInputActive(true);
+                       voiceStartPromiseRef.current = startRecording().catch(() => {
+                         setVoiceInputActive(false);
+                         voiceStartPromiseRef.current = null;
+                       });
+                     }
+                   }
+                 }}
+                 onPointerLeave={(e) => {
+                   e.preventDefault();
+                   voicePointerLeftRef.current = true;
+                 }}
+                 onPointerCancel={(e) => {
+                   e.preventDefault();
+                   voicePointerDownRef.current = false;
+                   voicePointerLeftRef.current = true;
+                 }}
                >
-                 {isRecording ? t('releaseToSend') : t('holdToSpeak')}
+                 {voiceInputActive || isRecording ? t('stopVoiceInput') : t('clickToSpeak')}
                </button>
              )}
              <div className="flex items-center gap-2">
