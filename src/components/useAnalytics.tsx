@@ -8,8 +8,8 @@ interface AnalyticsData {
   averageScore: number;
   recentQuizzes: any[];
   weeklyProgress: any[];
-  weeklyGoalHours?: number;
-  weeklyStudyHours?: number;
+  weeklyGoalMinutes?: number;
+  weeklyStudyMinutes?: number;
   weeklyProgressPercent?: number;
   streakDays?: number;
   badges?: Array<{ name: string; icon: string; earned: boolean }>;
@@ -31,8 +31,8 @@ export function useAnalytics() {
         averageScore: metrics.averageScore,
         recentQuizzes: [],
         weeklyProgress: [],
-        weeklyGoalHours: metrics.weeklyGoalHours,
-        weeklyStudyHours: metrics.weeklyStudyHours,
+        weeklyGoalMinutes: metrics.weeklyGoalMinutes,
+        weeklyStudyMinutes: metrics.weeklyStudyMinutes,
         weeklyProgressPercent: metrics.weeklyProgressPercent,
         streakDays: metrics.streakDays,
         badges: metrics.badges,
@@ -49,8 +49,8 @@ export function useAnalytics() {
         averageScore: 0,
         recentQuizzes: [],
         weeklyProgress: [],
-        weeklyGoalHours: 18,
-        weeklyStudyHours: 0,
+        weeklyGoalMinutes: 70,
+        weeklyStudyMinutes: 0,
         weeklyProgressPercent: 0,
         streakDays: 0,
         badges: [],

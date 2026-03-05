@@ -2,11 +2,49 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { getCourse, trackProductEvent } from '@/lib/backendApi';
+import { touchCourseOpened } from '@/lib/studentProgressApi';
 import { supabase } from '@/utils/supabase/client';
 import type { SystemTaskPlan } from '@/types/backend';
 import { Loader2, AlertCircle } from 'lucide-react';
 import StudentConsole from './StudentConsole';
 import { useRuntimePolicy } from '@/hooks/useRuntimePolicy';
+
+type StudentProgress = { progress: number; last_task_index: number; completed: boolean };
+
+function isGuidedVideoTask(task: unknown): boolean {
+  const t = task as { viewType?: string; contentPayload?: string } | undefined;
+  if (!t || t.viewType !== 'video_player' || !t.contentPayload?.trim()) return false;
+  try {
+    const payload = JSON.parse(t.contentPayload) as { learningObjective?: string };
+    return !!payload.learningObjective;
+  } catch {
+    return false;
+  }
+}
+
+function resolveInitialLearningPosition(
+  plan: SystemTaskPlan,
+  studentProgress?: StudentProgress
+): { initialTaskIndex?: number; initialGuidedStep?: number } {
+  if (!studentProgress || !Array.isArray(plan.tasks) || plan.tasks.length === 0) {
+    return {};
+  }
+  const totalTasks = plan.tasks.length;
+  const progressPercent = Math.max(0, Math.min(100, Number(studentProgress.progress) || 0));
+  const taskIndexFromProgress = Math.max(
+    0,
+    Math.min(Math.floor((progressPercent / 100) * totalTasks), totalTasks - 1)
+  );
+  const taskIndexFromRecord = Math.max(0, Math.min(Number(studentProgress.last_task_index) || 0, totalTasks - 1));
+  const taskIndex = Math.max(taskIndexFromRecord, taskIndexFromProgress);
+  let initialGuidedStep = 1;
+  if (isGuidedVideoTask(plan.tasks[taskIndex])) {
+    // portion = 当前任务内已完成比例 (0~1)，与保存公式 progress=(taskIndex+guidedStep/5)/total*100 对应
+    const portion = Math.max(0, Math.min(1, (progressPercent / 100) * totalTasks - taskIndex));
+    initialGuidedStep = Math.min(5, Math.max(1, Math.round(portion * 5) + 1));
+  }
+  return { initialTaskIndex: taskIndex, initialGuidedStep };
+}
 
 export function CoursePage() {
   const params = useParams<{ id: string }>();
@@ -16,6 +54,8 @@ export function CoursePage() {
   const { policy } = useRuntimePolicy();
   const courseId = params.id ?? '';
   const [plan, setPlan] = useState<SystemTaskPlan | null>(null);
+  const [initialTaskIndex, setInitialTaskIndex] = useState<number | undefined>(undefined);
+  const [initialGuidedStep, setInitialGuidedStep] = useState<number | undefined>(undefined);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -49,6 +89,9 @@ export function CoursePage() {
           throw new Error(t('dataFormatError'));
         }
         setPlan(data.plan);
+        const initialPos = resolveInitialLearningPosition(data.plan, data.studentProgress);
+        setInitialTaskIndex(initialPos.initialTaskIndex);
+        setInitialGuidedStep(initialPos.initialGuidedStep);
         if (typeof window !== 'undefined') {
           localStorage.setItem('lastLearningCourseId', courseId);
           localStorage.setItem('lastLearningTimestamp', Date.now().toString());
@@ -58,6 +101,7 @@ export function CoursePage() {
         const assignmentSource = searchParams.get('assignmentSource') as 'class' | 'group' | null;
         const groupId = searchParams.get('groupId');
         const classId = searchParams.get('classId');
+        touchCourseOpened(courseId).catch(() => undefined);
         await trackProductEvent(
           {
             eventName: 'course_opened',
@@ -132,6 +176,9 @@ export function CoursePage() {
                     getCourse(courseId)
                       .then((data) => {
                         setPlan(data.plan);
+                        const initialPos = resolveInitialLearningPosition(data.plan, data.studentProgress);
+                        setInitialTaskIndex(initialPos.initialTaskIndex);
+                        setInitialGuidedStep(initialPos.initialGuidedStep);
                         setError(null);
                       })
                       .catch((err) => setError(err.message || t('retryFailed')))
@@ -169,6 +216,8 @@ export function CoursePage() {
       assignmentSource={assignmentSource ?? undefined}
       groupId={groupId}
       classId={classId}
+      initialTaskIndex={initialTaskIndex}
+      initialGuidedStep={initialGuidedStep}
     />
   );
 }

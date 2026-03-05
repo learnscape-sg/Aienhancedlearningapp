@@ -47,7 +47,7 @@ import {
   Repeat,
 } from 'lucide-react';
 
-type RangeValue = 'week' | 'month' | 'quarter';
+type RangeValue = 'week' | 'month' | 'year';
 
 export function ReportsPage() {
   const [timeRange, setTimeRange] = useState<RangeValue>('week');
@@ -231,7 +231,7 @@ export function ReportsPage() {
             <SelectContent>
               <SelectItem value="week">本周</SelectItem>
               <SelectItem value="month">本月</SelectItem>
-              <SelectItem value="quarter">本季度</SelectItem>
+              <SelectItem value="year">本年</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -257,8 +257,8 @@ export function ReportsPage() {
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-600">完成章节</p>
-                <p className="text-2xl font-medium">{analytics ? `${analytics.completedChapters}/${analytics.totalChapters}章` : '0/0章'}</p>
+                <p className="text-sm text-gray-600">完成课程</p>
+                <p className="text-2xl font-medium">{analytics ? `${analytics.completedChapters}/${analytics.totalChapters} 课` : '0/0 课'}</p>
                 <p className="text-sm text-[#22C55E]">持续进步</p>
               </div>
               <div className="w-12 h-12 bg-[#22C55E]/10 rounded-lg flex items-center justify-center">
@@ -300,6 +300,63 @@ export function ReportsPage() {
                 <Trophy className="w-6 h-6 text-[#EF4444]" />
               </div>
             </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* 学霸特质图表：放在四个指标卡片下方 */}
+      <div className="grid lg:grid-cols-2 gap-4 md:gap-6">
+        <Card>
+          <CardHeader>
+            <CardTitle>四特质雷达图</CardTitle>
+            <CardDescription>展示当天完成的多次评估的平均值</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {radarData.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-8 text-center">暂无评估数据，完成课程学习并生成评估后可查看</p>
+            ) : (
+              <ResponsiveContainer width="100%" height={280}>
+                <RadarChart data={radarData}>
+                  <PolarGrid stroke="#E0E0E0" />
+                  <PolarAngleAxis dataKey="subject" tick={{ fill: '#5F6368', fontSize: 12 }} />
+                  <PolarRadiusAxis angle={90} domain={[0, 100]} tick={{ fill: '#5F6368', fontSize: 10 }} />
+                  <Radar name="当前水平" dataKey="score" stroke="#1A73E8" fill="#1A73E8" fillOpacity={0.6} strokeWidth={2} />
+                  <Tooltip />
+                </RadarChart>
+              </ResponsiveContainer>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>特质发展趋势</CardTitle>
+            <CardDescription>
+              {timeRange === 'year'
+                ? '每月值为该月所有评估的平均值'
+                : timeRange === 'month'
+                  ? '每周值为该周所有评估的平均值'
+                  : '每日值为该日所有评估的平均值'}
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {effectiveTrendData.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-8 text-center">暂无特质趋势数据</p>
+            ) : (
+              <ResponsiveContainer width="100%" height={280}>
+                <LineChart data={effectiveTrendData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#E0E0E0" />
+                  <XAxis dataKey="month" tick={{ fill: '#5F6368', fontSize: 12 }} />
+                  <YAxis domain={[0, 100]} tick={{ fill: '#5F6368', fontSize: 12 }} />
+                  <Tooltip />
+                  <Legend wrapperStyle={{ fontSize: '12px' }} />
+                  <Line type="monotone" dataKey="自驱力" stroke="#4285F4" strokeWidth={2} />
+                  <Line type="monotone" dataKey="专注力" stroke="#34A853" strokeWidth={2} />
+                  <Line type="monotone" dataKey="享受思考" stroke="#FBBC05" strokeWidth={2} />
+                  <Line type="monotone" dataKey="痴迷改进" stroke="#EA4335" strokeWidth={2} />
+                </LineChart>
+              </ResponsiveContainer>
+            )}
           </CardContent>
         </Card>
       </div>
@@ -399,52 +456,6 @@ export function ReportsPage() {
                   </div>
                 </CardContent>
               </Card>
-
-              <div className="grid lg:grid-cols-2 gap-4 md:gap-6">
-                <Card>
-                  <CardHeader>
-                    <CardTitle>四特质雷达图</CardTitle>
-                    <CardDescription>全方位展示您的学霸特质分布</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <ResponsiveContainer width="100%" height={280}>
-                      <RadarChart data={radarData}>
-                        <PolarGrid stroke="#E0E0E0" />
-                        <PolarAngleAxis dataKey="subject" tick={{ fill: '#5F6368', fontSize: 12 }} />
-                        <PolarRadiusAxis angle={90} domain={[0, 100]} tick={{ fill: '#5F6368', fontSize: 10 }} />
-                        <Radar name="当前水平" dataKey="score" stroke="#1A73E8" fill="#1A73E8" fillOpacity={0.6} strokeWidth={2} />
-                        <Tooltip />
-                      </RadarChart>
-                    </ResponsiveContainer>
-                  </CardContent>
-                </Card>
-
-                <Card>
-                  <CardHeader>
-                    <CardTitle>特质发展趋势</CardTitle>
-                    <CardDescription>按所选时间范围展示趋势</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    {effectiveTrendData.length === 0 ? (
-                      <p className="text-sm text-muted-foreground">暂无特质趋势数据。</p>
-                    ) : (
-                      <ResponsiveContainer width="100%" height={280}>
-                        <LineChart data={effectiveTrendData}>
-                          <CartesianGrid strokeDasharray="3 3" stroke="#E0E0E0" />
-                          <XAxis dataKey="month" tick={{ fill: '#5F6368', fontSize: 12 }} />
-                          <YAxis domain={[0, 100]} tick={{ fill: '#5F6368', fontSize: 12 }} />
-                          <Tooltip />
-                          <Legend wrapperStyle={{ fontSize: '12px' }} />
-                          <Line type="monotone" dataKey="自驱力" stroke="#4285F4" strokeWidth={2} />
-                          <Line type="monotone" dataKey="专注力" stroke="#34A853" strokeWidth={2} />
-                          <Line type="monotone" dataKey="享受思考" stroke="#FBBC05" strokeWidth={2} />
-                          <Line type="monotone" dataKey="痴迷改进" stroke="#EA4335" strokeWidth={2} />
-                        </LineChart>
-                      </ResponsiveContainer>
-                    )}
-                  </CardContent>
-                </Card>
-              </div>
 
               <div className="grid lg:grid-cols-2 gap-4 md:gap-6">
                 {effectiveTraits.map((trait) => {

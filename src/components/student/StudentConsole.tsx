@@ -88,6 +88,8 @@ interface StudentConsoleProps {
   assignmentSource?: 'class' | 'group';
   groupId?: string;
   classId?: string;
+  initialTaskIndex?: number;
+  initialGuidedStep?: number;
 }
 
 interface GuidedKeyIdea {
@@ -293,6 +295,8 @@ const StudentConsole: React.FC<StudentConsoleProps> = ({
   assignmentSource,
   groupId,
   classId,
+  initialTaskIndex,
+  initialGuidedStep,
 }) => {
   const { user } = useAuth();
   const params = useParams();
@@ -318,6 +322,13 @@ const StudentConsole: React.FC<StudentConsoleProps> = ({
   // --- State (currentTaskIndex must be before emitEvent which uses it) ---
   const taskIndexStorageKey = `currentTaskIndex_${courseId || 'default'}`;
   const [currentTaskIndex, setCurrentTaskIndex] = useState(() => {
+    if (
+      typeof initialTaskIndex === 'number' &&
+      initialTaskIndex >= 0 &&
+      initialTaskIndex < plan.tasks.length
+    ) {
+      return initialTaskIndex;
+    }
     if (typeof window !== 'undefined' && courseId) {
       const saved = localStorage.getItem(taskIndexStorageKey);
       if (saved !== null) {
@@ -345,6 +356,7 @@ const StudentConsole: React.FC<StudentConsoleProps> = ({
       properties?: Record<string, unknown>
     ) => {
       const { data: sessionData } = await supabase.auth.getSession();
+      const timeSpentSeconds = Math.round((Date.now() - sessionStartRef.current) / 1000);
       await trackProductEvent(
         {
           eventName,
@@ -353,7 +365,7 @@ const StudentConsole: React.FC<StudentConsoleProps> = ({
           courseId,
           taskId: plan.tasks[currentTaskIndex]?.id,
           studentId: user?.id,
-          properties: { taskIndex: currentTaskIndex, ...assignmentEventProps, ...properties },
+          properties: { taskIndex: currentTaskIndex, timeSpentSeconds, ...assignmentEventProps, ...properties },
         },
         sessionData.session?.access_token
       );
@@ -412,6 +424,9 @@ const StudentConsole: React.FC<StudentConsoleProps> = ({
   const [mathEditorContent, setMathEditorContent] = useState<string>('');
   const getGuidedProgressKey = (idx: number) => `guidedProgress_${courseId || 'default'}_${idx}`;
   const [guidedStep, setGuidedStep] = useState(() => {
+    if (typeof initialGuidedStep === 'number' && initialGuidedStep >= 1 && initialGuidedStep <= 5) {
+      return initialGuidedStep;
+    }
     if (typeof window !== 'undefined' && courseId) {
       const savedIdx = localStorage.getItem(taskIndexStorageKey);
       const idx = savedIdx !== null && !isNaN(parseInt(savedIdx, 10)) ? parseInt(savedIdx, 10) : 0;
@@ -428,6 +443,9 @@ const StudentConsole: React.FC<StudentConsoleProps> = ({
     return 1;
   });
   const [maxStepReached, setMaxStepReached] = useState(() => {
+    if (typeof initialGuidedStep === 'number' && initialGuidedStep >= 1 && initialGuidedStep <= 5) {
+      return Math.max(1, initialGuidedStep);
+    }
     if (typeof window !== 'undefined' && courseId) {
       const savedIdx = localStorage.getItem(taskIndexStorageKey);
       const idx = savedIdx !== null && !isNaN(parseInt(savedIdx, 10)) ? parseInt(savedIdx, 10) : 0;
@@ -1887,6 +1905,11 @@ CRITICAL: Output language must be 简体中文 only.
         messagesCountAtStep5EntryRef.current = messages.length;
       }
       setGuidedStep(next);
+      // 引导模式：进入算开始，5 步完成算完成；step 间切换时上报进度
+      const progressPct = Math.round(
+        ((currentTaskIndex + guidedStep / 5) / plan.tasks.length) * 100
+      );
+      reportProgress(progressPct, false, currentTaskIndex);
     } else if (currentTaskIndex < plan.tasks.length - 1) {
       // 非最后任务 → 进入下一个任务
       handleNextTask();

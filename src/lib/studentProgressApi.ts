@@ -47,3 +47,22 @@ export async function upsertStudentCourseProgress(
     console.warn('[studentProgressApi] Upsert failed:', err.error || response.statusText);
   }
 }
+
+/** 记录打开课程（更新 last_opened_at），用于课程列表按最近打开排序 */
+export async function touchCourseOpened(courseId: string): Promise<void> {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session?.access_token) return;
+
+  const base = getBaseUrl();
+  const response = await fetch(`${base}/api/student-course-progress`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${session.access_token}`,
+    },
+    body: JSON.stringify({ courseId, touchOnly: true }),
+  });
+  if (!response.ok) {
+    console.warn('[studentProgressApi] Touch failed:', response.statusText);
+  }
+}

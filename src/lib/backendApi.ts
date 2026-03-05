@@ -692,17 +692,21 @@ export async function createScheduledAssignment(params: {
 export interface StudentCourseItem {
   courseId: string;
   topic?: string;
+  subject?: string;
   teacherName?: string;
   assignmentSource?: 'class' | 'group';
   classId?: string;
   groupId?: string;
+  progress?: number;
+  completed?: boolean;
+  lastOpenedAt?: string | null;
 }
 
 export async function getStudentCourses(studentId: string): Promise<{
   courseIds: string[];
   courses: StudentCourseItem[];
 }> {
-  return apiCall<{ courseIds: string[]; courses: { courseId: string; topic?: string; teacherName?: string }[] }>(
+  return apiCall<{ courseIds: string[]; courses: StudentCourseItem[] }>(
     `/api/assignments?studentId=${encodeURIComponent(studentId)}`,
     { method: 'GET' }
   );
@@ -710,8 +714,16 @@ export async function getStudentCourses(studentId: string): Promise<{
 
 export async function getCourse(
   courseId: string
-): Promise<{ plan: SystemTaskPlan; sourceTaskIds?: string | null }> {
-  return apiCall<{ plan: SystemTaskPlan; sourceTaskIds?: string | null }>(
+): Promise<{
+  plan: SystemTaskPlan;
+  sourceTaskIds?: string | null;
+  studentProgress?: { progress: number; last_task_index: number; completed: boolean };
+}> {
+  return apiCall<{
+    plan: SystemTaskPlan;
+    sourceTaskIds?: string | null;
+    studentProgress?: { progress: number; last_task_index: number; completed: boolean };
+  }>(
     `/api/courses?id=${encodeURIComponent(courseId)}`,
     { method: 'GET' }
   );
@@ -1835,11 +1847,11 @@ export interface AdminTenantRow {
 }
 
 export type StudentMetrics = {
-  weeklyStudyHours: number;
-  weeklyGoalHours: number;
+  weeklyStudyMinutes: number;
+  weeklyGoalMinutes: number;
   weeklyProgressPercent: number;
   streakDays: number;
-  badges: Array<{ name: string; icon: string; earned: boolean }>;
+  badges: Array<{ name: string; condition?: string; icon: string; earned: boolean }>;
   earnedBadges: number;
   badgeDeltaVsLastWeek: number;
   totalChapters: number;
