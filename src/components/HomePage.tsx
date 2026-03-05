@@ -18,43 +18,39 @@ interface HomePageProps {
 
 const COURSE_COLORS = ['#34A853', '#FBBC05', '#1A73E8', '#EA4335'];
 
+const ALL_SUBJECTS = '全部';
+
 function CourseListBySubject({
   groups,
+  selectedSubject,
   navigate,
   buttonLabel,
   showBadge,
 }: {
   groups: Array<{ subject: string; courses: StudentCourseItem[] }>;
+  selectedSubject: string;
   navigate: (path: string) => void;
   buttonLabel: string;
   showBadge: boolean;
 }) {
   if (groups.length === 0) return null;
-  const defaultSubject = groups[0].subject;
+  const courses =
+    selectedSubject === ALL_SUBJECTS
+      ? sortByLastOpened(groups.flatMap((g) => g.courses))
+      : (groups.find((g) => g.subject === selectedSubject) ?? groups[0])?.courses ?? [];
   return (
-    <Tabs defaultValue={defaultSubject} className="w-full">
-      <TabsList className="mb-4 flex-wrap h-auto gap-1">
-        {groups.map(({ subject, courses }) => (
-          <TabsTrigger key={subject} value={subject} className="text-xs">
-            {subject} ({courses.length})
-          </TabsTrigger>
-        ))}
-      </TabsList>
-      {groups.map(({ subject, courses }) => (
-        <TabsContent key={subject} value={subject} className="mt-0 space-y-4">
-          {courses.map((course, idx) => (
-            <CourseCard
-              key={course.courseId}
-              course={course}
-              color={COURSE_COLORS[idx % COURSE_COLORS.length]}
-              navigate={navigate}
-              buttonLabel={buttonLabel}
-              showBadge={showBadge}
-            />
-          ))}
-        </TabsContent>
+    <div className="space-y-4">
+      {courses.map((course, idx) => (
+        <CourseCard
+          key={course.courseId}
+          course={course}
+          color={COURSE_COLORS[idx % COURSE_COLORS.length]}
+          navigate={navigate}
+          buttonLabel={buttonLabel}
+          showBadge={showBadge}
+        />
       ))}
-    </Tabs>
+    </div>
   );
 }
 
@@ -162,14 +158,26 @@ export function HomePage({ onStartChapter }: HomePageProps) {
       .finally(() => setCoursesLoading(false));
   }, [user?.id]);
 
-  const { inProgressCourses, completedCourses } = useMemo(() => {
+  const [courseStatus, setCourseStatus] = useState<'in_progress' | 'completed'>('in_progress');
+  const [courseSubject, setCourseSubject] = useState(ALL_SUBJECTS);
+
+  const { inProgressCourses, completedCourses, inProgressGroups, completedGroups } = useMemo(() => {
     const inProgress = assignedCourses.filter((c) => !(c.completed ?? false));
     const completed = assignedCourses.filter((c) => c.completed ?? false);
     return {
       inProgressCourses: sortByLastOpened(inProgress),
       completedCourses: sortByLastOpened(completed),
+      inProgressGroups: groupCoursesBySubject(sortByLastOpened(inProgress)),
+      completedGroups: groupCoursesBySubject(sortByLastOpened(completed)),
     };
   }, [assignedCourses]);
+
+  useEffect(() => {
+    const groups = courseStatus === 'in_progress' ? inProgressGroups : completedGroups;
+    if (groups.length > 0 && courseSubject !== ALL_SUBJECTS && !groups.some((g) => g.subject === courseSubject)) {
+      setCourseSubject(ALL_SUBJECTS);
+    }
+  }, [courseStatus, inProgressGroups, completedGroups, courseSubject]);
 
   const getGreeting = () => {
     const hour = new Date().getHours();
@@ -201,7 +209,7 @@ export function HomePage({ onStartChapter }: HomePageProps) {
               <span>学习时长</span>
               <span>{analytics ? `${analytics.weeklyStudyMinutes ?? 0}分钟` : '--'}</span>
             </div>
-            <Progress value={analytics?.weeklyProgressPercent ?? 0} className="h-2 bg-primary-foreground/20" />
+            <Progress value={analytics?.weeklyProgressPercent ?? 0} className="h-2 bg-primary-foreground/20 border border-black/30" />
             <div className="flex justify-between text-sm text-primary-foreground/80 mt-1">
               <span>目标：{analytics?.weeklyGoalMinutes ?? 70}分钟</span>
               <span>{analytics?.weeklyProgressPercent ?? 0}%</span>
@@ -231,42 +239,93 @@ export function HomePage({ onStartChapter }: HomePageProps) {
                 </div>
               ) : assignedCourses.length === 0 ? (
                 <p className="text-muted-foreground text-center py-6">暂无分配课程，等待老师分配后即可在此学习</p>
-              ) : (
-                <Tabs defaultValue="in_progress" className="w-full">
-                  <TabsList>
-                    <TabsTrigger value="in_progress">
-                      进行中 ({inProgressCourses.length})
-                    </TabsTrigger>
-                    <TabsTrigger value="completed">
-                      已完成 ({completedCourses.length})
-                    </TabsTrigger>
-                  </TabsList>
-                  <TabsContent value="in_progress" className="mt-4">
-                    {inProgressCourses.length === 0 ? (
-                      <p className="text-muted-foreground text-center py-6">暂无进行中的课程</p>
-                    ) : (
-                      <CourseListBySubject
-                        groups={groupCoursesBySubject(inProgressCourses)}
-                        navigate={navigate}
-                        buttonLabel="开始学习"
-                        showBadge={false}
-                      />
-                    )}
-                  </TabsContent>
-                  <TabsContent value="completed" className="mt-4">
-                    {completedCourses.length === 0 ? (
-                      <p className="text-muted-foreground text-center py-6">暂无已完成的课程</p>
-                    ) : (
-                      <CourseListBySubject
-                        groups={groupCoursesBySubject(completedCourses)}
-                        navigate={navigate}
-                        buttonLabel="复习"
-                        showBadge={true}
-                      />
-                    )}
-                  </TabsContent>
-                </Tabs>
-              )}
+              ) : (() => {
+                const groups = courseStatus === 'in_progress' ? inProgressGroups : completedGroups;
+                const effectiveSubject =
+                  groups.length > 0 &&
+                  (courseSubject === ALL_SUBJECTS || groups.some((g) => g.subject === courseSubject))
+                    ? courseSubject
+                    : ALL_SUBJECTS;
+                return (
+                  <Tabs
+                    value={courseStatus}
+                    onValueChange={(v) => setCourseStatus(v as 'in_progress' | 'completed')}
+                    className="w-full"
+                  >
+                    <div className="flex flex-wrap gap-2 items-center mb-4 justify-between">
+                      {groups.length > 0 && (
+                        <div
+                          role="tablist"
+                          className="inline-flex h-9 items-center justify-center rounded-lg bg-muted p-1 text-muted-foreground gap-1 flex-wrap"
+                        >
+                          <button
+                            key={ALL_SUBJECTS}
+                            role="tab"
+                            type="button"
+                            className={`inline-flex items-center justify-center whitespace-nowrap rounded-md px-3 py-1 text-xs font-medium ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 ${
+                              effectiveSubject === ALL_SUBJECTS
+                                ? 'bg-primary text-primary-foreground shadow'
+                                : 'hover:bg-muted-foreground/10'
+                            }`}
+                            onClick={() => setCourseSubject(ALL_SUBJECTS)}
+                          >
+                            {ALL_SUBJECTS} ({groups.reduce((sum, g) => sum + g.courses.length, 0)})
+                          </button>
+                          {groups.map(({ subject: s, courses }) => (
+                            <button
+                              key={s}
+                              role="tab"
+                              type="button"
+                              className={`inline-flex items-center justify-center whitespace-nowrap rounded-md px-3 py-1 text-xs font-medium ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 ${
+                                effectiveSubject === s
+                                  ? 'bg-primary text-primary-foreground shadow'
+                                  : 'hover:bg-muted-foreground/10'
+                              }`}
+                              onClick={() => setCourseSubject(s)}
+                            >
+                              {s} ({courses.length})
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                      <TabsList className="ml-auto">
+                        <TabsTrigger value="in_progress">
+                          进行中 ({inProgressCourses.length})
+                        </TabsTrigger>
+                        <TabsTrigger value="completed">
+                          已完成 ({completedCourses.length})
+                        </TabsTrigger>
+                      </TabsList>
+                    </div>
+                    <TabsContent value="in_progress" className="mt-0">
+                      {inProgressCourses.length === 0 ? (
+                        <p className="text-muted-foreground text-center py-6">暂无进行中的课程</p>
+                      ) : (
+                        <CourseListBySubject
+                          groups={inProgressGroups}
+                          selectedSubject={effectiveSubject}
+                          navigate={navigate}
+                          buttonLabel="开始学习"
+                          showBadge={false}
+                        />
+                      )}
+                    </TabsContent>
+                    <TabsContent value="completed" className="mt-0">
+                      {completedCourses.length === 0 ? (
+                        <p className="text-muted-foreground text-center py-6">暂无已完成的课程</p>
+                      ) : (
+                        <CourseListBySubject
+                          groups={completedGroups}
+                          selectedSubject={effectiveSubject}
+                          navigate={navigate}
+                          buttonLabel="复习"
+                          showBadge={true}
+                        />
+                      )}
+                    </TabsContent>
+                  </Tabs>
+                );
+              })()}
             </CardContent>
           </Card>
         </div>
