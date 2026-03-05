@@ -6,7 +6,7 @@ import { Progress } from './ui/progress';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
-import { BookOpen, Trophy, Play, Target, Loader2 } from 'lucide-react';
+import { BookOpen, Play, Loader2 } from 'lucide-react';
 import { useAuth } from './AuthContext';
 import { getStudentCourses } from '@/lib/backendApi';
 import { useAnalytics } from './useAnalytics';
@@ -188,14 +188,24 @@ export function HomePage({ onStartChapter }: HomePageProps) {
         <p className="text-primary-foreground/80">
           继续您的学习之旅，今天也要加油哦！
         </p>
-        <div className="mt-4 flex items-center space-x-4">
-          <div className="flex items-center space-x-2">
-            <Target className="w-5 h-5" />
-            <span className="text-sm">今日目标：完成2个章节</span>
+        <div className="mt-4 flex flex-wrap gap-6">
+          <div className="flex items-center gap-3 min-w-[140px]">
+            <div className="text-2xl">🔥</div>
+            <div>
+              <p className="font-medium">连续 {analytics?.streakDays ?? 0} 天</p>
+              <p className="text-sm text-primary-foreground/80">继续保持！</p>
+            </div>
           </div>
-          <div className="flex items-center space-x-2">
-            <Trophy className="w-5 h-5" />
-            <span className="text-sm">学习积分：1,250</span>
+          <div className="flex-1 min-w-[180px]">
+            <div className="flex justify-between text-sm mb-1">
+              <span>学习时长</span>
+              <span>{analytics ? `${analytics.weeklyStudyMinutes ?? 0}分钟` : '--'}</span>
+            </div>
+            <Progress value={analytics?.weeklyProgressPercent ?? 0} className="h-2 bg-primary-foreground/20" />
+            <div className="flex justify-between text-sm text-primary-foreground/80 mt-1">
+              <span>目标：{analytics?.weeklyGoalMinutes ?? 70}分钟</span>
+              <span>{analytics?.weeklyProgressPercent ?? 0}%</span>
+            </div>
           </div>
         </div>
       </div>
@@ -263,26 +273,6 @@ export function HomePage({ onStartChapter }: HomePageProps) {
 
         {/* Right Column - Achievements & Stats */}
         <div className="space-y-6">
-          {/* Weekly Progress */}
-          <Card>
-            <CardHeader>
-              <CardTitle>本周进度</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-3">
-                <div className="flex justify-between text-sm">
-                  <span>学习时长</span>
-                  <span>{analytics ? `${analytics.weeklyStudyMinutes ?? 0}分钟` : '--'}</span>
-                </div>
-                <Progress value={analytics?.weeklyProgressPercent ?? 0} className="h-2" />
-                <div className="flex justify-between text-sm text-muted-foreground">
-                  <span>目标：{analytics?.weeklyGoalMinutes ?? 70}分钟</span>
-                  <span>{analytics?.weeklyProgressPercent ?? 0}%</span>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
           {/* Achievements */}
           <Card>
             <CardHeader>
@@ -313,20 +303,6 @@ export function HomePage({ onStartChapter }: HomePageProps) {
                 {(!analytics?.badges || analytics.badges.length === 0) && (
                   <p className="col-span-2 text-xs text-muted-foreground text-center py-2">暂无徽章数据</p>
                 )}
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Study Streak */}
-          <Card>
-            <CardHeader>
-              <CardTitle>学习打卡</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-center">
-                <div className="text-3xl text-[#FACC15] mb-2">🔥</div>
-                <p className="text-lg font-medium">连续 {analytics?.streakDays ?? 0} 天</p>
-                <p className="text-sm text-gray-600">继续保持！</p>
               </div>
             </CardContent>
           </Card>
