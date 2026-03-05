@@ -65,7 +65,7 @@ function AppContent() {
   const [appState, setAppState] = useState<AppState>('login');
   const [activeSection, setActiveSection] = useState('home');
   const [languageSpace, setLanguageSpace] = useState<LanguageSpace>(experience.entry.defaultLanguageSpace);
-  const [initialCourseTab, setInitialCourseTab] = useState<'active' | 'shared' | 'recycle' | undefined>(undefined);
+  const [initialCourseTab, setInitialCourseTab] = useState<'active' | 'shared' | 'public' | 'recycle' | undefined>(undefined);
   const [currentChapter, setCurrentChapter] = useState<string | null>(null);
   const [pdfData, setPdfData] = useState<{ fileName: string; grade: string; interests: string[] } | null>(null);
   const [tutorQuestionTrigger, setTutorQuestionTrigger] = useState<{ selectedText: string; context: string; timestamp: number } | null>(null);

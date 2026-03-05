@@ -922,6 +922,11 @@ export async function listSharedCourses(teacherId: string): Promise<{ courses: T
   );
 }
 
+/** Tenant-wide public courses (visibility='public'). */
+export async function listPublicCourses(): Promise<{ courses: TeacherCourseItem[] }> {
+  return apiCall<{ courses: TeacherCourseItem[] }>('/api/public-courses', { method: 'GET' });
+}
+
 export async function resolveShareToken(
   shareToken: string
 ): Promise<{ courseId: string; title: string; subject: string; grade: string; ownerTeacherId: string }> {

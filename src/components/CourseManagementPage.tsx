@@ -27,6 +27,8 @@ import {
   deleteTask,
   listTeacherClasses,
   listTeacherTasks,
+  listPublicTasks,
+  listPublicCourses,
   restoreTask,
   listTeacherCoursesWithStats,
   updateCourseVisibility,
@@ -88,16 +90,18 @@ interface CourseShareItem {
   expires_at?: string;
 }
 
-export function CourseManagementPage({ initialCourseTab }: { initialCourseTab?: 'active' | 'shared' | 'recycle' } = {}) {
+export function CourseManagementPage({ initialCourseTab }: { initialCourseTab?: 'active' | 'shared' | 'public' | 'recycle' } = {}) {
   const { user } = useAuth();
   const { publishedCourses, refreshCourses } = usePublishedCourses();
   const { tasks: myTasks, refreshTasks } = useTasks();
 
   // --- Task state ---
-  const [myTaskView, setMyTaskView] = useState<'active' | 'recycle'>('active');
+  const [myTaskView, setMyTaskView] = useState<'active' | 'public' | 'recycle'>('active');
   const [taskSearchQuery, setTaskSearchQuery] = useState('');
   const [deletedTasks, setDeletedTasks] = useState<TaskItem[]>([]);
+  const [publicTasks, setPublicTasks] = useState<TaskItem[]>([]);
   const [loadingDeletedTasks, setLoadingDeletedTasks] = useState(false);
+  const [loadingPublicTasks, setLoadingPublicTasks] = useState(false);
   const [selectedTaskIds, setSelectedTaskIds] = useState<string[]>([]);
   const [deletingTaskId, setDeletingTaskId] = useState<string | null>(null);
   const [restoringTaskId, setRestoringTaskId] = useState<string | null>(null);
@@ -105,7 +109,7 @@ export function CourseManagementPage({ initialCourseTab }: { initialCourseTab?: 
   const [selectedTaskIdsForAssign, setSelectedTaskIdsForAssign] = useState<string[]>([]);
 
   // --- Course state ---
-  const [courseView, setCourseView] = useState<'active' | 'shared' | 'recycle'>(
+  const [courseView, setCourseView] = useState<'active' | 'shared' | 'public' | 'recycle'>(
     initialCourseTab ?? 'active'
   );
   const [courseSearchQuery, setCourseSearchQuery] = useState('');
@@ -113,8 +117,10 @@ export function CourseManagementPage({ initialCourseTab }: { initialCourseTab?: 
   const [selectedCourse, setSelectedCourse] = useState<Course | null>(null);
   const [deletedCourses, setDeletedCourses] = useState<Course[]>([]);
   const [sharedCourses, setSharedCourses] = useState<Course[]>([]);
+  const [publicCourses, setPublicCourses] = useState<Course[]>([]);
   const [loadingDeletedCourses, setLoadingDeletedCourses] = useState(false);
   const [loadingSharedCourses, setLoadingSharedCourses] = useState(false);
+  const [loadingPublicCourses, setLoadingPublicCourses] = useState(false);
   const [deletingCourseId, setDeletingCourseId] = useState<string | null>(null);
   const [restoringCourseId, setRestoringCourseId] = useState<string | null>(null);
   const [publishingCourseId, setPublishingCourseId] = useState<string | null>(null);
@@ -165,6 +171,27 @@ export function CourseManagementPage({ initialCourseTab }: { initialCourseTab?: 
       .catch((err) => console.error('Failed to load deleted tasks:', err))
       .finally(() => setLoadingDeletedTasks(false));
   }, [user?.id, myTaskView]);
+
+  useEffect(() => {
+    if (myTaskView !== 'public') return;
+    setLoadingPublicTasks(true);
+    listPublicTasks()
+      .then((res) => {
+        const mapped: TaskItem[] = (res.tasks ?? []).map((row) => ({
+          taskId: row.taskId,
+          subject: row.subject,
+          grade: row.grade,
+          topic: row.topic,
+          taskType: row.taskType,
+          durationMin: row.durationMin,
+          isPublic: true,
+          teacherId: row.teacherId,
+        }));
+        setPublicTasks(mapped);
+      })
+      .catch((err) => console.error('Failed to load public tasks:', err))
+      .finally(() => setLoadingPublicTasks(false));
+  }, [myTaskView]);
 
   useEffect(() => {
     const dialogOpen = taskAssignDialogOpen || courseAssignDialogOpen;
@@ -258,14 +285,44 @@ export function CourseManagementPage({ initialCourseTab }: { initialCourseTab?: 
       .finally(() => setLoadingSharedCourses(false));
   }, [courseView, user?.id]);
 
+  useEffect(() => {
+    if (courseView !== 'public') return;
+    setLoadingPublicCourses(true);
+    listPublicCourses()
+      .then((res) => {
+        const mapped: Course[] = (res.courses ?? []).map((row) => ({
+          id: row.id,
+          title: row.title,
+          subject: row.subject,
+          grade: row.grade,
+          students: row.students,
+          completion: row.completion,
+          assignmentStatus: (row.assignmentStatus ?? 'unassigned') as 'assigned' | 'unassigned',
+          visibilityStatus: (row.visibilityStatus ?? 'public') as 'public' | 'private',
+          shareStatus: (row.shareStatus ?? 'none') as 'shared' | 'none',
+          deletedAt: null,
+          canRestore: false,
+          lastUpdated: row.lastUpdated,
+          ownerTeacherId: row.ownerTeacherId,
+          ownerTeacherName: row.ownerTeacherName,
+        }));
+        setPublicCourses(mapped);
+      })
+      .catch((err) => console.error('Failed to load public courses:', err))
+      .finally(() => setLoadingPublicCourses(false));
+  }, [courseView]);
+
   const activeTasks = myTaskView === 'active' ? myTasks : [];
+  const publicTaskList = myTaskView === 'public' ? publicTasks : [];
   const recycleTaskList = myTaskView === 'recycle' ? deletedTasks : [];
+  const taskListForView =
+    myTaskView === 'active' ? activeTasks : myTaskView === 'public' ? publicTaskList : recycleTaskList;
   const filteredMyTasks = useMemo(
     () =>
-      (myTaskView === 'active' ? activeTasks : recycleTaskList).filter((task) =>
+      taskListForView.filter((task) =>
         `${task.topic || ''} ${task.subject || ''}`.toLowerCase().includes(taskSearchQuery.toLowerCase())
       ),
-    [myTaskView, activeTasks, recycleTaskList, taskSearchQuery]
+    [taskListForView, taskSearchQuery]
   );
 
   const courses: Course[] = publishedCourses.map((c) => ({
@@ -284,7 +341,13 @@ export function CourseManagementPage({ initialCourseTab }: { initialCourseTab?: 
   }));
 
   const sourceCourses =
-    courseView === 'active' ? courses : courseView === 'shared' ? sharedCourses : deletedCourses;
+    courseView === 'active'
+      ? courses
+      : courseView === 'shared'
+        ? sharedCourses
+        : courseView === 'public'
+          ? publicCourses
+          : deletedCourses;
   const filteredCourses = sourceCourses.filter((course) => {
     return (
       course.title.toLowerCase().includes(courseSearchQuery.toLowerCase()) ||
@@ -923,6 +986,9 @@ export function CourseManagementPage({ initialCourseTab }: { initialCourseTab?: 
             {courseView === 'shared' && course.ownerTeacherId ? (
               <Badge variant="outline">分享自 {course.ownerTeacherName ?? course.ownerTeacherId}</Badge>
             ) : null}
+            {courseView === 'public' && course.ownerTeacherId ? (
+              <Badge variant="outline">来自 {course.ownerTeacherName ?? course.ownerTeacherId}</Badge>
+            ) : null}
             {canManage && courseView === 'active' && (
               <Badge variant={course.shareStatus === 'shared' ? 'default' : 'secondary'}>
                 {course.shareStatus === 'shared' ? '已分享' : '未分享'}
@@ -948,7 +1014,7 @@ export function CourseManagementPage({ initialCourseTab }: { initialCourseTab?: 
             编辑
           </Button>
         )}
-        {courseView === 'shared' ? (
+        {courseView === 'shared' || courseView === 'public' ? (
           <Button variant="ghost" size="sm" onClick={() => openCourseAssignDialog(course)}>
             <UserPlus className="w-4 h-4 mr-1" />
             分配
@@ -1033,6 +1099,9 @@ export function CourseManagementPage({ initialCourseTab }: { initialCourseTab?: 
                   <Button variant={myTaskView === 'active' ? 'default' : 'outline'} size="sm" onClick={() => setMyTaskView('active')}>
                     我的任务
                   </Button>
+                  <Button variant={myTaskView === 'public' ? 'default' : 'outline'} size="sm" onClick={() => setMyTaskView('public')}>
+                    公开任务
+                  </Button>
                 </div>
                 <div className="flex items-center gap-2">
                   <div className="relative md:w-64">
@@ -1049,17 +1118,17 @@ export function CourseManagementPage({ initialCourseTab }: { initialCourseTab?: 
                   </Button>
                 </div>
               </div>
-              {myTaskView === 'recycle' && loadingDeletedTasks ? (
+              {(myTaskView === 'recycle' && loadingDeletedTasks) || (myTaskView === 'public' && loadingPublicTasks) ? (
                 <div className="flex justify-center py-8">
                   <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
                 </div>
               ) : filteredMyTasks.length === 0 ? (
                 <p className="text-muted-foreground py-8 text-center">
-                  {myTaskView === 'active' ? '暂无任务' : '回收站暂无任务'}
+                  {myTaskView === 'active' ? '暂无任务' : myTaskView === 'public' ? '暂无公开任务' : '回收站暂无任务'}
                 </p>
               ) : (
                 <>
-                  {myTaskView === 'active' && (
+                  {(myTaskView === 'active' || myTaskView === 'public') && (
                     <div className="flex items-center justify-between gap-4 py-3 px-4 bg-primary/10 border border-primary/20 rounded-lg">
                       <span className="text-sm font-medium">已选 {selectedTaskIds.length} 个任务</span>
                       <div className="flex items-center gap-2">
@@ -1083,7 +1152,11 @@ export function CourseManagementPage({ initialCourseTab }: { initialCourseTab?: 
                   )}
                   <div className="space-y-2 max-h-[280px] overflow-y-auto">
                     {filteredMyTasks.map((task) =>
-                      renderTaskRow(task, { canManage: true, selectable: myTaskView === 'active', assignable: myTaskView === 'active' })
+                      renderTaskRow(task, {
+                        canManage: myTaskView === 'active',
+                        selectable: myTaskView === 'active' || myTaskView === 'public',
+                        assignable: myTaskView === 'active' || myTaskView === 'public',
+                      })
                     )}
                   </div>
                 </>
@@ -1108,6 +1181,9 @@ export function CourseManagementPage({ initialCourseTab }: { initialCourseTab?: 
                   <Button variant={courseView === 'shared' ? 'default' : 'outline'} size="sm" onClick={() => setCourseView('shared')}>
                     分享给我的
                   </Button>
+                  <Button variant={courseView === 'public' ? 'default' : 'outline'} size="sm" onClick={() => setCourseView('public')}>
+                    公开课程
+                  </Button>
                 </div>
                 <div className="flex items-center gap-2">
                   <div className="relative md:w-64">
@@ -1124,13 +1200,21 @@ export function CourseManagementPage({ initialCourseTab }: { initialCourseTab?: 
                   </Button>
                 </div>
               </div>
-              {(courseView === 'recycle' && loadingDeletedCourses) || (courseView === 'shared' && loadingSharedCourses) ? (
+              {(courseView === 'recycle' && loadingDeletedCourses) ||
+              (courseView === 'shared' && loadingSharedCourses) ||
+              (courseView === 'public' && loadingPublicCourses) ? (
                 <div className="flex justify-center py-8">
                   <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
                 </div>
               ) : filteredCourses.length === 0 ? (
                 <p className="text-muted-foreground py-8 text-center">
-                  {courseView === 'active' ? '暂无课程' : courseView === 'shared' ? '暂无分享给我的课程' : '回收站暂无课程'}
+                  {courseView === 'active'
+                    ? '暂无课程'
+                    : courseView === 'shared'
+                      ? '暂无分享给我的课程'
+                      : courseView === 'public'
+                        ? '暂无公开课程'
+                        : '回收站暂无课程'}
                 </p>
               ) : (
                 <div className="space-y-3 max-h-[280px] overflow-y-auto">
