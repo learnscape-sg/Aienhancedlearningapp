@@ -533,10 +533,6 @@ const StudentConsole: React.FC<StudentConsoleProps> = ({
     };
   }, []);
 
-  useEffect(() => {
-    if (!isRecording) setVoiceInputActive(false);
-  }, [isRecording]);
-
   // Speech recognition hook
   const {
     isRecording,
@@ -560,6 +556,10 @@ const StudentConsole: React.FC<StudentConsoleProps> = ({
       }
     },
   });
+
+  useEffect(() => {
+    if (!isRecording) setVoiceInputActive(false);
+  }, [isRecording]);
 
   // Text-to-speech hook
   const {
