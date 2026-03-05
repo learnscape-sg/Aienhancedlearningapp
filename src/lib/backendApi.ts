@@ -665,6 +665,30 @@ export async function removeCourseAssignment(
   return apiCall(`/api/assignments?${params.toString()}`, { method: 'DELETE' });
 }
 
+export async function createScheduledAssignment(params: {
+  type: 'course' | 'task_package';
+  courseId?: string;
+  taskIds?: string[];
+  classIds: string[];
+  groupIds?: string[];
+  teacherId: string;
+  scheduledAt: string;
+}): Promise<{ id: string; scheduledAt: string }> {
+  const { data } = await apiCall<{ id: string; scheduledAt: string }>('/api/scheduled-assignments', {
+    method: 'POST',
+    body: JSON.stringify({
+      type: params.type,
+      courseId: params.courseId,
+      taskIds: params.taskIds,
+      classIds: params.classIds,
+      groupIds: params.groupIds?.length ? params.groupIds : undefined,
+      teacherId: params.teacherId,
+      scheduledAt: params.scheduledAt,
+    }),
+  });
+  return data ?? { id: '', scheduledAt: params.scheduledAt };
+}
+
 export interface StudentCourseItem {
   courseId: string;
   topic?: string;

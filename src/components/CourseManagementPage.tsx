@@ -23,6 +23,7 @@ import { getLearnYourWayOrigin } from '@/config/appConfig';
 import {
   assignCourseToClasses,
   createCourse,
+  createScheduledAssignment,
   deleteTask,
   listTeacherClasses,
   listTeacherTasks,
@@ -31,6 +32,7 @@ import {
   updateCourseVisibility,
   updateCoursePlan,
   updateTask,
+  updateTaskVisibility,
   getTask,
   getCourse,
   listSharedCourses,
@@ -115,6 +117,8 @@ export function CourseManagementPage({ initialCourseTab }: { initialCourseTab?: 
   const [loadingSharedCourses, setLoadingSharedCourses] = useState(false);
   const [deletingCourseId, setDeletingCourseId] = useState<string | null>(null);
   const [restoringCourseId, setRestoringCourseId] = useState<string | null>(null);
+  const [publishingCourseId, setPublishingCourseId] = useState<string | null>(null);
+  const [publishingTaskId, setPublishingTaskId] = useState<string | null>(null);
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
   const [sharingCourse, setSharingCourse] = useState<Course | null>(null);
   const [shareLoading, setShareLoading] = useState(false);
@@ -337,6 +341,21 @@ export function CourseManagementPage({ initialCourseTab }: { initialCourseTab?: 
     }
   };
 
+  const handleTaskPublish = async (task: TaskItem) => {
+    if (!user?.id) return;
+    setPublishingTaskId(task.taskId);
+    try {
+      const action = task.isPublic ? 'unpublish' : 'publish';
+      await updateTaskVisibility(task.taskId, user.id, action);
+      await refreshTasks();
+    } catch (err) {
+      console.error('Task publish failed:', err);
+      alert(err instanceof Error ? err.message : '操作失败');
+    } finally {
+      setPublishingTaskId(null);
+    }
+  };
+
   const handleTaskRestore = async (task: TaskItem) => {
     if (!user?.id) return;
     setRestoringTaskId(task.taskId);
@@ -355,16 +374,37 @@ export function CourseManagementPage({ initialCourseTab }: { initialCourseTab?: 
 
   const handleTaskConfirmAssign = async () => {
     if (!user?.id || selectedTaskIdsForAssign.length === 0 || selectedClasses.length === 0) return;
+    if (publishMode === 'schedule') {
+      if (!scheduledPublishAt) {
+        alert('请选择定时发布时间');
+        return;
+      }
+      setAssigning(true);
+      try {
+        await createScheduledAssignment({
+          type: 'task_package',
+          taskIds: selectedTaskIdsForAssign,
+          classIds: selectedClasses,
+          teacherId: user.id,
+          scheduledAt: new Date(scheduledPublishAt).toISOString(),
+        });
+        alert(`已设置定时发送，将在 ${new Date(scheduledPublishAt).toLocaleString()} 自动分配`);
+        setTaskAssignDialogOpen(false);
+        setSelectedClasses([]);
+        setSelectedTaskIdsForAssign([]);
+        setSelectedTaskIds([]);
+      } catch (err) {
+        console.error('Scheduled assign failed:', err);
+        alert(err instanceof Error ? err.message : '定时发送设置失败');
+      } finally {
+        setAssigning(false);
+      }
+      return;
+    }
     setAssigning(true);
     try {
       const created = await createCourse({ taskIds: selectedTaskIdsForAssign }, user.id);
       const result = await assignCourseToClasses(created.courseId, selectedClasses, user.id);
-      if (publishMode === 'schedule') {
-        if (!scheduledPublishAt) throw new Error('请选择定时发布时间');
-        await updateCourseVisibility(created.courseId, user.id, 'schedule', new Date(scheduledPublishAt).toISOString());
-      } else {
-        await updateCourseVisibility(created.courseId, user.id, 'publish');
-      }
       const message =
         result.skippedCount && result.skippedCount > 0
           ? `成功分配 ${result.assignedCount} 个班级，${result.skippedCount} 个班级已分配过`
@@ -428,6 +468,37 @@ export function CourseManagementPage({ initialCourseTab }: { initialCourseTab?: 
 
   const handleCourseConfirmAssign = async () => {
     if (!user?.id || !selectedCourse || (selectedClasses.length === 0 && selectedGroups.length === 0)) return;
+    if (publishMode === 'schedule') {
+      if (!scheduledPublishAt) {
+        alert('请选择定时发布时间');
+        return;
+      }
+      setAssigning(true);
+      try {
+        await createScheduledAssignment({
+          type: 'course',
+          courseId: selectedCourse.id,
+          classIds: selectedClasses,
+          groupIds: selectedGroups.length > 0 ? selectedGroups : undefined,
+          teacherId: user.id,
+          scheduledAt: new Date(scheduledPublishAt).toISOString(),
+        });
+        alert(`已设置定时发送，将在 ${new Date(scheduledPublishAt).toLocaleString()} 自动分配`);
+        setCourseAssignDialogOpen(false);
+        setSelectedClasses([]);
+        setSelectedGroups([]);
+        setSelectedCourse(null);
+        setAssignedClasses([]);
+        setAssignedGroups([]);
+        await refreshCourses();
+      } catch (err) {
+        console.error('Scheduled assign failed:', err);
+        alert(err instanceof Error ? err.message : '定时发送设置失败');
+      } finally {
+        setAssigning(false);
+      }
+      return;
+    }
     setAssigning(true);
     try {
       const result = await assignCourseToClasses(
@@ -436,12 +507,6 @@ export function CourseManagementPage({ initialCourseTab }: { initialCourseTab?: 
         user.id,
         selectedGroups.length > 0 ? selectedGroups : undefined
       );
-      if (publishMode === 'schedule') {
-        if (!scheduledPublishAt) throw new Error('请选择定时发布时间');
-        await updateCourseVisibility(selectedCourse.id, user.id, 'schedule', new Date(scheduledPublishAt).toISOString());
-      } else {
-        await updateCourseVisibility(selectedCourse.id, user.id, 'publish');
-      }
       const parts: string[] = [];
       if (result.assignedClassCount && result.assignedClassCount > 0) {
         const classNames = classes.filter((c) => selectedClasses.includes(c.id)).map((c) => c.name).join('、');
@@ -492,6 +557,23 @@ export function CourseManagementPage({ initialCourseTab }: { initialCourseTab?: 
 
   const handleCoursePreview = (courseId: string) => {
     window.open(`${getLearnYourWayOrigin()}/course/${courseId}`, '_blank');
+  };
+
+  const handleCoursePublish = async (course: Course) => {
+    if (!user?.id) return;
+    const isOwner = !course.ownerTeacherId || course.ownerTeacherId === user.id;
+    if (!isOwner) return;
+    setPublishingCourseId(course.id);
+    try {
+      const action = course.visibilityStatus === 'public' ? 'unpublish' : 'publish';
+      await updateCourseVisibility(course.id, user.id, action);
+      await refreshCourses();
+    } catch (err) {
+      console.error('Course publish failed:', err);
+      alert(err instanceof Error ? err.message : '操作失败');
+    } finally {
+      setPublishingCourseId(null);
+    }
   };
 
   const handleCourseRestore = async (course: Course) => {
@@ -775,6 +857,19 @@ export function CourseManagementPage({ initialCourseTab }: { initialCourseTab?: 
               分配
             </Button>
           ) : null}
+          {opts.canManage && myTaskView === 'active' && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => handleTaskPublish(task)}
+              disabled={publishingTaskId === task.taskId}
+            >
+              {publishingTaskId === task.taskId ? (
+                <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+              ) : null}
+              {task.isPublic ? '取消发布' : '发布'}
+            </Button>
+          )}
           {opts.canManage ? (
             <>
               {myTaskView === 'active' ? (
@@ -865,6 +960,19 @@ export function CourseManagementPage({ initialCourseTab }: { initialCourseTab?: 
                 <UserPlus className="w-4 h-4 mr-1" />
                 分配
               </Button>
+              {(!course.ownerTeacherId || course.ownerTeacherId === user?.id) && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => handleCoursePublish(course)}
+                  disabled={publishingCourseId === course.id}
+                >
+                  {publishingCourseId === course.id ? (
+                    <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                  ) : null}
+                  {course.visibilityStatus === 'public' ? '取消发布' : '发布'}
+                </Button>
+              )}
               <Button variant="ghost" size="sm" onClick={() => openShareDialog(course)}>
                 <Share2 className="w-4 h-4 mr-1" />
                 分享
