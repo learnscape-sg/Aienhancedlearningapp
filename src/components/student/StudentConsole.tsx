@@ -518,6 +518,8 @@ const StudentConsole: React.FC<StudentConsoleProps> = ({
   const pendingAutoSpeakRef = useRef<string | null>(null);
   const voiceReleaseHandledRef = useRef(false);
   const voiceStartPromiseRef = useRef<Promise<void> | null>(null);
+  const readTaskPointerDownRef = useRef(false);
+  const readTaskPointerLeftRef = useRef(false);
 
   useEffect(() => {
     const unlock = () => setHasUserInteracted(true);
@@ -3601,42 +3603,72 @@ CRITICAL: Output language must be 简体中文 only.
                 {voiceServiceAvailable && (
                   <button
                     type="button"
-                    onClick={() => {
-                      const stripMath = (s: string) => s.replace(/\[[\s\S]*?\]|\$\$[\s\S]*?\$\$|\$[^$]*\$/g, ' ').replace(/\s+/g, ' ').trim();
-                      let textToRead = '';
-                      if (isGuidedVideoFlow) {
-                        if (guidedStep === 1) {
-                          const parts: string[] = [t('guidedStep1')];
-                          const obj = guidedPayload?.learningObjective || currentTask.outputGoal || t('learnObjectivePlaceholder');
-                          if (obj) parts.push(`${t('learningObjective')}：${stripMath(obj)}`);
-                          if (guidedPayload?.whyItMatters?.meaning_anchor) {
-                            parts.push(`${t('whyLearnThis')} ${stripMath(guidedPayload.whyItMatters.meaning_anchor)}`);
-                          }
-                          if (guidedPayload?.whyItMatters?.advance_organizer) {
-                            parts.push(`${t('whatToLearn')} ${stripMath(guidedPayload.whyItMatters.advance_organizer)}`);
-                          }
-                          textToRead = parts.join('。');
-                        } else if (guidedStep === 2) {
-                          const inst = guidedPayload?.customTextInstruction?.trim();
-                          const html = guidedPayload?.convertedHtml?.trim();
-                          if (inst) textToRead = stripMath(inst);
-                          else if (html) textToRead = stripMath(html.replace(/<[^>]+>/g, ' '));
-                        } else if (guidedStep === 3 && guidedKeyIdeas.length > 0) {
-                          textToRead = guidedKeyIdeas.map((i) => stripMath(i.text.replace(/__KEY__/g, '填空'))).filter(Boolean).join('。');
-                        } else if (guidedStep === 4 && guidedPractice.length > 0) {
-                          textToRead = guidedPractice.map((q) => stripMath(q.stem || q.question || '')).filter(Boolean).join('。');
-                        } else if (guidedStep === 5 && guidedExitTickets.length > 0) {
-                          textToRead = guidedExitTickets.map((q) => stripMath(q.question || q.stem || '')).filter(Boolean).join('。');
-                        }
-                      } else {
-                        const desc = (currentTask.description || currentTask.contentPayload || '').trim();
-                        textToRead = stripMath(desc);
-                      }
-                      if (textToRead) playVoice(textToRead).catch(() => {});
+                    className={`flex items-center gap-2 px-3 py-2 rounded-full text-sm font-semibold text-white border transition-colors shadow-sm touch-none select-none ${
+                      isPlayingVoice || isLoadingVoice
+                        ? 'bg-red-500 hover:bg-red-600 border-red-600'
+                        : 'bg-emerald-500 hover:bg-emerald-600 border-emerald-600'
+                    }`}
+                    onPointerDown={(e) => {
+                      e.preventDefault();
+                      e.currentTarget.setPointerCapture(e.pointerId);
+                      readTaskPointerDownRef.current = true;
+                      readTaskPointerLeftRef.current = false;
                     }}
-                    className="flex items-center gap-2 px-3 py-2 rounded-full text-sm font-semibold bg-emerald-500 hover:bg-emerald-600 text-white border border-emerald-600 transition-colors shadow-sm"
+                    onPointerUp={(e) => {
+                      e.preventDefault();
+                      const wasPressed = readTaskPointerDownRef.current;
+                      const didNotLeave = !readTaskPointerLeftRef.current;
+                      readTaskPointerDownRef.current = false;
+                      e.currentTarget.releasePointerCapture?.(e.pointerId);
+                      if (wasPressed && didNotLeave) {
+                        const stripMath = (s: string) => s.replace(/\[[\s\S]*?\]|\$\$[\s\S]*?\$\$|\$[^$]*\$/g, ' ').replace(/\s+/g, ' ').trim();
+                        if (isPlayingVoice || isLoadingVoice) {
+                          stopVoice();
+                        } else {
+                          let textToRead = '';
+                          if (isGuidedVideoFlow) {
+                            if (guidedStep === 1) {
+                              const parts: string[] = [t('guidedStep1')];
+                              const obj = guidedPayload?.learningObjective || currentTask.outputGoal || t('learnObjectivePlaceholder');
+                              if (obj) parts.push(`${t('learningObjective')}：${stripMath(obj)}`);
+                              if (guidedPayload?.whyItMatters?.meaning_anchor) {
+                                parts.push(`${t('whyLearnThis')} ${stripMath(guidedPayload.whyItMatters.meaning_anchor)}`);
+                              }
+                              if (guidedPayload?.whyItMatters?.advance_organizer) {
+                                parts.push(`${t('whatToLearn')} ${stripMath(guidedPayload.whyItMatters.advance_organizer)}`);
+                              }
+                              textToRead = parts.join('。');
+                            } else if (guidedStep === 2) {
+                              const inst = guidedPayload?.customTextInstruction?.trim();
+                              const html = guidedPayload?.convertedHtml?.trim();
+                              if (inst) textToRead = stripMath(inst);
+                              else if (html) textToRead = stripMath(html.replace(/<[^>]+>/g, ' '));
+                            } else if (guidedStep === 3 && guidedKeyIdeas.length > 0) {
+                              textToRead = guidedKeyIdeas.map((i) => stripMath(i.text.replace(/__KEY__/g, '填空'))).filter(Boolean).join('。');
+                            } else if (guidedStep === 4 && guidedPractice.length > 0) {
+                              textToRead = guidedPractice.map((q) => stripMath(q.stem || q.question || '')).filter(Boolean).join('。');
+                            } else if (guidedStep === 5 && guidedExitTickets.length > 0) {
+                              textToRead = guidedExitTickets.map((q) => stripMath(q.question || q.stem || '')).filter(Boolean).join('。');
+                            }
+                          } else {
+                            const desc = (currentTask.description || currentTask.contentPayload || '').trim();
+                            textToRead = stripMath(desc);
+                          }
+                          if (textToRead) playVoice(textToRead).catch(() => {});
+                        }
+                      }
+                    }}
+                    onPointerLeave={(e) => {
+                      e.preventDefault();
+                      readTaskPointerLeftRef.current = true;
+                    }}
+                    onPointerCancel={(e) => {
+                      e.preventDefault();
+                      readTaskPointerDownRef.current = false;
+                      readTaskPointerLeftRef.current = true;
+                    }}
                   >
-                    <Volume2 size={16} /> {t('readTaskAloud')}
+                    <Volume2 size={16} /> {isPlayingVoice || isLoadingVoice ? t('stopReadTask') : t('readTaskAloud')}
                   </button>
                 )}
                 <button
