@@ -1063,13 +1063,14 @@ const StudentConsole: React.FC<StudentConsoleProps> = ({
       // Check if student is stuck (idle for more than 2 minutes)
       if (idleTime > 120000 && lastVisualizationAction === 'idle') {
         const prompt = generateGuidancePrompt(visualizationData, 'idle', idleTime);
-        handleSendMessage(undefined, prompt);
+        // 必须传入 forcedInput，否则 handleSendMessage 会因 chatInput 为空而提前 return
+        handleSendMessage(t('stuckHint'), prompt);
         setLastVisualizationActionTime(Date.now()); // Reset timer to avoid spam
       }
     }, 30000); // Check every 30 seconds
     
     return () => clearInterval(checkProgress);
-  }, [plan.tasks, currentTaskIndex, visualizationData, lastVisualizationAction, lastVisualizationActionTime]);
+  }, [plan.tasks, currentTaskIndex, visualizationData, lastVisualizationAction, lastVisualizationActionTime, t]);
 
   // --- Helpers ---
   const addLog = (text: string) => {
@@ -1425,7 +1426,8 @@ ${isMathOrScience
           : '关键要点填空 - 当前题目、学生已填内容、参考答案（供渐进式提示使用）：',
       ];
       guidedKeyIdeas.forEach((idea, idx) => {
-        const parts = idea.text.split('__KEY__');
+        const text = idea?.text ?? '';
+        const parts = text.split('__KEY__');
         const blankCount = Math.max(0, parts.length - 1);
         const refKeywords = idea.blanks || [];
         const studentFills =
@@ -1434,7 +1436,7 @@ ${isMathOrScience
             : [keywordAnswers[`idea-${idx}`] || ''];
         const missing = studentFills.map((v, i) => (v.trim() ? '' : `[空${i + 1}]`)).filter(Boolean);
         lines.push(
-          `[${idx + 1}] 题干: ${idea.text.replace(/__KEY__/g, '___')} | 学生已填: ${JSON.stringify(studentFills)} | 缺失: ${missing.join(' ') || '无'} | 参考答案: ${JSON.stringify(refKeywords)}`
+          `[${idx + 1}] 题干: ${text.replace(/__KEY__/g, '___')} | 学生已填: ${JSON.stringify(studentFills)} | 缺失: ${missing.join(' ') || '无'} | 参考答案: ${JSON.stringify(refKeywords)}`
         );
       });
       lines.push(
@@ -1447,6 +1449,7 @@ ${isMathOrScience
     if (guidedStep === 4 && guidedPractice.length > 0) {
       const idx = practiceCurrentIndex;
       const q = guidedPractice[idx];
+      if (!q) return contentLanguage === 'en' ? 'Practice: no question at index.' : '练习：题目索引异常。';
       const parsed = extractQuestionStemAndOptions(q.question || '', q.options);
       const stuckCount = stuckClicksPerPracticeQuestion[idx] ?? 0;
       const isTF = q.questionType === 'true_false' || (!parsed.options?.length && /^(true|false)$/i.test((q.correctAnswer || '').trim()));
@@ -1804,11 +1807,11 @@ CRITICAL: Output language must be 简体中文 only.
     if (guidedStep === 2) return `当前步骤「${currentStepTitle}」：学生已完成自主学习。`;
     if (guidedStep === 3) {
       const totalBlanks = guidedKeyIdeas.reduce((acc, idea) => {
-        const blankCount = Math.max(0, idea.text.split('__KEY__').length - 1);
+        const blankCount = Math.max(0, (idea?.text ?? '').split('__KEY__').length - 1);
         return acc + (blankCount > 0 ? blankCount : 1);
       }, 0);
       const filledBlanks = guidedKeyIdeas.reduce((acc, idea, idx) => {
-        const blankCount = Math.max(0, idea.text.split('__KEY__').length - 1);
+        const blankCount = Math.max(0, (idea?.text ?? '').split('__KEY__').length - 1);
         if (blankCount > 0) {
           return acc + Array.from({ length: blankCount }).filter((_, blankIdx) =>
             (keywordAnswers[`blank-${idx}-${blankIdx}`] || '').trim().length > 0
@@ -1817,7 +1820,7 @@ CRITICAL: Output language must be 简体中文 only.
         return acc + ((keywordAnswers[`idea-${idx}`] || '').trim().length > 0 ? 1 : 0);
       }, 0);
       const answers = guidedKeyIdeas.map((idea, idx) => {
-        const blankCount = Math.max(0, idea.text.split('__KEY__').length - 1);
+        const blankCount = Math.max(0, (idea?.text ?? '').split('__KEY__').length - 1);
         if (blankCount > 0) {
           return Array.from({ length: blankCount }).map((_, blankIdx) =>
             keywordAnswers[`blank-${idx}-${blankIdx}`] || ''
@@ -2751,7 +2754,8 @@ CRITICAL: Output language must be 简体中文 only.
                             />
                           )}
                           {(() => {
-                            const parts = idea.text.split('__KEY__');
+                            const text = idea?.text ?? '';
+                            const parts = text.split('__KEY__');
                             const blankCount = Math.max(0, parts.length - 1);
                             if (blankCount > 0) {
                               return (
@@ -2780,7 +2784,7 @@ CRITICAL: Output language must be 简体中文 only.
                             }
                             return (
                               <div className="flex items-center flex-wrap gap-2 text-sm text-slate-700 leading-7">
-                                <MathTextPreview text={idea.text} className="text-sm text-slate-700" />
+                                <MathTextPreview text={text} className="text-sm text-slate-700" />
                                 <input
                                   type="text"
                                   value={keywordAnswers[`idea-${idx}`] || ''}
@@ -2817,6 +2821,7 @@ CRITICAL: Output language must be 简体中文 only.
                   {(() => {
                     const idx = practiceCurrentIndex;
                     const q = guidedPractice[idx];
+                    if (!q) return null;
                     const parsed = extractQuestionStemAndOptions(q.question || '', q.options);
                     const inputMode = practiceInputMode[idx] || 'text';
                     const hasImageAnswer = !!practiceImageAnswers[idx];
@@ -3650,11 +3655,11 @@ CRITICAL: Output language must be 简体中文 only.
                               if (inst) textToRead = stripMath(inst);
                               else if (html) textToRead = stripMath(html.replace(/<[^>]+>/g, ' '));
                             } else if (guidedStep === 3 && guidedKeyIdeas.length > 0) {
-                              textToRead = guidedKeyIdeas.map((i) => stripMath(i.text.replace(/__KEY__/g, '填空'))).filter(Boolean).join('。');
+                              textToRead = guidedKeyIdeas.map((i) => stripMath((i?.text ?? '').replace(/__KEY__/g, '填空'))).filter(Boolean).join('。');
                             } else if (guidedStep === 4 && guidedPractice.length > 0) {
-                              textToRead = guidedPractice.map((q) => stripMath(q.stem || q.question || '')).filter(Boolean).join('。');
+                              textToRead = guidedPractice.map((q) => stripMath(q?.stem || q?.question || '')).filter(Boolean).join('。');
                             } else if (guidedStep === 5 && guidedExitTickets.length > 0) {
-                              textToRead = guidedExitTickets.map((q) => stripMath(q.question || q.stem || '')).filter(Boolean).join('。');
+                              textToRead = guidedExitTickets.map((q) => stripMath(q?.question || q?.stem || '')).filter(Boolean).join('。');
                             }
                           } else {
                             const desc = (currentTask.description || currentTask.contentPayload || '').trim();

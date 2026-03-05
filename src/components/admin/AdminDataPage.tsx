@@ -91,6 +91,8 @@ export function AdminDataPage() {
   const [viewLanguage, setViewLanguage] = useState('');
   const [viewCreatedFrom, setViewCreatedFrom] = useState('');
   const [viewCreatedTo, setViewCreatedTo] = useState('');
+  const [viewUserQ, setViewUserQ] = useState('');
+  const [viewUserId, setViewUserId] = useState('');
   const [viewUsers, setViewUsers] = useState<AdminUserProfile[]>([]);
   const [viewUsersLoading, setViewUsersLoading] = useState(false);
   const [viewUsersError, setViewUsersError] = useState('');
@@ -405,6 +407,8 @@ export function AdminDataPage() {
           language: viewLanguage.trim() || undefined,
           createdFrom: viewCreatedFrom.trim() || undefined,
           createdTo: viewCreatedTo.trim() || undefined,
+          q: viewUserQ.trim() || undefined,
+          id: viewUserId.trim() || undefined,
           limit: 200,
         },
         token
@@ -425,6 +429,26 @@ export function AdminDataPage() {
         <div className="rounded-xl border bg-white p-6">
           <h2 className="text-lg font-semibold text-slate-900 mb-4">查看用户</h2>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+            <div>
+              <label className="block text-sm font-medium text-slate-600 mb-1">用户名/邮箱搜索</label>
+              <input
+                type="text"
+                value={viewUserQ}
+                onChange={(e) => setViewUserQ(e.target.value)}
+                placeholder="姓名或邮箱模糊匹配"
+                className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-600 mb-1">ID 精确搜索</label>
+              <input
+                type="text"
+                value={viewUserId}
+                onChange={(e) => setViewUserId(e.target.value)}
+                placeholder="UUID"
+                className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm font-mono"
+              />
+            </div>
             <div>
               <label className="block text-sm font-medium text-slate-600 mb-1">Tenant</label>
               <select
@@ -513,7 +537,7 @@ export function AdminDataPage() {
           )}
           <div className="overflow-x-auto">
             {viewUsers.length === 0 && !viewUsersLoading ? (
-              <p className="text-sm text-slate-500 py-8 text-center">选择筛选条件后点击查询，或暂无匹配用户</p>
+              <p className="text-sm text-slate-500 py-8 text-center">选择筛选条件、输入用户名/ID 后点击查询，或暂无匹配用户</p>
             ) : (
               <div className="space-y-3">
                 {viewUsers.map((u) => (

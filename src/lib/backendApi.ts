@@ -1993,6 +1993,8 @@ export async function listAdminUsers(
     language?: string;
     createdFrom?: string;
     createdTo?: string;
+    q?: string;
+    id?: string;
     limit?: number;
   },
   accessToken: string
@@ -2004,6 +2006,8 @@ export async function listAdminUsers(
   if (params.language) qs.set('language', params.language);
   if (params.createdFrom) qs.set('createdFrom', params.createdFrom);
   if (params.createdTo) qs.set('createdTo', params.createdTo);
+  if (params.q) qs.set('q', params.q);
+  if (params.id) qs.set('id', params.id);
   if (params.limit != null) qs.set('limit', String(params.limit));
   return apiCall<{ users: AdminUserProfile[] }>(`/api/admin/users${qs.toString() ? `?${qs}` : ''}`, {
     method: 'GET',
@@ -2180,6 +2184,8 @@ export interface AdminCostAnalyticsResponse {
     avgCostPerRequestUsd: number;
     dateRange: { startIso: string; endIso: string };
   };
+  teacherSummary?: { requests: number; tokensIn: number; tokensOut: number; costUsd: number };
+  studentSummary?: { requests: number; tokensIn: number; tokensOut: number; costUsd: number };
   byDay: Array<{ day: string; requests: number; tokensIn: number; tokensOut: number; costUsd: number }>;
   byModel: Array<{ model: string; requests: number; tokensIn: number; tokensOut: number; costUsd: number }>;
   byEndpoint: Array<{ endpoint: string; requests: number; tokensIn: number; tokensOut: number; costUsd: number }>;
@@ -2201,6 +2207,7 @@ export interface AdminCostAnalyticsResponse {
   teacherTopN: Array<{
     teacherId: string;
     teacherName: string;
+    teacherEmail?: string | null;
     requests: number;
     tokensIn: number;
     tokensOut: number;
@@ -2209,6 +2216,7 @@ export interface AdminCostAnalyticsResponse {
   studentTopN: Array<{
     studentId: string;
     studentName: string;
+    studentEmail?: string | null;
     userType?: string | null;
     requests: number;
     tokensIn: number;

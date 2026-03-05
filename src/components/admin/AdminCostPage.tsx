@@ -99,6 +99,29 @@ export function AdminCostPage() {
               <AdminStatCard label="单请求平均成本(USD)" value={data.summary.avgCostPerRequestUsd.toFixed(6)} />
             </AdminStatGrid>
 
+            {(data.teacherSummary || data.studentSummary) ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {data.teacherSummary ? (
+                  <div className="rounded-xl border bg-white p-4">
+                    <h3 className="text-base font-semibold text-slate-900 mb-3">教师成本</h3>
+                    <AdminStatGrid columns={2}>
+                      <AdminStatCard label="请求数" value={String(data.teacherSummary.requests)} />
+                      <AdminStatCard label="成本(USD)" value={data.teacherSummary.costUsd.toFixed(4)} />
+                    </AdminStatGrid>
+                  </div>
+                ) : null}
+                {data.studentSummary ? (
+                  <div className="rounded-xl border bg-white p-4">
+                    <h3 className="text-base font-semibold text-slate-900 mb-3">学生成本</h3>
+                    <AdminStatGrid columns={2}>
+                      <AdminStatCard label="请求数" value={String(data.studentSummary.requests)} />
+                      <AdminStatCard label="成本(USD)" value={data.studentSummary.costUsd.toFixed(4)} />
+                    </AdminStatGrid>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+
             <AdminTableCard
               title="按模型"
               headers={['Model', 'Requests', 'Cost (USD)']}
@@ -122,9 +145,10 @@ export function AdminCostPage() {
             />
             <AdminTableCard
               title={`教师 Top ${topN}`}
-              headers={['Teacher', 'Requests', 'Tokens In', 'Tokens Out', 'Cost (USD)']}
+              headers={['教师', '邮箱/用户名', 'Requests', 'Tokens In', 'Tokens Out', 'Cost (USD)']}
               rows={data.teacherTopN.map((x) => [
                 x.teacherName,
+                x.teacherEmail ?? '—',
                 String(x.requests),
                 String(x.tokensIn),
                 String(x.tokensOut),
@@ -133,9 +157,10 @@ export function AdminCostPage() {
             />
             <AdminTableCard
               title={`学生 Top ${topN}`}
-              headers={['Student', 'Requests', 'Tokens In', 'Tokens Out', 'Cost (USD)']}
+              headers={['学生', '邮箱/用户名', 'Requests', 'Tokens In', 'Tokens Out', 'Cost (USD)']}
               rows={data.studentTopN.map((x) => [
                 x.studentName,
+                x.studentEmail ?? '—',
                 String(x.requests),
                 String(x.tokensIn),
                 String(x.tokensOut),
