@@ -240,42 +240,50 @@ export function useSpeechRecognition(
   }, [startRecordingBrowser, startRecordingServer]);
 
   const stopRecording = useCallback(async () => {
+    setIsRecording(false);
+
     const mode = getSpeechMode();
     if (mode === 'browser') {
-      if (recognitionRef.current) {
-        recognitionRef.current.stop();
-        // 不依赖 isRecording，解决 pointerup 早于 onstart 时的竞态
+      try {
+        recognitionRef.current?.stop();
+      } catch {
+        /* ignore */
       }
       return;
     }
-    if (mediaRecorderRef.current) {
-      mediaRecorderRef.current.stop();
-      setIsRecording(false);
+
+    try {
+      mediaRecorderRef.current?.stop();
+    } catch {
+      /* ignore */
     }
   }, []);
 
   const cancelRecording = useCallback(() => {
+    setIsRecording(false);
+    setIsProcessing(false);
+    setError(null);
+
     const mode = getSpeechMode();
     if (mode === 'browser') {
-      if (recognitionRef.current) recognitionRef.current.abort();
-      setIsRecording(false);
-      setIsProcessing(false);
-      setError(null);
+      try {
+        recognitionRef.current?.abort();
+      } catch {
+        /* ignore */
+      }
       return;
     }
 
-    if (mediaRecorderRef.current) {
-      mediaRecorderRef.current.stop();
-      setIsRecording(false);
+    try {
+      mediaRecorderRef.current?.stop();
+    } catch {
+      /* ignore */
     }
-
     if (streamRef.current) {
       streamRef.current.getTracks().forEach(track => track.stop());
       streamRef.current = null;
     }
-
     audioChunksRef.current = [];
-    setError(null);
   }, []);
 
   return {
