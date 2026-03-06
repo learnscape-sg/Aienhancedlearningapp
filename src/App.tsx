@@ -34,6 +34,7 @@ import { RoleBasedLayout } from '@/components/shared/RoleBasedLayout';
 import { useRuntimePolicy } from '@/hooks/useRuntimePolicy';
 import { shouldUseStudentTabletCompat, getCompatViewportContent } from '@/config/tenantCompat';
 import { appConfig } from '@/config/appConfig';
+import { LoadingScreen } from './components/LoadingScreen';
 
 // Teacher platform components
 import { TeacherOverview } from './components/TeacherOverview';
@@ -184,13 +185,12 @@ function AppContent() {
 
   // Loading state
   if (loading) {
+    const loadingText = experience.entry.defaultLanguageSpace === 'zh' ? '加载中' : 'Loading';
     return (
-      <div className="min-h-screen bg-muted flex items-center justify-center">
-        <div className="text-center">
-          <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-muted-foreground">加载中...</p>
-        </div>
-      </div>
+      <LoadingScreen
+        appName={experience.brand.labels.appName}
+        loadingText={loadingText}
+      />
     );
   }
 
