@@ -717,6 +717,19 @@ export type ExitTicketAnalysis = {
   nextSteps: string;
   overallScore: number;
   characteristics: Array<{ key: string; name: string; score: number; dimensions?: Array<{ name: string; score: number; comment?: string }> }>;
+  learningReview?: {
+    totalTimeSec: number;
+    totalTimeLabel: string;
+    activitiesWithTime: Array<{ activity: string; timeSpentSec: number; timeSpentLabel: string }>;
+    qaReview: Array<{
+      task: string;
+      step: string;
+      question: string;
+      studentAnswer: string;
+      referenceAnswer: string;
+      questionType?: string;
+    }>;
+  };
 };
 
 export async function getCourse(
@@ -726,12 +739,16 @@ export async function getCourse(
   sourceTaskIds?: string | null;
   studentProgress?: { progress: number; last_task_index: number; completed: boolean };
   lastAssessment?: ExitTicketAnalysis;
+  lastReport?: ExitTicketAnalysis;
+  lastSessionRecord?: Record<string, unknown>;
 }> {
   return apiCall<{
     plan: SystemTaskPlan;
     sourceTaskIds?: string | null;
     studentProgress?: { progress: number; last_task_index: number; completed: boolean };
     lastAssessment?: ExitTicketAnalysis;
+    lastReport?: ExitTicketAnalysis;
+    lastSessionRecord?: Record<string, unknown>;
   }>(
     `/api/courses?id=${encodeURIComponent(courseId)}`,
     { method: 'GET' }

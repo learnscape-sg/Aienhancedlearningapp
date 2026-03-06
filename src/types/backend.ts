@@ -214,9 +214,32 @@ export interface Characteristic {
   dimensions: SubDimension[];
 }
 
+export interface LearningReviewActivityItem {
+  activity: string;
+  timeSpentSec: number;
+  timeSpentLabel: string;
+}
+
+export interface LearningReviewQaItem {
+  task: string;
+  step: string;
+  question: string;
+  studentAnswer: string;
+  referenceAnswer: string;
+  questionType?: string;
+}
+
+export interface LearningReview {
+  totalTimeSec: number;
+  totalTimeLabel: string;
+  activitiesWithTime: LearningReviewActivityItem[];
+  qaReview: LearningReviewQaItem[];
+}
+
 export interface ExitTicketAnalysis {
   summary: string;
   nextSteps: string;
   overallScore: number;
   characteristics: Characteristic[];
+  learningReview?: LearningReview;
 }

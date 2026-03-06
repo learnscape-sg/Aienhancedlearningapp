@@ -6,7 +6,7 @@ import { Progress } from './ui/progress';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
-import { BookOpen, Play, Loader2 } from 'lucide-react';
+import { BookOpen, Play, Loader2, FileText, TrendingUp } from 'lucide-react';
 import { useAuth } from './AuthContext';
 import { getStudentCourses } from '@/lib/backendApi';
 import { useAnalytics } from './useAnalytics';
@@ -27,6 +27,7 @@ function CourseListBySubject({
   buttonLabel,
   showBadge,
   buttonDisabled,
+  completedActions,
 }: {
   groups: Array<{ subject: string; courses: StudentCourseItem[] }>;
   selectedSubject: string;
@@ -34,6 +35,7 @@ function CourseListBySubject({
   buttonLabel: string;
   showBadge: boolean;
   buttonDisabled?: boolean;
+  completedActions?: boolean;
 }) {
   if (groups.length === 0) return null;
   const courses =
@@ -51,6 +53,7 @@ function CourseListBySubject({
           buttonLabel={buttonLabel}
           showBadge={showBadge}
           buttonDisabled={buttonDisabled}
+          completedActions={completedActions}
         />
       ))}
     </div>
@@ -64,6 +67,7 @@ function CourseCard({
   buttonLabel,
   showBadge,
   buttonDisabled,
+  completedActions,
 }: {
   course: StudentCourseItem;
   color: string;
@@ -71,15 +75,29 @@ function CourseCard({
   buttonLabel: string;
   showBadge: boolean;
   buttonDisabled?: boolean;
+  completedActions?: boolean;
 }) {
   const actualProgress = course.progress ?? 0;
-  const handleClick = () => {
+  const buildCoursePath = (entry?: 'report' | 'improve') => {
     if (buttonDisabled) return;
     const params = new URLSearchParams();
     if (course.groupId) params.set('groupId', course.groupId);
     if (course.classId) params.set('classId', course.classId);
     if (course.assignmentSource) params.set('assignmentSource', course.assignmentSource);
-    navigate(`/course/${course.courseId}${params.toString() ? `?${params.toString()}` : ''}`);
+    if (entry) params.set('entry', entry);
+    return `/course/${course.courseId}${params.toString() ? `?${params.toString()}` : ''}`;
+  };
+  const handleClick = () => {
+    const path = buildCoursePath();
+    if (path) navigate(path);
+  };
+  const handleReportClick = () => {
+    const path = buildCoursePath('report');
+    if (path) navigate(path);
+  };
+  const handleImproveClick = () => {
+    const path = buildCoursePath('improve');
+    if (path) navigate(path);
   };
   return (
     <Card className="border-l-4" style={{ borderLeftColor: color }}>
@@ -107,15 +125,39 @@ function CourseCard({
               <span className="text-xs text-muted-foreground shrink-0 w-8 text-right">{Math.round(actualProgress)}%</span>
             </div>
           </div>
-          <Button
-            size="sm"
-            onClick={handleClick}
-            disabled={buttonDisabled}
-            className="shrink-0 bg-primary hover:bg-primary-hover text-primary-foreground h-8 px-3 text-xs"
-          >
-            <Play className="w-3.5 h-3.5 mr-1" />
-            {buttonLabel}
-          </Button>
+          {completedActions ? (
+            <div className="shrink-0 flex flex-col gap-2">
+              <Button
+                size="sm"
+                onClick={handleReportClick}
+                disabled={buttonDisabled}
+                className="bg-primary hover:bg-primary-hover text-primary-foreground h-8 px-3 text-xs"
+              >
+                <FileText className="w-3.5 h-3.5 mr-1" />
+                复盘报告
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleImproveClick}
+                disabled={buttonDisabled}
+                className="h-8 px-3 text-xs border-primary/40 text-primary hover:bg-primary/5"
+              >
+                <TrendingUp className="w-3.5 h-3.5 mr-1" />
+                痴迷改进
+              </Button>
+            </div>
+          ) : (
+            <Button
+              size="sm"
+              onClick={handleClick}
+              disabled={buttonDisabled}
+              className="shrink-0 bg-primary hover:bg-primary-hover text-primary-foreground h-8 px-3 text-xs"
+            >
+              <Play className="w-3.5 h-3.5 mr-1" />
+              {buttonLabel}
+            </Button>
+          )}
         </div>
       </CardContent>
     </Card>
@@ -325,8 +367,9 @@ export function HomePage({ onStartChapter }: HomePageProps) {
                           groups={completedGroups}
                           selectedSubject={effectiveSubject}
                           navigate={navigate}
-                          buttonLabel="复习"
+                          buttonLabel="复盘报告"
                           showBadge={true}
+                          completedActions={true}
                         />
                       )}
                     </TabsContent>

@@ -75,6 +75,12 @@ import type { MarkdownComponentProps } from '@/utils/types';
 import type { VisualizationData, VisualizationNode, VisualizationEdge, VisualizationProgress } from '@/types/backend';
 import { generateGuidancePrompt, shouldTriggerAIFeedback, calculateCompletionRate } from './shared/VisualizationEditor/utils/aiGuidance';
 import type { VisualizationAction } from './shared/VisualizationEditor/utils/aiGuidance';
+import {
+  isBase64Image,
+  saveSessionRecord,
+  uploadPracticeImage,
+  type SessionRecordPayload,
+} from '@/lib/studentSessionApi';
 
 interface StudentConsoleProps {
   plan: SystemTaskPlan;
@@ -92,6 +98,8 @@ interface StudentConsoleProps {
   initialGuidedStep?: number;
   /** 复习模式：已完成课程进入时传入上次学习报告，直接展示 */
   initialExitData?: ExitTicketAnalysis;
+  /** 痴迷改进模式：已完成课程进入时传入上次学习会话，恢复输入状态 */
+  initialSessionRecord?: SessionRecordPayload;
 }
 
 interface GuidedKeyIdea {
@@ -300,6 +308,7 @@ const StudentConsole: React.FC<StudentConsoleProps> = ({
   initialTaskIndex,
   initialGuidedStep,
   initialExitData,
+  initialSessionRecord,
 }) => {
   const { user } = useAuth();
   const params = useParams();
@@ -325,6 +334,13 @@ const StudentConsole: React.FC<StudentConsoleProps> = ({
   // --- State (currentTaskIndex must be before emitEvent which uses it) ---
   const taskIndexStorageKey = `currentTaskIndex_${courseId || 'default'}`;
   const [currentTaskIndex, setCurrentTaskIndex] = useState(() => {
+    if (
+      typeof initialSessionRecord?.currentTaskIndex === 'number' &&
+      initialSessionRecord.currentTaskIndex >= 0 &&
+      initialSessionRecord.currentTaskIndex < plan.tasks.length
+    ) {
+      return initialSessionRecord.currentTaskIndex;
+    }
     if (
       typeof initialTaskIndex === 'number' &&
       initialTaskIndex >= 0 &&
@@ -376,10 +392,10 @@ const StudentConsole: React.FC<StudentConsoleProps> = ({
     [contentLanguage, courseId, currentTaskIndex, plan.tasks, user?.id, assignmentEventProps]
   );
 
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [messages, setMessages] = useState<ChatMessage[]>(initialSessionRecord?.messages ?? []);
   const [chatInput, setChatInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
-  const [studentLog, setStudentLog] = useState<string[]>([]);
+  const [studentLog, setStudentLog] = useState<string[]>(initialSessionRecord?.learningLog ?? []);
   
   // Layout State - 80/20 split, no resizers
   const containerRef = useRef<HTMLDivElement>(null);
@@ -392,13 +408,15 @@ const StudentConsole: React.FC<StudentConsoleProps> = ({
   const [isAssetLoading, setIsAssetLoading] = useState(false); // Restored for runtime fallback
   
   // Interactive View States
-  const [mindMapInput, setMindMapInput] = useState<string>(''); 
+  const [mindMapInput, setMindMapInput] = useState<string>(initialSessionRecord?.mindMapInput ?? ''); 
   const [mindMapError, setMindMapError] = useState<string | null>(null);
   const [mindMapScale, setMindMapScale] = useState(1); // Zoom state
-  const [confusionPoints, setConfusionPoints] = useState<string[]>([]); // 困惑点列表
+  const [confusionPoints, setConfusionPoints] = useState<string[]>(initialSessionRecord?.confusionPoints ?? []); // 困惑点列表
   const [showConfusionInput, setShowConfusionInput] = useState(false); // 显示困惑点输入框
   const [confusionInput, setConfusionInput] = useState(''); // 困惑点输入内容
-  const [visualizationData, setVisualizationData] = useState<VisualizationData | null>(null); // 可视化数据
+  const [visualizationData, setVisualizationData] = useState<VisualizationData | null>(
+    (initialSessionRecord?.visualizationData as VisualizationData | null) ?? null
+  ); // 可视化数据
   
   // Fullscreen modal states
   const [isFullscreenExperiment, setIsFullscreenExperiment] = useState(false);
@@ -417,16 +435,25 @@ const StudentConsole: React.FC<StudentConsoleProps> = ({
   const [previousEdgeCount, setPreviousEdgeCount] = useState<number>(0);
   
   // Table View States
-  const [tableData, setTableData] = useState<{columns: string[], rows: string[][]}>({ columns: [], rows: [] });
+  const [tableData, setTableData] = useState<{columns: string[], rows: string[][]}>(
+    initialSessionRecord?.tableData ?? { columns: [], rows: [] }
+  );
 
   // Text Editor State
-  const [textEditorContent, setTextEditorContent] = useState<string>('');
+  const [textEditorContent, setTextEditorContent] = useState<string>(initialSessionRecord?.textEditorContent ?? '');
   const [isTextEditorPreview, setIsTextEditorPreview] = useState<boolean>(false);
   
   // Math Editor State
-  const [mathEditorContent, setMathEditorContent] = useState<string>('');
+  const [mathEditorContent, setMathEditorContent] = useState<string>(initialSessionRecord?.mathEditorContent ?? '');
   const getGuidedProgressKey = (idx: number) => `guidedProgress_${courseId || 'default'}_${idx}`;
   const [guidedStep, setGuidedStep] = useState(() => {
+    if (
+      typeof initialSessionRecord?.guidedStep === 'number' &&
+      initialSessionRecord.guidedStep >= 1 &&
+      initialSessionRecord.guidedStep <= 5
+    ) {
+      return initialSessionRecord.guidedStep;
+    }
     if (typeof initialGuidedStep === 'number' && initialGuidedStep >= 1 && initialGuidedStep <= 5) {
       return initialGuidedStep;
     }
@@ -446,6 +473,13 @@ const StudentConsole: React.FC<StudentConsoleProps> = ({
     return 1;
   });
   const [maxStepReached, setMaxStepReached] = useState(() => {
+    if (
+      typeof initialSessionRecord?.maxStepReached === 'number' &&
+      initialSessionRecord.maxStepReached >= 1 &&
+      initialSessionRecord.maxStepReached <= 5
+    ) {
+      return initialSessionRecord.maxStepReached;
+    }
     if (typeof initialGuidedStep === 'number' && initialGuidedStep >= 1 && initialGuidedStep <= 5) {
       return Math.max(1, initialGuidedStep);
     }
@@ -462,31 +496,31 @@ const StudentConsole: React.FC<StudentConsoleProps> = ({
     }
     return 1;
   });
-  const [keywordAnswers, setKeywordAnswers] = useState<Record<string, string>>({});
-  const [practiceTextAnswers, setPracticeTextAnswers] = useState<Record<number, string>>({});
-  const [practiceChoiceAnswers, setPracticeChoiceAnswers] = useState<Record<number, number>>({});
-  const [practiceImageAnswers, setPracticeImageAnswers] = useState<Record<number, string>>({});
-  const [practiceInputMode, setPracticeInputMode] = useState<Record<number, 'text' | 'upload' | 'draw'>>({});
-  const [practiceCurrentIndex, setPracticeCurrentIndex] = useState(0);
+  const [keywordAnswers, setKeywordAnswers] = useState<Record<string, string>>(initialSessionRecord?.keywordAnswers ?? {});
+  const [practiceTextAnswers, setPracticeTextAnswers] = useState<Record<number, string>>(initialSessionRecord?.practiceTextAnswers ?? {});
+  const [practiceChoiceAnswers, setPracticeChoiceAnswers] = useState<Record<number, number>>(initialSessionRecord?.practiceChoiceAnswers ?? {});
+  const [practiceImageAnswers, setPracticeImageAnswers] = useState<Record<number, string>>(initialSessionRecord?.practiceImageAnswers ?? {});
+  const [practiceInputMode, setPracticeInputMode] = useState<Record<number, 'text' | 'upload' | 'draw'>>(initialSessionRecord?.practiceInputMode ?? {});
+  const [practiceCurrentIndex, setPracticeCurrentIndex] = useState(initialSessionRecord?.practiceCurrentIndex ?? 0);
   const practiceCanvasRef = useRef<SignatureCanvas>(null);
   const [mindmapInputMode, setMindmapInputMode] = useState<'upload' | 'draw'>('upload');
-  const [mindmapImageAnswer, setMindmapImageAnswer] = useState<string>('');
+  const [mindmapImageAnswer, setMindmapImageAnswer] = useState<string>(initialSessionRecord?.mindmapImageAnswer ?? '');
   const mindmapCanvasRef = useRef<SignatureCanvas>(null);
   const [showPracticeSolutions, setShowPracticeSolutions] = useState<Record<number, boolean>>({});
   const [stuckClicksPerPracticeQuestion, setStuckClicksPerPracticeQuestion] = useState<Record<number, number>>({});
   const [stuckClicksForKeyIdeas, setStuckClicksForKeyIdeas] = useState(0);
   const [showKeyIdeaBlanks, setShowKeyIdeaBlanks] = useState(false);
-  const [exitTicketAnswer, setExitTicketAnswer] = useState('');
-  const [exitTicketAnswers, setExitTicketAnswers] = useState<Record<number, string>>({});
+  const [exitTicketAnswer, setExitTicketAnswer] = useState(initialSessionRecord?.exitTicketAnswer ?? '');
+  const [exitTicketAnswers, setExitTicketAnswers] = useState<Record<number, string>>(initialSessionRecord?.exitTicketAnswers ?? {});
   const [showExitTicketAnswer, setShowExitTicketAnswer] = useState(false);
 
   // Edit Count Tracking (for progress tracker)
-  const [editCounts, setEditCounts] = useState({
-    mindMap: 0,
-    table: 0,
-    text: 0,
-    math: 0
-  });
+  const [editCounts, setEditCounts] = useState(() => ({
+    mindMap: Number(initialSessionRecord?.editCounts?.mindMap) || 0,
+    table: Number(initialSessionRecord?.editCounts?.table) || 0,
+    text: Number(initialSessionRecord?.editCounts?.text) || 0,
+    math: Number(initialSessionRecord?.editCounts?.math) || 0,
+  }));
 
   // Improvement Count Tracking (基于"我做完了"循环)
   const [improvementCount, setImprovementCount] = useState(0);
@@ -494,7 +528,9 @@ const StudentConsole: React.FC<StudentConsoleProps> = ({
   const [hasEditAfterDone, setHasEditAfterDone] = useState(false);
 
   // Completed Tasks Tracking (基于AI明确给出"任务完成"信号)
-  const [completedTasks, setCompletedTasks] = useState<Set<number>>(new Set());
+  const [completedTasks, setCompletedTasks] = useState<Set<number>>(
+    new Set(initialSessionRecord?.completedTaskIndexes ?? [])
+  );
 
   // Exit Ticket / Report States（复习模式：有 initialExitData 时直接展示报告）
   const [showReport, setShowReport] = useState(!!initialExitData);
@@ -504,7 +540,9 @@ const StudentConsole: React.FC<StudentConsoleProps> = ({
     return 'self_drive';
   });
   const [finalMindMapCode, setFinalMindMapCode] = useState<string | null>(null);
-  const [learningLog, setLearningLog] = useState<string>('');
+  const [learningLog, setLearningLog] = useState<string>(
+    Array.isArray(initialSessionRecord?.learningLog) ? initialSessionRecord.learningLog.join('\n') : ''
+  );
   
   // Student Name State: use logged-in user name, then localStorage, else "您"
   const [studentName, setStudentName] = useState<string>(() => {
@@ -2083,22 +2121,204 @@ CRITICAL: Output language must be 简体中文 only.
     };
   };
 
+  const clearLearningProgressStorage = useCallback(() => {
+    if (typeof window === 'undefined') return;
+    localStorage.removeItem('lastLearningCourseId');
+    localStorage.removeItem('lastLearningTimestamp');
+    localStorage.removeItem(taskIndexStorageKey);
+    for (let i = 0; i < plan.tasks.length; i++) {
+      localStorage.removeItem(`guidedProgress_${courseId}_${i}`);
+    }
+  }, [courseId, plan.tasks.length, taskIndexStorageKey]);
+
+  const buildLearningReviewDraft = useCallback(
+    (objectiveMetrics?: ObjectiveMetrics) => {
+      const totalTimeSec = Math.max(0, Number(objectiveMetrics?.totalSessionTime) || 0);
+      const completedIndexes = Array.from(completedTasks.values());
+      const effectiveIndexes =
+        completedIndexes.length > 0 ? completedIndexes : plan.tasks.map((_, idx) => idx);
+      const perTaskSec = effectiveIndexes.length > 0 ? Math.round(totalTimeSec / effectiveIndexes.length) : 0;
+
+      const activitiesWithTime = effectiveIndexes.map((taskIdx) => ({
+        activity: `任务${taskIdx + 1}｜${plan.tasks[taskIdx]?.title || '学习活动'}`,
+        timeSpentSec: perTaskSec,
+        timeSpentLabel: perTaskSec >= 60 ? `${Math.floor(perTaskSec / 60)}分${perTaskSec % 60}秒` : `${perTaskSec}秒`,
+      }));
+
+      const qaReview: Array<{
+        task: string;
+        step: string;
+        question: string;
+        studentAnswer: string;
+        referenceAnswer: string;
+        questionType?: string;
+      }> = [];
+      plan.tasks.forEach((task, taskIdx) => {
+        if (task.viewType !== 'video_player') return;
+        const payload = parseGuidedPayload(task.contentPayload);
+        if (!payload) return;
+
+        (payload.keyIdeas ?? []).forEach((idea, idx) => {
+          const blanks = Array.isArray(idea.blanks) ? idea.blanks : [];
+          const studentAnswer = blanks.length > 0
+            ? blanks.map((_, bi) => keywordAnswers[`blank-${idx}-${bi}`] ?? '').filter(Boolean).join(' / ')
+            : keywordAnswers[`idea-${idx}`] ?? '';
+          qaReview.push({
+            task: `任务${taskIdx + 1}`,
+            step: '关键要点',
+            question: idea.text || `关键要点 ${idx + 1}`,
+            studentAnswer: studentAnswer || '',
+            referenceAnswer: blanks.join(' / '),
+            questionType: blanks.length > 0 ? 'fill_blank' : 'short_answer',
+          });
+        });
+
+        (payload.practiceQuestions ?? []).forEach((q, idx) => {
+          const choiceIdx = Number(practiceChoiceAnswers[idx]);
+          const choiceAnswer =
+            Number.isFinite(choiceIdx) && Array.isArray(q.options) && choiceIdx >= 0 && choiceIdx < q.options.length
+              ? q.options[choiceIdx]
+              : '';
+          qaReview.push({
+            task: `任务${taskIdx + 1}`,
+            step: '练习题',
+            question: q.question || `练习题 ${idx + 1}`,
+            studentAnswer: choiceAnswer || practiceTextAnswers[idx] || (practiceImageAnswers[idx] ? '[手写图片已提交]' : ''),
+            referenceAnswer: q.correctAnswer || '',
+            questionType: q.questionType || '',
+          });
+        });
+
+        (payload.exitTicketItems ?? []).forEach((q, idx) => {
+          qaReview.push({
+            task: `任务${taskIdx + 1}`,
+            step: '离场券',
+            question: q.question || `离场券 ${idx + 1}`,
+            studentAnswer: exitTicketAnswers[idx] || (idx === 0 ? exitTicketAnswer : ''),
+            referenceAnswer: q.correctAnswer || '',
+            questionType: q.questionType || '',
+          });
+        });
+      });
+
+      return {
+        totalTimeSec,
+        totalTimeLabel: totalTimeSec >= 60 ? `${Math.floor(totalTimeSec / 60)}分${totalTimeSec % 60}秒` : `${totalTimeSec}秒`,
+        activitiesWithTime,
+        qaReview,
+      };
+    },
+    [
+      completedTasks,
+      exitTicketAnswer,
+      exitTicketAnswers,
+      keywordAnswers,
+      plan.tasks,
+      practiceChoiceAnswers,
+      practiceImageAnswers,
+      practiceTextAnswers,
+    ]
+  );
+
+  const buildSessionPayload = useCallback(
+    (objectiveMetrics?: ObjectiveMetrics): SessionRecordPayload => {
+      return {
+        currentTaskIndex,
+        guidedStep,
+        maxStepReached,
+        keywordAnswers,
+        practiceTextAnswers,
+        practiceChoiceAnswers,
+        practiceImageAnswers,
+        practiceInputMode,
+        practiceCurrentIndex,
+        exitTicketAnswer,
+        exitTicketAnswers,
+        messages,
+        visualizationData,
+        mindMapInput,
+        mindmapImageAnswer,
+        tableData,
+        textEditorContent,
+        mathEditorContent,
+        confusionPoints,
+        editCounts,
+        learningLog: studentLog,
+        completedTaskIndexes: Array.from(completedTasks.values()),
+        objectiveMetrics,
+        learningReviewDraft: buildLearningReviewDraft(objectiveMetrics),
+      };
+    },
+    [
+      buildLearningReviewDraft,
+      completedTasks,
+      confusionPoints,
+      currentTaskIndex,
+      editCounts,
+      guidedStep,
+      keywordAnswers,
+      mathEditorContent,
+      maxStepReached,
+      messages,
+      mindMapInput,
+      mindmapImageAnswer,
+      practiceChoiceAnswers,
+      practiceCurrentIndex,
+      practiceImageAnswers,
+      practiceInputMode,
+      practiceTextAnswers,
+      exitTicketAnswer,
+      exitTicketAnswers,
+      studentLog,
+      tableData,
+      textEditorContent,
+      visualizationData,
+    ]
+  );
+
+  const saveSessionRecordBeforeExit = useCallback(
+    async (objectiveMetrics?: ObjectiveMetrics) => {
+      if (!courseId) return null;
+      const sessionPayload = buildSessionPayload(objectiveMetrics);
+      const normalized: SessionRecordPayload = {
+        ...sessionPayload,
+        practiceImageAnswers: { ...sessionPayload.practiceImageAnswers },
+      };
+
+      for (const [rawIndex, image] of Object.entries(sessionPayload.practiceImageAnswers ?? {})) {
+        if (!isBase64Image(image)) continue;
+        const questionIndex = Number(rawIndex);
+        const url = await uploadPracticeImage(
+          image,
+          courseId,
+          currentTaskIndex,
+          Number.isFinite(questionIndex) ? questionIndex : 0
+        );
+        normalized.practiceImageAnswers[Number(rawIndex)] = url;
+      }
+
+      if (isBase64Image(sessionPayload.mindmapImageAnswer)) {
+        const url = await uploadPracticeImage(sessionPayload.mindmapImageAnswer, courseId, currentTaskIndex, 999);
+        normalized.mindmapImageAnswer = url;
+      }
+
+      await saveSessionRecord(courseId, normalized);
+      return normalized;
+    },
+    [buildSessionPayload, courseId, currentTaskIndex]
+  );
+
   const handleFinishLearning = async () => {
-    // Capture the final mind map if the current view is a mind map editor
     const finalMindMap = viewType === 'mindmap_editor' ? (mindmapImageAnswer || mindMapInput) : undefined;
     const log = studentLog.join("\n");
-    
-    // Extract objective metrics
+
     let objectiveMetrics: ObjectiveMetrics | undefined;
     try {
       objectiveMetrics = extractObjectiveMetrics(messages, studentLog, plan.tasks.length);
-      console.log('[StudentConsole] Extracted objective metrics:', objectiveMetrics);
-    } catch (extractError) {
-      console.error('[StudentConsole] Error extracting objective metrics:', extractError);
-      // Continue without objective metrics if extraction fails
+    } catch {
       objectiveMetrics = undefined;
     }
-    
+
     reportProgress(100, true, plan.tasks.length - 1);
     void emitEvent('course_completed', { totalTasks: plan.tasks.length }).catch(() => undefined);
     setLearningLog(log);
@@ -2106,10 +2326,13 @@ CRITICAL: Output language must be 简体中文 only.
       setFinalMindMapCode(finalMindMap);
     }
     setShowReport(true);
-    setExitData(null); // Reset to show loading screen
-    if (typeof window !== 'undefined') {
-      localStorage.removeItem('lastLearningCourseId');
-      localStorage.removeItem('lastLearningTimestamp');
+    setExitData(null);
+
+    try {
+      await saveSessionRecordBeforeExit(objectiveMetrics);
+      clearLearningProgressStorage();
+    } catch (saveError) {
+      console.error('[StudentConsole] save session before finish failed:', saveError);
     }
 
     const sessionDurationSec = Math.round((Date.now() - sessionStartRef.current) / 1000);
@@ -2129,15 +2352,9 @@ CRITICAL: Output language must be 简体中文 only.
         ...(classId && { classId }),
       },
     }).catch(() => undefined);
-    
+
     try {
-      console.log('[StudentConsole] Calling generateExitTicket with:', {
-        logLength: log.length,
-        studentName,
-        hasObjectiveMetrics: !!objectiveMetrics
-      });
       const data = await generateExitTicket(log, contentLanguage, studentName, objectiveMetrics, courseId);
-      console.log('[StudentConsole] Exit ticket generated successfully');
       setExitData(data);
       void trackProductEvent({
         eventName: 'exit_ticket_generation_succeeded',
@@ -2159,10 +2376,6 @@ CRITICAL: Output language must be 简体中文 only.
       }
     } catch (error) {
       console.error("[StudentConsole] Error generating exit ticket:", error);
-      if (error instanceof Error) {
-        console.error("[StudentConsole] Error message:", error.message);
-        console.error("[StudentConsole] Error stack:", error.stack);
-      }
       setExitData(null);
       void trackProductEvent({
         eventName: 'exit_ticket_generation_failed',
@@ -2212,13 +2425,23 @@ CRITICAL: Output language must be 简体中文 only.
     setEditCounts({ mindMap: 0, table: 0, text: 0, math: 0 });
   };
 
-  const handleEndLearning = () => {
-    // Close the current page/window
+  const handleEndLearning = async () => {
+    let objectiveMetrics: ObjectiveMetrics | undefined;
+    try {
+      objectiveMetrics = extractObjectiveMetrics(messages, studentLog, plan.tasks.length);
+    } catch {
+      objectiveMetrics = undefined;
+    }
+
+    try {
+      await saveSessionRecordBeforeExit(objectiveMetrics);
+      clearLearningProgressStorage();
+    } catch (saveError) {
+      console.error('[StudentConsole] save session before end failed:', saveError);
+    }
+
     if (typeof window !== 'undefined') {
-      localStorage.removeItem('lastLearningCourseId');
-      localStorage.removeItem('lastLearningTimestamp');
       window.close();
-      // If window.close() doesn't work (e.g., tab wasn't opened by script), try to navigate away
       setTimeout(() => {
         if (!document.hidden) {
           window.location.href = '/';
@@ -2343,6 +2566,57 @@ CRITICAL: Output language must be 简体中文 only.
                 {exitData.nextSteps}
              </p>
           </div>
+
+          {exitData.learningReview && (
+            <div className="bg-white p-8 rounded-3xl border border-slate-200 shadow-xl space-y-6">
+              <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wider flex items-center gap-2">
+                <BookOpen size={18} className="text-cyan-600" /> 学习复盘
+              </h3>
+              <div className="text-sm text-slate-600">
+                总学习时长：<span className="font-semibold text-slate-800">{exitData.learningReview.totalTimeLabel}</span>
+              </div>
+
+              <div>
+                <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">完成活动与时长</h4>
+                <div className="overflow-x-auto rounded-xl border border-slate-200">
+                  <table className="min-w-full text-sm">
+                    <thead className="bg-slate-50">
+                      <tr>
+                        <th className="text-left px-4 py-2 font-semibold text-slate-600">活动</th>
+                        <th className="text-left px-4 py-2 font-semibold text-slate-600">耗时</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {exitData.learningReview.activitiesWithTime.map((item, idx) => (
+                        <tr key={`${item.activity}-${idx}`} className="border-t border-slate-100">
+                          <td className="px-4 py-2 text-slate-700">{item.activity}</td>
+                          <td className="px-4 py-2 text-slate-700">{item.timeSpentLabel}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div>
+                <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">答题复盘</h4>
+                <div className="space-y-3 max-h-[420px] overflow-y-auto pr-1">
+                  {exitData.learningReview.qaReview.length === 0 ? (
+                    <div className="text-sm text-slate-500">暂无可复盘答题记录</div>
+                  ) : (
+                    exitData.learningReview.qaReview.map((item, idx) => (
+                      <div key={`${item.question}-${idx}`} className="rounded-xl border border-slate-200 p-4 bg-slate-50/60">
+                        <div className="text-xs text-slate-500 mb-2">{item.task} · {item.step}{item.questionType ? ` · ${item.questionType}` : ''}</div>
+                        <div className="text-sm font-semibold text-slate-800 mb-2">{item.question}</div>
+                        <div className="text-sm text-slate-700 mb-1">你的回答：{item.studentAnswer || '（未作答）'}</div>
+                        <div className="text-sm text-emerald-700">参考答案：{item.referenceAnswer || '（无）'}</div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Section 3: Xueba Four Characteristics (Interactive) */}
           <div className="bg-white p-8 rounded-3xl border border-slate-200 shadow-xl">

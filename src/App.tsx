@@ -47,7 +47,7 @@ type AppState = 'login' | 'onboarding' | 'dashboard' | 'chapter' | 'quiz' | 'lea
 
 const TEACHER_SECTIONS = ['overview', 'course-design', 'courses', 'materials', 'classes', 'settings'];
 
-const LAST_LEARNING_TTL_MS = 24 * 60 * 60 * 1000;
+const LAST_LEARNING_TTL_MS = 60 * 60 * 1000;
 
 function AppContent() {
   const { user, loading, login } = useAuth();

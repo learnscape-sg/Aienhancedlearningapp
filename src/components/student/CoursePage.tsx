@@ -5,6 +5,7 @@ import { getCourse, trackProductEvent } from '@/lib/backendApi';
 import { touchCourseOpened } from '@/lib/studentProgressApi';
 import { supabase } from '@/utils/supabase/client';
 import type { SystemTaskPlan, ExitTicketAnalysis } from '@/types/backend';
+import type { SessionRecordPayload } from '@/lib/studentSessionApi';
 import { Loader2, AlertCircle } from 'lucide-react';
 import StudentConsole from './StudentConsole';
 import { useRuntimePolicy } from '@/hooks/useRuntimePolicy';
@@ -57,6 +58,7 @@ export function CoursePage() {
   const [initialTaskIndex, setInitialTaskIndex] = useState<number | undefined>(undefined);
   const [initialGuidedStep, setInitialGuidedStep] = useState<number | undefined>(undefined);
   const [initialExitData, setInitialExitData] = useState<ExitTicketAnalysis | undefined>(undefined);
+  const [initialSessionRecord, setInitialSessionRecord] = useState<SessionRecordPayload | undefined>(undefined);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -89,11 +91,21 @@ export function CoursePage() {
         if (!data?.plan) {
           throw new Error(t('dataFormatError'));
         }
+        const entryMode = searchParams.get('entry');
         setPlan(data.plan);
         const initialPos = resolveInitialLearningPosition(data.plan, data.studentProgress);
         setInitialTaskIndex(initialPos.initialTaskIndex);
         setInitialGuidedStep(initialPos.initialGuidedStep);
-        setInitialExitData(data.lastAssessment ?? undefined);
+        setInitialExitData(
+          entryMode === 'report'
+            ? (data.lastReport ?? data.lastAssessment ?? undefined)
+            : undefined
+        );
+        setInitialSessionRecord(
+          entryMode === 'improve'
+            ? (data.lastSessionRecord as SessionRecordPayload | undefined)
+            : undefined
+        );
         if (typeof window !== 'undefined') {
           localStorage.setItem('lastLearningCourseId', courseId);
           localStorage.setItem('lastLearningTimestamp', Date.now().toString());
@@ -181,7 +193,17 @@ export function CoursePage() {
                         const initialPos = resolveInitialLearningPosition(data.plan, data.studentProgress);
                         setInitialTaskIndex(initialPos.initialTaskIndex);
                         setInitialGuidedStep(initialPos.initialGuidedStep);
-                        setInitialExitData(data.lastAssessment ?? undefined);
+                        const entryMode = searchParams.get('entry');
+                        setInitialExitData(
+                          entryMode === 'report'
+                            ? (data.lastReport ?? data.lastAssessment ?? undefined)
+                            : undefined
+                        );
+                        setInitialSessionRecord(
+                          entryMode === 'improve'
+                            ? (data.lastSessionRecord as SessionRecordPayload | undefined)
+                            : undefined
+                        );
                         setError(null);
                       })
                       .catch((err) => setError(err.message || t('retryFailed')))
@@ -222,6 +244,7 @@ export function CoursePage() {
       initialTaskIndex={initialTaskIndex}
       initialGuidedStep={initialGuidedStep}
       initialExitData={initialExitData}
+      initialSessionRecord={initialSessionRecord}
     />
   );
 }
