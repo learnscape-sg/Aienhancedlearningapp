@@ -35,6 +35,7 @@ import { useRuntimePolicy } from '@/hooks/useRuntimePolicy';
 import { shouldUseStudentTabletCompat, getCompatViewportContent } from '@/config/tenantCompat';
 import { appConfig } from '@/config/appConfig';
 import { LoadingScreen } from './components/LoadingScreen';
+import { LAST_LEARNING_TTL_MS, SESSION_RECORD_STORAGE_PREFIX } from '@/constants/learningSession';
 
 // Teacher platform components
 import { TeacherOverview } from './components/TeacherOverview';
@@ -46,8 +47,6 @@ import { TeachingResourcesPage } from './components/TeachingResourcesPage';
 type AppState = 'login' | 'onboarding' | 'dashboard' | 'chapter' | 'quiz' | 'learning-mode-selection' | 'immersive-text' | 'slides-narration' | 'audio-lesson' | 'mindmap' | 'game' | 'video';
 
 const TEACHER_SECTIONS = ['overview', 'course-design', 'courses', 'materials', 'classes', 'settings'];
-
-const LAST_LEARNING_TTL_MS = 60 * 60 * 1000;
 
 function AppContent() {
   const { user, loading, login } = useAuth();
@@ -139,7 +138,7 @@ function AppContent() {
     }
   }, [user?.role, activeSection, searchParams, setSearchParams]);
 
-  // Restore last learning session for students (within 24h); skip if onboarding
+  // Restore last learning session for students (within 1h); skip if onboarding
   useEffect(() => {
     if (!user || user.role !== 'student') return;
     const needsOnboarding = !user.grade && (!user.interests || user.interests.length === 0);
@@ -152,6 +151,7 @@ function AppContent() {
       if (typeof window !== 'undefined') {
         localStorage.removeItem('lastLearningCourseId');
         localStorage.removeItem('lastLearningTimestamp');
+        localStorage.removeItem(`${SESSION_RECORD_STORAGE_PREFIX}${courseId}`);
       }
       return;
     }

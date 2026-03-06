@@ -5,7 +5,7 @@ import { getCourse, trackProductEvent } from '@/lib/backendApi';
 import { touchCourseOpened } from '@/lib/studentProgressApi';
 import { supabase } from '@/utils/supabase/client';
 import type { SystemTaskPlan, ExitTicketAnalysis } from '@/types/backend';
-import type { SessionRecordPayload } from '@/lib/studentSessionApi';
+import { cleanupExpiredLocalSessionRecords, type SessionRecordPayload } from '@/lib/studentSessionApi';
 import { Loader2, AlertCircle } from 'lucide-react';
 import StudentConsole from './StudentConsole';
 import { useRuntimePolicy } from '@/hooks/useRuntimePolicy';
@@ -78,6 +78,9 @@ export function CoursePage() {
   }, [i18n, contentLanguage]);
 
   useEffect(() => {
+    if (typeof window !== 'undefined') {
+      cleanupExpiredLocalSessionRecords();
+    }
     const loadCourse = async () => {
       if (!courseId) {
         setError(t('invalidCourseId'));

@@ -76,9 +76,13 @@ import type { VisualizationData, VisualizationNode, VisualizationEdge, Visualiza
 import { generateGuidancePrompt, shouldTriggerAIFeedback, calculateCompletionRate } from './shared/VisualizationEditor/utils/aiGuidance';
 import type { VisualizationAction } from './shared/VisualizationEditor/utils/aiGuidance';
 import {
+  getSessionRecordStorageKey,
   isBase64Image,
+  readLocalSessionRecord,
   saveSessionRecord,
+  type TaskInputs,
   uploadPracticeImage,
+  writeLocalSessionRecord,
   type SessionRecordPayload,
 } from '@/lib/studentSessionApi';
 
@@ -296,6 +300,69 @@ const TextEditorPreview = ({ content, onEditClick }: { content: string; onEditCl
   );
 };
 
+function createEmptyTaskInputs(): TaskInputs {
+  return {
+    keywordAnswers: {},
+    practiceTextAnswers: {},
+    practiceChoiceAnswers: {},
+    practiceImageAnswers: {},
+    practiceInputMode: {},
+    practiceCurrentIndex: 0,
+    exitTicketAnswer: '',
+    exitTicketAnswers: {},
+  };
+}
+
+function normalizeTaskInputs(input: Partial<TaskInputs> | undefined): TaskInputs {
+  const empty = createEmptyTaskInputs();
+  return {
+    keywordAnswers: input?.keywordAnswers ?? empty.keywordAnswers,
+    practiceTextAnswers: input?.practiceTextAnswers ?? empty.practiceTextAnswers,
+    practiceChoiceAnswers: input?.practiceChoiceAnswers ?? empty.practiceChoiceAnswers,
+    practiceImageAnswers: input?.practiceImageAnswers ?? empty.practiceImageAnswers,
+    practiceInputMode: input?.practiceInputMode ?? empty.practiceInputMode,
+    practiceCurrentIndex: Number(input?.practiceCurrentIndex) || 0,
+    exitTicketAnswer: input?.exitTicketAnswer ?? empty.exitTicketAnswer,
+    exitTicketAnswers: input?.exitTicketAnswers ?? empty.exitTicketAnswers,
+  };
+}
+
+function buildTaskInputsByIndex(
+  record: SessionRecordPayload | undefined,
+  planTaskCount: number
+): Record<number, TaskInputs> {
+  if (!record) return {};
+  const normalizedTaskMap = Object.entries(record.taskInputsByIndex ?? {}).reduce<Record<number, TaskInputs>>(
+    (acc, [rawTaskIndex, rawTaskInputs]) => {
+      const taskIndex = Number(rawTaskIndex);
+      if (!Number.isInteger(taskIndex) || taskIndex < 0 || taskIndex >= planTaskCount) return acc;
+      acc[taskIndex] = normalizeTaskInputs(rawTaskInputs as Partial<TaskInputs> | undefined);
+      return acc;
+    },
+    {}
+  );
+  if (Object.keys(normalizedTaskMap).length > 0) {
+    return normalizedTaskMap;
+  }
+
+  // Backward compatibility for old flat session schema.
+  const fallbackTaskIndex =
+    Number.isInteger(record.currentTaskIndex) && record.currentTaskIndex >= 0 && record.currentTaskIndex < planTaskCount
+      ? record.currentTaskIndex
+      : 0;
+  normalizedTaskMap[fallbackTaskIndex] = normalizeTaskInputs({
+    keywordAnswers: record.keywordAnswers,
+    practiceTextAnswers: record.practiceTextAnswers,
+    practiceChoiceAnswers: record.practiceChoiceAnswers,
+    practiceImageAnswers: record.practiceImageAnswers,
+    practiceInputMode: record.practiceInputMode,
+    practiceCurrentIndex: record.practiceCurrentIndex,
+    exitTicketAnswer: record.exitTicketAnswer,
+    exitTicketAnswers: record.exitTicketAnswers,
+  });
+  return normalizedTaskMap;
+}
+
 const StudentConsole: React.FC<StudentConsoleProps> = ({
   plan,
   onComplete,
@@ -315,6 +382,16 @@ const StudentConsole: React.FC<StudentConsoleProps> = ({
   const { t } = useTranslation('studentConsole');
   const courseId = params.id as string | undefined;
   const sessionStartRef = useRef(Date.now());
+  const isImproveMode = Boolean(initialSessionRecord);
+  const restoredSessionRecord = useMemo<SessionRecordPayload | undefined>(() => {
+    if (isImproveMode) return initialSessionRecord;
+    if (!courseId) return undefined;
+    return readLocalSessionRecord(courseId);
+  }, [courseId, initialSessionRecord, isImproveMode]);
+  const sessionRecordStorageKey = useMemo(
+    () => getSessionRecordStorageKey(courseId),
+    [courseId]
+  );
 
   const reportProgress = useCallback(
     (progress: number, completed: boolean, lastTaskIndex: number) => {
@@ -335,11 +412,11 @@ const StudentConsole: React.FC<StudentConsoleProps> = ({
   const taskIndexStorageKey = `currentTaskIndex_${courseId || 'default'}`;
   const [currentTaskIndex, setCurrentTaskIndex] = useState(() => {
     if (
-      typeof initialSessionRecord?.currentTaskIndex === 'number' &&
-      initialSessionRecord.currentTaskIndex >= 0 &&
-      initialSessionRecord.currentTaskIndex < plan.tasks.length
+      typeof restoredSessionRecord?.currentTaskIndex === 'number' &&
+      restoredSessionRecord.currentTaskIndex >= 0 &&
+      restoredSessionRecord.currentTaskIndex < plan.tasks.length
     ) {
-      return initialSessionRecord.currentTaskIndex;
+      return restoredSessionRecord.currentTaskIndex;
     }
     if (
       typeof initialTaskIndex === 'number' &&
@@ -392,10 +469,10 @@ const StudentConsole: React.FC<StudentConsoleProps> = ({
     [contentLanguage, courseId, currentTaskIndex, plan.tasks, user?.id, assignmentEventProps]
   );
 
-  const [messages, setMessages] = useState<ChatMessage[]>(initialSessionRecord?.messages ?? []);
+  const [messages, setMessages] = useState<ChatMessage[]>(restoredSessionRecord?.messages ?? []);
   const [chatInput, setChatInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
-  const [studentLog, setStudentLog] = useState<string[]>(initialSessionRecord?.learningLog ?? []);
+  const [studentLog, setStudentLog] = useState<string[]>(restoredSessionRecord?.learningLog ?? []);
   
   // Layout State - 80/20 split, no resizers
   const containerRef = useRef<HTMLDivElement>(null);
@@ -408,14 +485,14 @@ const StudentConsole: React.FC<StudentConsoleProps> = ({
   const [isAssetLoading, setIsAssetLoading] = useState(false); // Restored for runtime fallback
   
   // Interactive View States
-  const [mindMapInput, setMindMapInput] = useState<string>(initialSessionRecord?.mindMapInput ?? ''); 
+  const [mindMapInput, setMindMapInput] = useState<string>(restoredSessionRecord?.mindMapInput ?? ''); 
   const [mindMapError, setMindMapError] = useState<string | null>(null);
   const [mindMapScale, setMindMapScale] = useState(1); // Zoom state
-  const [confusionPoints, setConfusionPoints] = useState<string[]>(initialSessionRecord?.confusionPoints ?? []); // 困惑点列表
+  const [confusionPoints, setConfusionPoints] = useState<string[]>(restoredSessionRecord?.confusionPoints ?? []); // 困惑点列表
   const [showConfusionInput, setShowConfusionInput] = useState(false); // 显示困惑点输入框
   const [confusionInput, setConfusionInput] = useState(''); // 困惑点输入内容
   const [visualizationData, setVisualizationData] = useState<VisualizationData | null>(
-    (initialSessionRecord?.visualizationData as VisualizationData | null) ?? null
+    (restoredSessionRecord?.visualizationData as VisualizationData | null) ?? null
   ); // 可视化数据
   
   // Fullscreen modal states
@@ -436,23 +513,23 @@ const StudentConsole: React.FC<StudentConsoleProps> = ({
   
   // Table View States
   const [tableData, setTableData] = useState<{columns: string[], rows: string[][]}>(
-    initialSessionRecord?.tableData ?? { columns: [], rows: [] }
+    restoredSessionRecord?.tableData ?? { columns: [], rows: [] }
   );
 
   // Text Editor State
-  const [textEditorContent, setTextEditorContent] = useState<string>(initialSessionRecord?.textEditorContent ?? '');
+  const [textEditorContent, setTextEditorContent] = useState<string>(restoredSessionRecord?.textEditorContent ?? '');
   const [isTextEditorPreview, setIsTextEditorPreview] = useState<boolean>(false);
   
   // Math Editor State
-  const [mathEditorContent, setMathEditorContent] = useState<string>(initialSessionRecord?.mathEditorContent ?? '');
+  const [mathEditorContent, setMathEditorContent] = useState<string>(restoredSessionRecord?.mathEditorContent ?? '');
   const getGuidedProgressKey = (idx: number) => `guidedProgress_${courseId || 'default'}_${idx}`;
   const [guidedStep, setGuidedStep] = useState(() => {
     if (
-      typeof initialSessionRecord?.guidedStep === 'number' &&
-      initialSessionRecord.guidedStep >= 1 &&
-      initialSessionRecord.guidedStep <= 5
+      typeof restoredSessionRecord?.guidedStep === 'number' &&
+      restoredSessionRecord.guidedStep >= 1 &&
+      restoredSessionRecord.guidedStep <= 5
     ) {
-      return initialSessionRecord.guidedStep;
+      return restoredSessionRecord.guidedStep;
     }
     if (typeof initialGuidedStep === 'number' && initialGuidedStep >= 1 && initialGuidedStep <= 5) {
       return initialGuidedStep;
@@ -474,11 +551,11 @@ const StudentConsole: React.FC<StudentConsoleProps> = ({
   });
   const [maxStepReached, setMaxStepReached] = useState(() => {
     if (
-      typeof initialSessionRecord?.maxStepReached === 'number' &&
-      initialSessionRecord.maxStepReached >= 1 &&
-      initialSessionRecord.maxStepReached <= 5
+      typeof restoredSessionRecord?.maxStepReached === 'number' &&
+      restoredSessionRecord.maxStepReached >= 1 &&
+      restoredSessionRecord.maxStepReached <= 5
     ) {
-      return initialSessionRecord.maxStepReached;
+      return restoredSessionRecord.maxStepReached;
     }
     if (typeof initialGuidedStep === 'number' && initialGuidedStep >= 1 && initialGuidedStep <= 5) {
       return Math.max(1, initialGuidedStep);
@@ -496,30 +573,61 @@ const StudentConsole: React.FC<StudentConsoleProps> = ({
     }
     return 1;
   });
-  const [keywordAnswers, setKeywordAnswers] = useState<Record<string, string>>(initialSessionRecord?.keywordAnswers ?? {});
-  const [practiceTextAnswers, setPracticeTextAnswers] = useState<Record<number, string>>(initialSessionRecord?.practiceTextAnswers ?? {});
-  const [practiceChoiceAnswers, setPracticeChoiceAnswers] = useState<Record<number, number>>(initialSessionRecord?.practiceChoiceAnswers ?? {});
-  const [practiceImageAnswers, setPracticeImageAnswers] = useState<Record<number, string>>(initialSessionRecord?.practiceImageAnswers ?? {});
-  const [practiceInputMode, setPracticeInputMode] = useState<Record<number, 'text' | 'upload' | 'draw'>>(initialSessionRecord?.practiceInputMode ?? {});
-  const [practiceCurrentIndex, setPracticeCurrentIndex] = useState(initialSessionRecord?.practiceCurrentIndex ?? 0);
+  const initialTaskInputMap = useMemo(
+    () => buildTaskInputsByIndex(restoredSessionRecord, plan.tasks.length),
+    [restoredSessionRecord, plan.tasks.length]
+  );
+  const [taskInputsByIndex, setTaskInputsByIndex] = useState<Record<number, TaskInputs>>(() =>
+    initialTaskInputMap
+  );
+  const [keywordAnswers, setKeywordAnswers] = useState<Record<string, string>>(() => {
+    const taskInput = initialTaskInputMap[currentTaskIndex];
+    return taskInput?.keywordAnswers ?? restoredSessionRecord?.keywordAnswers ?? {};
+  });
+  const [practiceTextAnswers, setPracticeTextAnswers] = useState<Record<number, string>>(() => {
+    const taskInput = initialTaskInputMap[currentTaskIndex];
+    return taskInput?.practiceTextAnswers ?? restoredSessionRecord?.practiceTextAnswers ?? {};
+  });
+  const [practiceChoiceAnswers, setPracticeChoiceAnswers] = useState<Record<number, number>>(() => {
+    const taskInput = initialTaskInputMap[currentTaskIndex];
+    return taskInput?.practiceChoiceAnswers ?? restoredSessionRecord?.practiceChoiceAnswers ?? {};
+  });
+  const [practiceImageAnswers, setPracticeImageAnswers] = useState<Record<number, string>>(() => {
+    const taskInput = initialTaskInputMap[currentTaskIndex];
+    return taskInput?.practiceImageAnswers ?? restoredSessionRecord?.practiceImageAnswers ?? {};
+  });
+  const [practiceInputMode, setPracticeInputMode] = useState<Record<number, 'text' | 'upload' | 'draw'>>(() => {
+    const taskInput = initialTaskInputMap[currentTaskIndex];
+    return taskInput?.practiceInputMode ?? restoredSessionRecord?.practiceInputMode ?? {};
+  });
+  const [practiceCurrentIndex, setPracticeCurrentIndex] = useState(() => {
+    const taskInput = initialTaskInputMap[currentTaskIndex];
+    return taskInput?.practiceCurrentIndex ?? restoredSessionRecord?.practiceCurrentIndex ?? 0;
+  });
   const practiceCanvasRef = useRef<SignatureCanvas>(null);
   const [mindmapInputMode, setMindmapInputMode] = useState<'upload' | 'draw'>('upload');
-  const [mindmapImageAnswer, setMindmapImageAnswer] = useState<string>(initialSessionRecord?.mindmapImageAnswer ?? '');
+  const [mindmapImageAnswer, setMindmapImageAnswer] = useState<string>(restoredSessionRecord?.mindmapImageAnswer ?? '');
   const mindmapCanvasRef = useRef<SignatureCanvas>(null);
   const [showPracticeSolutions, setShowPracticeSolutions] = useState<Record<number, boolean>>({});
   const [stuckClicksPerPracticeQuestion, setStuckClicksPerPracticeQuestion] = useState<Record<number, number>>({});
   const [stuckClicksForKeyIdeas, setStuckClicksForKeyIdeas] = useState(0);
   const [showKeyIdeaBlanks, setShowKeyIdeaBlanks] = useState(false);
-  const [exitTicketAnswer, setExitTicketAnswer] = useState(initialSessionRecord?.exitTicketAnswer ?? '');
-  const [exitTicketAnswers, setExitTicketAnswers] = useState<Record<number, string>>(initialSessionRecord?.exitTicketAnswers ?? {});
+  const [exitTicketAnswer, setExitTicketAnswer] = useState(() => {
+    const taskInput = initialTaskInputMap[currentTaskIndex];
+    return taskInput?.exitTicketAnswer ?? restoredSessionRecord?.exitTicketAnswer ?? '';
+  });
+  const [exitTicketAnswers, setExitTicketAnswers] = useState<Record<number, string>>(() => {
+    const taskInput = initialTaskInputMap[currentTaskIndex];
+    return taskInput?.exitTicketAnswers ?? restoredSessionRecord?.exitTicketAnswers ?? {};
+  });
   const [showExitTicketAnswer, setShowExitTicketAnswer] = useState(false);
 
   // Edit Count Tracking (for progress tracker)
   const [editCounts, setEditCounts] = useState(() => ({
-    mindMap: Number(initialSessionRecord?.editCounts?.mindMap) || 0,
-    table: Number(initialSessionRecord?.editCounts?.table) || 0,
-    text: Number(initialSessionRecord?.editCounts?.text) || 0,
-    math: Number(initialSessionRecord?.editCounts?.math) || 0,
+    mindMap: Number(restoredSessionRecord?.editCounts?.mindMap) || 0,
+    table: Number(restoredSessionRecord?.editCounts?.table) || 0,
+    text: Number(restoredSessionRecord?.editCounts?.text) || 0,
+    math: Number(restoredSessionRecord?.editCounts?.math) || 0,
   }));
 
   // Improvement Count Tracking (基于"我做完了"循环)
@@ -529,7 +637,7 @@ const StudentConsole: React.FC<StudentConsoleProps> = ({
 
   // Completed Tasks Tracking (基于AI明确给出"任务完成"信号)
   const [completedTasks, setCompletedTasks] = useState<Set<number>>(
-    new Set(initialSessionRecord?.completedTaskIndexes ?? [])
+    new Set(restoredSessionRecord?.completedTaskIndexes ?? [])
   );
 
   // Exit Ticket / Report States（复习模式：有 initialExitData 时直接展示报告）
@@ -541,7 +649,7 @@ const StudentConsole: React.FC<StudentConsoleProps> = ({
   });
   const [finalMindMapCode, setFinalMindMapCode] = useState<string | null>(null);
   const [learningLog, setLearningLog] = useState<string>(
-    Array.isArray(initialSessionRecord?.learningLog) ? initialSessionRecord.learningLog.join('\n') : ''
+    Array.isArray(restoredSessionRecord?.learningLog) ? restoredSessionRecord.learningLog.join('\n') : ''
   );
   
   // Student Name State: use logged-in user name, then localStorage, else "您"
@@ -737,24 +845,71 @@ const StudentConsole: React.FC<StudentConsoleProps> = ({
       }
   };
 
-  const prevTaskIndexRef = useRef<number | null>(null);
   useEffect(() => {
-    if (prevTaskIndexRef.current === null) {
-      prevTaskIndexRef.current = currentTaskIndex;
-      return;
+    const taskInput = taskInputsByIndex[currentTaskIndex];
+    setKeywordAnswers(taskInput?.keywordAnswers ?? {});
+    setPracticeTextAnswers(taskInput?.practiceTextAnswers ?? {});
+    setPracticeChoiceAnswers(taskInput?.practiceChoiceAnswers ?? {});
+    setPracticeImageAnswers(taskInput?.practiceImageAnswers ?? {});
+    setPracticeInputMode(taskInput?.practiceInputMode ?? {});
+    setPracticeCurrentIndex(taskInput?.practiceCurrentIndex ?? 0);
+    setExitTicketAnswer(taskInput?.exitTicketAnswer ?? '');
+    setExitTicketAnswers(taskInput?.exitTicketAnswers ?? {});
+    setShowPracticeSolutions({});
+    setShowExitTicketAnswer(false);
+    if (typeof window !== 'undefined' && courseId) {
+      const saved = localStorage.getItem(getGuidedProgressKey(currentTaskIndex));
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved) as { step?: number; max?: number };
+          const step = Number(parsed?.step);
+          const max = Number(parsed?.max);
+          if (step >= 1 && step <= 5) setGuidedStep(step);
+          else setGuidedStep(1);
+          if (max >= 1 && max <= 5) setMaxStepReached(max);
+          else setMaxStepReached(1);
+          return;
+        } catch {
+          // ignore malformed local cache
+        }
+      }
     }
-    if (prevTaskIndexRef.current === currentTaskIndex) return;
-    prevTaskIndexRef.current = currentTaskIndex;
     setGuidedStep(1);
     setMaxStepReached(1);
-    setKeywordAnswers({});
-    setPracticeTextAnswers({});
-    setPracticeChoiceAnswers({});
-    setShowPracticeSolutions({});
-    setExitTicketAnswer('');
-    setExitTicketAnswers({});
-    setShowExitTicketAnswer(false);
-  }, [currentTaskIndex]);
+  }, [currentTaskIndex, courseId, taskInputsByIndex]);
+
+  useEffect(() => {
+    const nextTaskInput = normalizeTaskInputs({
+      keywordAnswers,
+      practiceTextAnswers,
+      practiceChoiceAnswers,
+      practiceImageAnswers,
+      practiceInputMode,
+      practiceCurrentIndex,
+      exitTicketAnswer,
+      exitTicketAnswers,
+    });
+    setTaskInputsByIndex((prev) => {
+      const prevTaskInput = prev[currentTaskIndex];
+      const prevSerialized = JSON.stringify(prevTaskInput ?? createEmptyTaskInputs());
+      const nextSerialized = JSON.stringify(nextTaskInput);
+      if (prevSerialized === nextSerialized) return prev;
+      return {
+        ...prev,
+        [currentTaskIndex]: nextTaskInput,
+      };
+    });
+  }, [
+    currentTaskIndex,
+    exitTicketAnswer,
+    exitTicketAnswers,
+    keywordAnswers,
+    practiceChoiceAnswers,
+    practiceCurrentIndex,
+    practiceImageAnswers,
+    practiceInputMode,
+    practiceTextAnswers,
+  ]);
 
   useEffect(() => {
     if (typeof window !== 'undefined' && courseId && guidedStep >= 1 && guidedStep <= 5 && maxStepReached >= 1 && maxStepReached <= 5) {
@@ -2121,15 +2276,47 @@ CRITICAL: Output language must be 简体中文 only.
     };
   };
 
+  const getCurrentTaskInputsSnapshot = useCallback(
+    (): TaskInputs =>
+      normalizeTaskInputs({
+        keywordAnswers,
+        practiceTextAnswers,
+        practiceChoiceAnswers,
+        practiceImageAnswers,
+        practiceInputMode,
+        practiceCurrentIndex,
+        exitTicketAnswer,
+        exitTicketAnswers,
+      }),
+    [
+      exitTicketAnswer,
+      exitTicketAnswers,
+      keywordAnswers,
+      practiceChoiceAnswers,
+      practiceCurrentIndex,
+      practiceImageAnswers,
+      practiceInputMode,
+      practiceTextAnswers,
+    ]
+  );
+
+  const getMergedTaskInputsByIndex = useCallback((): Record<number, TaskInputs> => {
+    return {
+      ...taskInputsByIndex,
+      [currentTaskIndex]: getCurrentTaskInputsSnapshot(),
+    };
+  }, [currentTaskIndex, getCurrentTaskInputsSnapshot, taskInputsByIndex]);
+
   const clearLearningProgressStorage = useCallback(() => {
     if (typeof window === 'undefined') return;
     localStorage.removeItem('lastLearningCourseId');
     localStorage.removeItem('lastLearningTimestamp');
     localStorage.removeItem(taskIndexStorageKey);
+    localStorage.removeItem(sessionRecordStorageKey);
     for (let i = 0; i < plan.tasks.length; i++) {
       localStorage.removeItem(`guidedProgress_${courseId}_${i}`);
     }
-  }, [courseId, plan.tasks.length, taskIndexStorageKey]);
+  }, [courseId, plan.tasks.length, sessionRecordStorageKey, taskIndexStorageKey]);
 
   const buildLearningReviewDraft = useCallback(
     (objectiveMetrics?: ObjectiveMetrics) => {
@@ -2144,6 +2331,18 @@ CRITICAL: Output language must be 简体中文 only.
         timeSpentSec: perTaskSec,
         timeSpentLabel: perTaskSec >= 60 ? `${Math.floor(perTaskSec / 60)}分${perTaskSec % 60}秒` : `${perTaskSec}秒`,
       }));
+      const mergedTaskInputsByIndex = getMergedTaskInputsByIndex();
+      const shouldUseLegacyFlatFallback = Object.keys(mergedTaskInputsByIndex).length === 0;
+      const fallbackTaskInput = normalizeTaskInputs({
+        keywordAnswers,
+        practiceTextAnswers,
+        practiceChoiceAnswers,
+        practiceImageAnswers,
+        practiceInputMode,
+        practiceCurrentIndex,
+        exitTicketAnswer,
+        exitTicketAnswers,
+      });
 
       const qaReview: Array<{
         task: string;
@@ -2157,12 +2356,21 @@ CRITICAL: Output language must be 简体中文 only.
         if (task.viewType !== 'video_player') return;
         const payload = parseGuidedPayload(task.contentPayload);
         if (!payload) return;
+        const taskInput =
+          mergedTaskInputsByIndex[taskIdx] ??
+          (shouldUseLegacyFlatFallback ? fallbackTaskInput : createEmptyTaskInputs());
+        const taskKeywordAnswers = taskInput.keywordAnswers ?? {};
+        const taskPracticeChoiceAnswers = taskInput.practiceChoiceAnswers ?? {};
+        const taskPracticeTextAnswers = taskInput.practiceTextAnswers ?? {};
+        const taskPracticeImageAnswers = taskInput.practiceImageAnswers ?? {};
+        const taskExitTicketAnswers = taskInput.exitTicketAnswers ?? {};
+        const taskExitTicketAnswer = taskInput.exitTicketAnswer ?? '';
 
         (payload.keyIdeas ?? []).forEach((idea, idx) => {
           const blanks = Array.isArray(idea.blanks) ? idea.blanks : [];
           const studentAnswer = blanks.length > 0
-            ? blanks.map((_, bi) => keywordAnswers[`blank-${idx}-${bi}`] ?? '').filter(Boolean).join(' / ')
-            : keywordAnswers[`idea-${idx}`] ?? '';
+            ? blanks.map((_, bi) => taskKeywordAnswers[`blank-${idx}-${bi}`] ?? '').filter(Boolean).join(' / ')
+            : taskKeywordAnswers[`idea-${idx}`] ?? '';
           qaReview.push({
             task: `任务${taskIdx + 1}`,
             step: '关键要点',
@@ -2174,7 +2382,7 @@ CRITICAL: Output language must be 简体中文 only.
         });
 
         (payload.practiceQuestions ?? []).forEach((q, idx) => {
-          const choiceIdx = Number(practiceChoiceAnswers[idx]);
+          const choiceIdx = Number(taskPracticeChoiceAnswers[idx]);
           const choiceAnswer =
             Number.isFinite(choiceIdx) && Array.isArray(q.options) && choiceIdx >= 0 && choiceIdx < q.options.length
               ? q.options[choiceIdx]
@@ -2183,7 +2391,7 @@ CRITICAL: Output language must be 简体中文 only.
             task: `任务${taskIdx + 1}`,
             step: '练习题',
             question: q.question || `练习题 ${idx + 1}`,
-            studentAnswer: choiceAnswer || practiceTextAnswers[idx] || (practiceImageAnswers[idx] ? '[手写图片已提交]' : ''),
+            studentAnswer: choiceAnswer || taskPracticeTextAnswers[idx] || (taskPracticeImageAnswers[idx] ? '[手写图片已提交]' : ''),
             referenceAnswer: q.correctAnswer || '',
             questionType: q.questionType || '',
           });
@@ -2194,7 +2402,7 @@ CRITICAL: Output language must be 简体中文 only.
             task: `任务${taskIdx + 1}`,
             step: '离场券',
             question: q.question || `离场券 ${idx + 1}`,
-            studentAnswer: exitTicketAnswers[idx] || (idx === 0 ? exitTicketAnswer : ''),
+            studentAnswer: taskExitTicketAnswers[idx] || (idx === 0 ? taskExitTicketAnswer : ''),
             referenceAnswer: q.correctAnswer || '',
             questionType: q.questionType || '',
           });
@@ -2212,16 +2420,20 @@ CRITICAL: Output language must be 简体中文 only.
       completedTasks,
       exitTicketAnswer,
       exitTicketAnswers,
+      getMergedTaskInputsByIndex,
       keywordAnswers,
       plan.tasks,
       practiceChoiceAnswers,
+      practiceCurrentIndex,
       practiceImageAnswers,
+      practiceInputMode,
       practiceTextAnswers,
     ]
   );
 
   const buildSessionPayload = useCallback(
     (objectiveMetrics?: ObjectiveMetrics): SessionRecordPayload => {
+      const mergedTaskInputsByIndex = getMergedTaskInputsByIndex();
       return {
         currentTaskIndex,
         guidedStep,
@@ -2245,6 +2457,7 @@ CRITICAL: Output language must be 简体中文 only.
         editCounts,
         learningLog: studentLog,
         completedTaskIndexes: Array.from(completedTasks.values()),
+        taskInputsByIndex: mergedTaskInputsByIndex,
         objectiveMetrics,
         learningReviewDraft: buildLearningReviewDraft(objectiveMetrics),
       };
@@ -2256,6 +2469,7 @@ CRITICAL: Output language must be 简体中文 only.
       currentTaskIndex,
       editCounts,
       guidedStep,
+      getMergedTaskInputsByIndex,
       keywordAnswers,
       mathEditorContent,
       maxStepReached,
@@ -2276,25 +2490,72 @@ CRITICAL: Output language must be 简体中文 only.
     ]
   );
 
+  useEffect(() => {
+    if (!courseId) return;
+    if (typeof window === 'undefined') return;
+    const timer = window.setTimeout(() => {
+      try {
+        writeLocalSessionRecord(courseId, buildSessionPayload());
+      } catch (error) {
+        console.warn('[StudentConsole] local session save skipped:', error);
+      }
+    }, 1000);
+    return () => window.clearTimeout(timer);
+  }, [buildSessionPayload, courseId]);
+
+  useEffect(() => {
+    if (!courseId) return;
+    if (typeof document === 'undefined') return;
+    const handleVisibilityChange = () => {
+      if (!document.hidden) return;
+      try {
+        writeLocalSessionRecord(courseId, buildSessionPayload());
+      } catch (error) {
+        console.warn('[StudentConsole] local session save on hide skipped:', error);
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [buildSessionPayload, courseId]);
+
   const saveSessionRecordBeforeExit = useCallback(
     async (objectiveMetrics?: ObjectiveMetrics) => {
       if (!courseId) return null;
       const sessionPayload = buildSessionPayload(objectiveMetrics);
+      const normalizedTaskInputsByIndex = Object.entries(sessionPayload.taskInputsByIndex ?? {}).reduce<Record<number, TaskInputs>>(
+        (acc, [rawTaskIndex, taskInput]) => {
+          acc[Number(rawTaskIndex)] = {
+            ...taskInput,
+            practiceImageAnswers: { ...(taskInput.practiceImageAnswers ?? {}) },
+          };
+          return acc;
+        },
+        {}
+      );
       const normalized: SessionRecordPayload = {
         ...sessionPayload,
         practiceImageAnswers: { ...sessionPayload.practiceImageAnswers },
+        taskInputsByIndex: normalizedTaskInputsByIndex,
       };
 
-      for (const [rawIndex, image] of Object.entries(sessionPayload.practiceImageAnswers ?? {})) {
-        if (!isBase64Image(image)) continue;
-        const questionIndex = Number(rawIndex);
-        const url = await uploadPracticeImage(
-          image,
-          courseId,
-          currentTaskIndex,
-          Number.isFinite(questionIndex) ? questionIndex : 0
-        );
-        normalized.practiceImageAnswers[Number(rawIndex)] = url;
+      for (const [rawTaskIndex, taskInput] of Object.entries(normalizedTaskInputsByIndex)) {
+        const taskIndex = Number(rawTaskIndex);
+        for (const [rawQuestionIndex, image] of Object.entries(taskInput.practiceImageAnswers ?? {})) {
+          if (!isBase64Image(image)) continue;
+          const questionIndex = Number(rawQuestionIndex);
+          const url = await uploadPracticeImage(
+            image,
+            courseId,
+            Number.isFinite(taskIndex) ? taskIndex : currentTaskIndex,
+            Number.isFinite(questionIndex) ? questionIndex : 0
+          );
+          taskInput.practiceImageAnswers[Number(rawQuestionIndex)] = url;
+          if (taskIndex === currentTaskIndex) {
+            normalized.practiceImageAnswers[Number(rawQuestionIndex)] = url;
+          }
+        }
       }
 
       if (isBase64Image(sessionPayload.mindmapImageAnswer)) {
@@ -2404,10 +2665,12 @@ CRITICAL: Output language must be 简体中文 only.
     // 清除 localStorage 中的任务索引和步骤进度
     if (typeof window !== 'undefined') {
       localStorage.removeItem(taskIndexStorageKey);
+      localStorage.removeItem(sessionRecordStorageKey);
       for (let i = 0; i < plan.tasks.length; i++) {
         localStorage.removeItem(`guidedProgress_${courseId}_${i}`);
       }
     }
+    setTaskInputsByIndex({});
     setMessages([]);
     setStudentLog([]);
     setMindMapInput('');
