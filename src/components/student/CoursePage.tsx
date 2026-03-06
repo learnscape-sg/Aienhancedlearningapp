@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { getCourse, trackProductEvent } from '@/lib/backendApi';
 import { touchCourseOpened } from '@/lib/studentProgressApi';
 import { supabase } from '@/utils/supabase/client';
-import type { SystemTaskPlan } from '@/types/backend';
+import type { SystemTaskPlan, ExitTicketAnalysis } from '@/types/backend';
 import { Loader2, AlertCircle } from 'lucide-react';
 import StudentConsole from './StudentConsole';
 import { useRuntimePolicy } from '@/hooks/useRuntimePolicy';
@@ -56,6 +56,7 @@ export function CoursePage() {
   const [plan, setPlan] = useState<SystemTaskPlan | null>(null);
   const [initialTaskIndex, setInitialTaskIndex] = useState<number | undefined>(undefined);
   const [initialGuidedStep, setInitialGuidedStep] = useState<number | undefined>(undefined);
+  const [initialExitData, setInitialExitData] = useState<ExitTicketAnalysis | undefined>(undefined);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -92,6 +93,7 @@ export function CoursePage() {
         const initialPos = resolveInitialLearningPosition(data.plan, data.studentProgress);
         setInitialTaskIndex(initialPos.initialTaskIndex);
         setInitialGuidedStep(initialPos.initialGuidedStep);
+        setInitialExitData(data.lastAssessment ?? undefined);
         if (typeof window !== 'undefined') {
           localStorage.setItem('lastLearningCourseId', courseId);
           localStorage.setItem('lastLearningTimestamp', Date.now().toString());
@@ -179,6 +181,7 @@ export function CoursePage() {
                         const initialPos = resolveInitialLearningPosition(data.plan, data.studentProgress);
                         setInitialTaskIndex(initialPos.initialTaskIndex);
                         setInitialGuidedStep(initialPos.initialGuidedStep);
+                        setInitialExitData(data.lastAssessment ?? undefined);
                         setError(null);
                       })
                       .catch((err) => setError(err.message || t('retryFailed')))
@@ -218,6 +221,7 @@ export function CoursePage() {
       classId={classId}
       initialTaskIndex={initialTaskIndex}
       initialGuidedStep={initialGuidedStep}
+      initialExitData={initialExitData}
     />
   );
 }

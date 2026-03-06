@@ -90,6 +90,8 @@ interface StudentConsoleProps {
   classId?: string;
   initialTaskIndex?: number;
   initialGuidedStep?: number;
+  /** 复习模式：已完成课程进入时传入上次学习报告，直接展示 */
+  initialExitData?: ExitTicketAnalysis;
 }
 
 interface GuidedKeyIdea {
@@ -297,6 +299,7 @@ const StudentConsole: React.FC<StudentConsoleProps> = ({
   classId,
   initialTaskIndex,
   initialGuidedStep,
+  initialExitData,
 }) => {
   const { user } = useAuth();
   const params = useParams();
@@ -493,10 +496,13 @@ const StudentConsole: React.FC<StudentConsoleProps> = ({
   // Completed Tasks Tracking (基于AI明确给出"任务完成"信号)
   const [completedTasks, setCompletedTasks] = useState<Set<number>>(new Set());
 
-  // Exit Ticket / Report States
-  const [showReport, setShowReport] = useState(false);
-  const [exitData, setExitData] = useState<ExitTicketAnalysis | null>(null);
-  const [selectedCharacteristic, setSelectedCharacteristic] = useState<string | null>('self_drive');
+  // Exit Ticket / Report States（复习模式：有 initialExitData 时直接展示报告）
+  const [showReport, setShowReport] = useState(!!initialExitData);
+  const [exitData, setExitData] = useState<ExitTicketAnalysis | null>(initialExitData ?? null);
+  const [selectedCharacteristic, setSelectedCharacteristic] = useState<string | null>(() => {
+    if (initialExitData?.characteristics?.length) return initialExitData.characteristics[0].key;
+    return 'self_drive';
+  });
   const [finalMindMapCode, setFinalMindMapCode] = useState<string | null>(null);
   const [learningLog, setLearningLog] = useState<string>('');
   

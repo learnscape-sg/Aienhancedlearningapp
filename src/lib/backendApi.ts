@@ -712,17 +712,26 @@ export async function getStudentCourses(studentId: string): Promise<{
   );
 }
 
+export type ExitTicketAnalysis = {
+  summary: string;
+  nextSteps: string;
+  overallScore: number;
+  characteristics: Array<{ key: string; name: string; score: number; dimensions?: Array<{ name: string; score: number; comment?: string }> }>;
+};
+
 export async function getCourse(
   courseId: string
 ): Promise<{
   plan: SystemTaskPlan;
   sourceTaskIds?: string | null;
   studentProgress?: { progress: number; last_task_index: number; completed: boolean };
+  lastAssessment?: ExitTicketAnalysis;
 }> {
   return apiCall<{
     plan: SystemTaskPlan;
     sourceTaskIds?: string | null;
     studentProgress?: { progress: number; last_task_index: number; completed: boolean };
+    lastAssessment?: ExitTicketAnalysis;
   }>(
     `/api/courses?id=${encodeURIComponent(courseId)}`,
     { method: 'GET' }
