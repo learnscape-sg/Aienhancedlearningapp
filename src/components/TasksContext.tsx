@@ -11,7 +11,13 @@ export interface TaskItem {
   taskType?: string;
   durationMin?: number;
   isPublic?: boolean;
+  publicStatus?: 'public' | 'private';
+  assignmentStatus?: 'assigned' | 'unassigned';
+  shareStatus?: 'shared' | 'none';
+  updatedAt?: string;
   teacherId?: string;
+  ownerTeacherId?: string;
+  ownerTeacherName?: string;
 }
 
 interface TasksContextType {
@@ -41,6 +47,12 @@ export function TasksProvider({ children }: { children: ReactNode }) {
         taskType: row.taskType,
         durationMin: row.durationMin,
         isPublic: row.isPublic,
+        publicStatus: row.publicStatus,
+        assignmentStatus: row.assignmentStatus,
+        shareStatus: row.shareStatus,
+        updatedAt: row.updatedAt,
+        ownerTeacherId: row.ownerTeacherId,
+        ownerTeacherName: row.ownerTeacherName,
       }));
       setTasks(mapped);
     } catch (error) {

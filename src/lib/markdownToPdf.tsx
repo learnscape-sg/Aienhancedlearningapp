@@ -11,7 +11,21 @@ export async function downloadMarkdownAsPdf(
   markdown: string,
   filename: string
 ): Promise<void> {
-  const baseName = filename.replace(/\.(md|pdf)$/i, '') + '.pdf';
+  await renderMarkdownPdf(markdown, { mode: 'save', filename });
+}
+
+/** 将 Markdown（含 LaTeX 公式）转为 PDF Blob（用于上传存储） */
+export async function markdownToPdfBlob(markdown: string): Promise<Blob> {
+  return renderMarkdownPdf(markdown, { mode: 'blob' });
+}
+
+async function renderMarkdownPdf(
+  markdown: string,
+  options: { mode: 'save'; filename: string } | { mode: 'blob' }
+): Promise<Blob | void> {
+  const baseName = options.mode === 'save'
+    ? options.filename.replace(/\.(md|pdf)$/i, '') + '.pdf'
+    : 'document.pdf';
 
   const wrapper = document.createElement('div');
   wrapper.setAttribute('aria-hidden', 'true');
@@ -76,7 +90,7 @@ export async function downloadMarkdownAsPdf(
   await new Promise((r) => setTimeout(r, 600));
 
   try {
-    await html2pdf()
+    const worker = html2pdf()
       .set({
         margin: 10,
         filename: baseName,
@@ -93,8 +107,15 @@ export async function downloadMarkdownAsPdf(
         },
         jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
       })
-      .from(container)
-      .save();
+      .from(container);
+
+    if (options.mode === 'save') {
+      await worker.save();
+      return;
+    }
+
+    const blob = await (worker as unknown as { outputPdf: (type: 'blob') => Promise<Blob> }).outputPdf('blob');
+    return blob;
   } finally {
     root.unmount();
     wrapper.remove();

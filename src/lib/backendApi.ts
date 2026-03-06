@@ -260,6 +260,18 @@ export async function createCourse(
     topic?: string;
     grade?: string;
     language?: 'zh' | 'en';
+    documentAssets?: {
+      course?: Array<{
+        key: string;
+        label: string;
+        format: 'md' | 'pdf';
+        url?: string;
+        bucket?: string;
+        objectPath?: string;
+        mimeType?: string;
+        updatedAt?: string;
+      }>;
+    };
   }
 ): Promise<{ courseId: string; url: string }> {
   const base = Array.isArray((input as { taskIds?: string[] }).taskIds)
@@ -273,6 +285,7 @@ export async function createCourse(
           topic: meta.topic,
           grade: meta.grade,
           language: meta.language,
+          documentAssets: meta.documentAssets,
         }),
       };
   const body = teacherId != null ? { ...base, teacherId } : base;
@@ -298,6 +311,18 @@ export async function saveTask(
     prerequisites?: string;
     generationBatchId?: string;
     source?: 'course_generation' | 'task_generation';
+    documentAssets?: {
+      task?: Array<{
+        key: string;
+        label: string;
+        format: 'md' | 'pdf';
+        url?: string;
+        bucket?: string;
+        objectPath?: string;
+        mimeType?: string;
+        updatedAt?: string;
+      }>;
+    };
   }
 ): Promise<{ taskId: string }> {
   return apiCall<{ taskId: string }>('/api/tasks', {
@@ -334,6 +359,11 @@ export async function listTeacherTasks(
     difficulty?: string;
     prerequisites?: string;
     isPublic?: boolean;
+    publicStatus?: 'public' | 'private';
+    assignmentStatus?: 'assigned' | 'unassigned';
+    shareStatus?: 'shared' | 'none';
+    ownerTeacherId?: string;
+    ownerTeacherName?: string;
     publishedAt?: string;
     scheduledPublishAt?: string;
     publishStatus?: 'draft' | 'scheduled' | 'published' | 'cancelled';
@@ -411,6 +441,11 @@ export async function listPublicTasks(params?: {
     difficulty?: string;
     prerequisites?: string;
     teacherId?: string;
+    publicStatus?: 'public' | 'private';
+    assignmentStatus?: 'assigned' | 'unassigned';
+    shareStatus?: 'shared' | 'none';
+    ownerTeacherId?: string;
+    ownerTeacherName?: string;
     publishedAt?: string;
     createdAt?: string;
   }[];
@@ -420,6 +455,63 @@ export async function listPublicTasks(params?: {
   if (params?.subject) qs.set('subject', params.subject);
   if (params?.grade) qs.set('grade', params.grade);
   return apiCall(`/api/tasks?${qs.toString()}`, { method: 'GET' });
+}
+
+export async function listSharedTasks(teacherId: string): Promise<{
+  tasks: {
+    taskId: string;
+    taskTitle?: string;
+    subject?: string;
+    subjectRaw?: string;
+    subjectCustom?: string;
+    subjectIsCustom?: boolean;
+    grade?: string;
+    topic?: string;
+    taskType?: string;
+    durationMin?: number;
+    difficulty?: string;
+    prerequisites?: string;
+    isPublic?: boolean;
+    publicStatus?: 'public' | 'private';
+    assignmentStatus?: 'assigned' | 'unassigned';
+    shareStatus?: 'shared' | 'none';
+    ownerTeacherId?: string;
+    ownerTeacherName?: string;
+    publishedAt?: string;
+    scheduledPublishAt?: string;
+    publishStatus?: 'draft' | 'scheduled' | 'published' | 'cancelled';
+    createdAt?: string;
+    updatedAt?: string;
+  }[];
+}> {
+  const qs = new URLSearchParams({ teacherId, sharedForTeacher: 'true' });
+  return apiCall<{
+    tasks: {
+      taskId: string;
+      taskTitle?: string;
+      subject?: string;
+      subjectRaw?: string;
+      subjectCustom?: string;
+      subjectIsCustom?: boolean;
+      grade?: string;
+      topic?: string;
+      taskType?: string;
+      durationMin?: number;
+      difficulty?: string;
+      prerequisites?: string;
+      isPublic?: boolean;
+      publicStatus?: 'public' | 'private';
+      assignmentStatus?: 'assigned' | 'unassigned';
+      shareStatus?: 'shared' | 'none';
+      ownerTeacherId?: string;
+      ownerTeacherName?: string;
+      publishedAt?: string;
+      scheduledPublishAt?: string;
+      publishStatus?: 'draft' | 'scheduled' | 'published' | 'cancelled';
+      createdAt?: string;
+      updatedAt?: string;
+    }[];
+  }>(`/api/tasks?${qs.toString()}`, { method: 'GET' });
 }
 
 export interface ClassItem {
@@ -1715,6 +1807,8 @@ export async function convertDocumentToHtml(
 
 export async function uploadMaterialResource(file: File): Promise<{
   url: string;
+  bucket?: string;
+  objectPath?: string;
   mimeType: string;
   name: string;
   size: number;
@@ -1734,11 +1828,46 @@ export async function uploadMaterialResource(file: File): Promise<{
   const json = await response.json();
   return json.data as {
     url: string;
+    bucket?: string;
+    objectPath?: string;
     mimeType: string;
     name: string;
     size: number;
     resourceKind: 'video' | 'document';
   };
+}
+
+export async function listDocumentAssets(
+  params: { entityType: 'task' | 'course'; id: string; teacherId?: string }
+): Promise<{
+  items: Array<{
+    key: string;
+    label: string;
+    format: 'md' | 'pdf';
+    status: 'ready' | 'missing' | 'failed';
+    url?: string;
+    message?: string;
+    updatedAt?: string;
+  }>;
+}> {
+  const qs = new URLSearchParams({
+    entityType: params.entityType,
+    id: params.id,
+  });
+  if (params.teacherId) {
+    qs.set('teacherId', params.teacherId);
+  }
+  return apiCall<{
+    items: Array<{
+      key: string;
+      label: string;
+      format: 'md' | 'pdf';
+      status: 'ready' | 'missing' | 'failed';
+      url?: string;
+      message?: string;
+      updatedAt?: string;
+    }>;
+  }>(`/api/document-assets?${qs.toString()}`, { method: 'GET' });
 }
 
 export type GenerateTaskDesignResult = {

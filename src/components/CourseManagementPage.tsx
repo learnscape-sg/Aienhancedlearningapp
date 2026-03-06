@@ -15,6 +15,9 @@ import {
   Share2,
   Link2,
   Pencil,
+  Download,
+  MoreVertical,
+  Globe,
 } from 'lucide-react';
 import { useAuth } from './AuthContext';
 import { usePublishedCourses } from './PublishedCoursesContext';
@@ -27,6 +30,7 @@ import {
   deleteTask,
   listTeacherClasses,
   listTeacherTasks,
+  listSharedTasks,
   listPublicTasks,
   listPublicCourses,
   restoreTask,
@@ -48,11 +52,19 @@ import {
   deleteCourseShare,
   searchTeachers,
   generateTaskAsset,
+  listDocumentAssets,
   type ClassItem,
   type TeacherSearchItem,
 } from '@/lib/backendApi';
 import type { SystemTask, SystemTaskPlan } from '@/types/backend';
 import { TaskPreviewEdit } from './TaskPreviewEdit';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from './ui/dropdown-menu';
 
 const TASK_TYPE_LABELS: Record<string, string> = {
   mastery: '掌握型任务',
@@ -96,12 +108,14 @@ export function CourseManagementPage({ initialCourseTab }: { initialCourseTab?: 
   const { tasks: myTasks, refreshTasks } = useTasks();
 
   // --- Task state ---
-  const [myTaskView, setMyTaskView] = useState<'active' | 'public' | 'recycle'>('active');
+  const [myTaskView, setMyTaskView] = useState<'active' | 'shared' | 'public' | 'recycle'>('active');
   const [taskSearchQuery, setTaskSearchQuery] = useState('');
   const [deletedTasks, setDeletedTasks] = useState<TaskItem[]>([]);
   const [publicTasks, setPublicTasks] = useState<TaskItem[]>([]);
+  const [sharedTasks, setSharedTasks] = useState<TaskItem[]>([]);
   const [loadingDeletedTasks, setLoadingDeletedTasks] = useState(false);
   const [loadingPublicTasks, setLoadingPublicTasks] = useState(false);
+  const [loadingSharedTasks, setLoadingSharedTasks] = useState(false);
   const [selectedTaskIds, setSelectedTaskIds] = useState<string[]>([]);
   const [deletingTaskId, setDeletingTaskId] = useState<string | null>(null);
   const [restoringTaskId, setRestoringTaskId] = useState<string | null>(null);
@@ -125,6 +139,7 @@ export function CourseManagementPage({ initialCourseTab }: { initialCourseTab?: 
   const [restoringCourseId, setRestoringCourseId] = useState<string | null>(null);
   const [publishingCourseId, setPublishingCourseId] = useState<string | null>(null);
   const [publishingTaskId, setPublishingTaskId] = useState<string | null>(null);
+  const [sharingTaskId, setSharingTaskId] = useState<string | null>(null);
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
   const [sharingCourse, setSharingCourse] = useState<Course | null>(null);
   const [shareLoading, setShareLoading] = useState(false);
@@ -135,6 +150,11 @@ export function CourseManagementPage({ initialCourseTab }: { initialCourseTab?: 
   const shareTeacherSearchRef = useRef<HTMLDivElement>(null);
   const [sharePermission, setSharePermission] = useState<'view' | 'edit'>('view');
   const [shareItems, setShareItems] = useState<CourseShareItem[]>([]);
+  const [downloadDialogOpen, setDownloadDialogOpen] = useState(false);
+  const [downloadDialogTarget, setDownloadDialogTarget] = useState<{ entityType: 'task' | 'course'; id: string; title: string } | null>(null);
+  const [downloadItems, setDownloadItems] = useState<Array<{ key: string; label: string; format: 'md' | 'pdf'; status: 'ready' | 'missing' | 'failed'; url?: string; message?: string; updatedAt?: string }>>([]);
+  const [downloadLoading, setDownloadLoading] = useState(false);
+  const [downloadingKey, setDownloadingKey] = useState<string | null>(null);
 
   // --- Edit task/course state ---
   const [editMode, setEditMode] = useState<'task' | 'course' | null>(null);
@@ -160,7 +180,7 @@ export function CourseManagementPage({ initialCourseTab }: { initialCourseTab?: 
   const [classesLoading, setClassesLoading] = useState(false);
 
   useEffect(() => {
-    if (myTaskView === 'recycle') setSelectedTaskIds([]);
+    if (myTaskView === 'recycle' || myTaskView === 'shared') setSelectedTaskIds([]);
   }, [myTaskView]);
 
   useEffect(() => {
@@ -173,18 +193,50 @@ export function CourseManagementPage({ initialCourseTab }: { initialCourseTab?: 
   }, [user?.id, myTaskView]);
 
   useEffect(() => {
+    if (!user?.id || myTaskView !== 'shared') return;
+    setLoadingSharedTasks(true);
+    listSharedTasks(user.id)
+      .then((res) => {
+        const mapped: TaskItem[] = (res.tasks ?? []).map((row) => ({
+          taskId: row.taskId,
+          taskTitle: row.taskTitle,
+          subject: row.subject,
+          grade: row.grade,
+          topic: row.topic,
+          taskType: row.taskType,
+          durationMin: row.durationMin,
+          isPublic: row.isPublic,
+          publicStatus: row.publicStatus ?? 'private',
+          assignmentStatus: row.assignmentStatus ?? 'unassigned',
+          shareStatus: row.shareStatus ?? 'shared',
+          updatedAt: row.updatedAt,
+          ownerTeacherId: row.ownerTeacherId,
+          ownerTeacherName: row.ownerTeacherName,
+        }));
+        setSharedTasks(mapped);
+      })
+      .catch((err) => console.error('Failed to load shared tasks:', err))
+      .finally(() => setLoadingSharedTasks(false));
+  }, [myTaskView, user?.id]);
+
+  useEffect(() => {
     if (myTaskView !== 'public') return;
     setLoadingPublicTasks(true);
     listPublicTasks()
       .then((res) => {
         const mapped: TaskItem[] = (res.tasks ?? []).map((row) => ({
           taskId: row.taskId,
+          taskTitle: row.taskTitle,
           subject: row.subject,
           grade: row.grade,
           topic: row.topic,
           taskType: row.taskType,
           durationMin: row.durationMin,
           isPublic: true,
+          publicStatus: row.publicStatus ?? 'public',
+          assignmentStatus: row.assignmentStatus ?? 'unassigned',
+          shareStatus: row.shareStatus ?? 'none',
+          updatedAt: row.createdAt,
           teacherId: row.teacherId,
         }));
         setPublicTasks(mapped);
@@ -313,10 +365,17 @@ export function CourseManagementPage({ initialCourseTab }: { initialCourseTab?: 
   }, [courseView]);
 
   const activeTasks = myTaskView === 'active' ? myTasks : [];
+  const sharedTaskList = myTaskView === 'shared' ? sharedTasks : [];
   const publicTaskList = myTaskView === 'public' ? publicTasks : [];
   const recycleTaskList = myTaskView === 'recycle' ? deletedTasks : [];
   const taskListForView =
-    myTaskView === 'active' ? activeTasks : myTaskView === 'public' ? publicTaskList : recycleTaskList;
+    myTaskView === 'active'
+      ? activeTasks
+      : myTaskView === 'shared'
+        ? sharedTaskList
+        : myTaskView === 'public'
+          ? publicTaskList
+          : recycleTaskList;
   const filteredMyTasks = useMemo(
     () =>
       taskListForView.filter((task) =>
@@ -364,6 +423,72 @@ export function CourseManagementPage({ initialCourseTab }: { initialCourseTab?: 
     const base = grade && subject ? `${grade} - ${subject} - ${topic}` : topic;
     const withTitle = taskTitle ? `${base} - ${taskTitle}` : base;
     return taskTypeLabel ? `${withTitle} - ${taskTypeLabel}` : withTitle;
+  };
+
+  const formatTimeLabel = (value?: string | null) => {
+    if (!value) return '—';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return value;
+    return `${date.getMonth() + 1}-${date.getDate()} ${date.getHours()}:${date.getMinutes().toString().padStart(2, '0')}`;
+  };
+
+  const openDownloadDialog = async (target: { entityType: 'task' | 'course'; id: string; title: string }) => {
+    if (!user?.id) return;
+    setDownloadDialogTarget(target);
+    setDownloadDialogOpen(true);
+    setDownloadLoading(true);
+    setDownloadItems([]);
+    try {
+      const { items } = await listDocumentAssets({ entityType: target.entityType, id: target.id, teacherId: user.id });
+      setDownloadItems(items ?? []);
+    } catch (err) {
+      console.error('Load document assets failed:', err);
+      setDownloadItems([]);
+      alert(err instanceof Error ? err.message : '加载下载资源失败');
+    } finally {
+      setDownloadLoading(false);
+    }
+  };
+
+  const handleDownloadItem = (item: { key: string; url?: string; status: 'ready' | 'missing' | 'failed'; message?: string }) => {
+    if (item.status !== 'ready' || !item.url) {
+      alert(item.message || '此文件由于历史版本原因缺失');
+      return;
+    }
+    setDownloadingKey(item.key);
+    const a = document.createElement('a');
+    a.href = item.url;
+    a.target = '_blank';
+    a.rel = 'noreferrer';
+    a.click();
+    window.setTimeout(() => setDownloadingKey((prev) => (prev === item.key ? null : prev)), 400);
+  };
+
+  const handleTaskShare = async (task: TaskItem) => {
+    if (!user?.id) return;
+    setSharingTaskId(task.taskId);
+    try {
+      const created = await createCourse({ taskIds: [task.taskId] }, user.id);
+      const pseudoCourse: Course = {
+        id: created.courseId,
+        title: taskDisplayName(task),
+        subject: task.subject || '',
+        grade: task.grade || '',
+        students: 0,
+        completion: 0,
+        assignmentStatus: 'unassigned',
+        visibilityStatus: task.isPublic ? 'public' : 'private',
+        shareStatus: 'none',
+        lastUpdated: formatTimeLabel(new Date().toISOString()),
+      };
+      openShareDialog(pseudoCourse);
+      await refreshCourses();
+    } catch (err) {
+      console.error('Share task failed:', err);
+      alert(err instanceof Error ? err.message : '任务分享失败');
+    } finally {
+      setSharingTaskId(null);
+    }
   };
 
   const toggleTaskSelection = (taskId: string) => {
@@ -414,8 +539,8 @@ export function CourseManagementPage({ initialCourseTab }: { initialCourseTab?: 
       await updateTaskVisibility(task.taskId, user.id, action);
       await refreshTasks();
     } catch (err) {
-      console.error('Task publish failed:', err);
-      alert(err instanceof Error ? err.message : '操作失败');
+      console.error('Task visibility update failed:', err);
+      alert(err instanceof Error ? err.message : '公开设置失败');
     } finally {
       setPublishingTaskId(null);
     }
@@ -634,8 +759,8 @@ export function CourseManagementPage({ initialCourseTab }: { initialCourseTab?: 
       await updateCourseVisibility(course.id, user.id, action);
       await refreshCourses();
     } catch (err) {
-      console.error('Course publish failed:', err);
-      alert(err instanceof Error ? err.message : '操作失败');
+      console.error('Course visibility update failed:', err);
+      alert(err instanceof Error ? err.message : '公开设置失败');
     } finally {
       setPublishingCourseId(null);
     }
@@ -877,6 +1002,9 @@ export function CourseManagementPage({ initialCourseTab }: { initialCourseTab?: 
 
   const renderTaskRow = (task: TaskItem, opts: { canManage: boolean; selectable: boolean; assignable: boolean }) => {
     const selected = selectedTaskIds.includes(task.taskId);
+    const assignmentStatus = task.assignmentStatus ?? 'unassigned';
+    const shareStatus = task.shareStatus ?? 'none';
+    const publicStatus = task.publicStatus ?? (task.isPublic ? 'public' : 'private');
     return (
       <div
         key={task.taskId}
@@ -902,6 +1030,19 @@ export function CourseManagementPage({ initialCourseTab }: { initialCourseTab?: 
             </div>
             <div className="flex flex-wrap items-center gap-2 mt-1 text-sm text-muted-foreground">
               <span>{[task.subject, task.grade].filter(Boolean).join(' · ') || task.taskId.slice(0, 8)}</span>
+              <Badge variant={assignmentStatus === 'assigned' ? 'default' : 'secondary'}>
+                {assignmentStatus === 'assigned' ? '已分配' : '未分配'}
+              </Badge>
+              <Badge variant={shareStatus === 'shared' ? 'default' : 'secondary'}>
+                {shareStatus === 'shared' ? '已分享' : '未分享'}
+              </Badge>
+              <Badge variant={publicStatus === 'public' ? 'default' : 'secondary'}>
+                {publicStatus === 'public' ? '已公开' : '未公开'}
+              </Badge>
+              {myTaskView === 'shared' && task.ownerTeacherId ? (
+                <Badge variant="outline">分享自 {task.ownerTeacherName ?? task.ownerTeacherId}</Badge>
+              ) : null}
+              <span>更新于 {formatTimeLabel(task.updatedAt)}</span>
             </div>
           </div>
         </div>
@@ -910,62 +1051,56 @@ export function CourseManagementPage({ initialCourseTab }: { initialCourseTab?: 
             <ExternalLink className="w-4 h-4 mr-1" />
             预览
           </Button>
-          {opts.canManage && myTaskView === 'active' && (
-            <Button variant="outline" size="sm" onClick={() => handleTaskEdit(task.taskId)}>
-              <Pencil className="w-4 h-4 mr-1" />
-              编辑
-            </Button>
-          )}
           {opts.assignable ? (
             <Button variant="ghost" size="sm" onClick={() => openTaskAssignDialog([task.taskId])}>
               <UserPlus className="w-4 h-4 mr-1" />
               分配
             </Button>
           ) : null}
-          {opts.canManage && myTaskView === 'active' && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => handleTaskPublish(task)}
-              disabled={publishingTaskId === task.taskId}
-            >
-              {publishingTaskId === task.taskId ? (
-                <Loader2 className="w-4 h-4 mr-1 animate-spin" />
-              ) : null}
-              {task.isPublic ? '取消发布' : '发布'}
-            </Button>
-          )}
-          {opts.canManage ? (
-            <>
-              {myTaskView === 'active' ? (
-                <>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => handleTaskDelete(task)}
-                    disabled={deletingTaskId === task.taskId}
-                    className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                  >
-                    {deletingTaskId === task.taskId ? (
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                    ) : (
-                      <Trash2 className="w-4 h-4 mr-1" />
-                    )}
-                    删除
-                  </Button>
-                </>
-              ) : (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handleTaskRestore(task)}
-                  disabled={restoringTaskId === task.taskId}
+          <Button variant="outline" size="sm" onClick={() => openDownloadDialog({ entityType: 'task', id: task.taskId, title: taskDisplayName(task) })}>
+            <Download className="w-4 h-4 mr-1" />
+            下载
+          </Button>
+          {opts.canManage && myTaskView === 'active' ? (
+            <DropdownMenu>
+              <DropdownMenuTrigger className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-transparent text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900">
+                <MoreVertical className="w-4 h-4" />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onSelect={() => handleTaskEdit(task.taskId)}>
+                  <Pencil className="w-4 h-4 mr-1" />
+                  编辑
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => handleTaskPublish(task)} disabled={publishingTaskId === task.taskId}>
+                  <Globe className="w-4 h-4 mr-1" />
+                  {task.isPublic ? '取消公开' : '公开'}
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => handleTaskShare(task)} disabled={sharingTaskId === task.taskId}>
+                  <Share2 className="w-4 h-4 mr-1" />
+                  {sharingTaskId === task.taskId ? '分享中...' : '分享'}
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  onSelect={() => handleTaskDelete(task)}
+                  disabled={deletingTaskId === task.taskId}
+                  variant="destructive"
                 >
-                  {restoringTaskId === task.taskId ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : null}
-                  恢复
-                </Button>
-              )}
-            </>
+                  <Trash2 className="w-4 h-4 mr-1" />
+                  删除
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          ) : null}
+          {opts.canManage && myTaskView === 'recycle' ? (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => handleTaskRestore(task)}
+              disabled={restoringTaskId === task.taskId}
+            >
+              {restoringTaskId === task.taskId ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : null}
+              恢复
+            </Button>
           ) : null}
         </div>
       </div>
@@ -985,17 +1120,18 @@ export function CourseManagementPage({ initialCourseTab }: { initialCourseTab?: 
             <Badge variant={course.assignmentStatus === 'assigned' ? 'default' : 'secondary'}>
               {course.assignmentStatus === 'assigned' ? '已分配' : '未分配'}
             </Badge>
+            <Badge variant={course.shareStatus === 'shared' ? 'default' : 'secondary'}>
+              {course.shareStatus === 'shared' ? '已分享' : '未分享'}
+            </Badge>
+            <Badge variant={course.visibilityStatus === 'public' ? 'default' : 'secondary'}>
+              {course.visibilityStatus === 'public' ? '已公开' : '未公开'}
+            </Badge>
             {courseView === 'shared' && course.ownerTeacherId ? (
               <Badge variant="outline">分享自 {course.ownerTeacherName ?? course.ownerTeacherId}</Badge>
             ) : null}
             {courseView === 'public' && course.ownerTeacherId ? (
               <Badge variant="outline">来自 {course.ownerTeacherName ?? course.ownerTeacherId}</Badge>
             ) : null}
-            {canManage && courseView === 'active' && (
-              <Badge variant={course.shareStatus === 'shared' ? 'default' : 'secondary'}>
-                {course.shareStatus === 'shared' ? '已分享' : '未分享'}
-              </Badge>
-            )}
             <span>{course.students} 名学生</span>
             <span>完成率 {course.completion}%</span>
             {courseView === 'recycle' && course.deletedAt ? (
@@ -1010,17 +1146,17 @@ export function CourseManagementPage({ initialCourseTab }: { initialCourseTab?: 
           <ExternalLink className="w-4 h-4 mr-1" />
           预览
         </Button>
-        {canManage && courseView === 'active' && (
-          <Button variant="outline" size="sm" onClick={() => handleCourseEdit(course.id)}>
-            <Pencil className="w-4 h-4 mr-1" />
-            编辑
-          </Button>
-        )}
         {courseView === 'shared' || courseView === 'public' ? (
-          <Button variant="ghost" size="sm" onClick={() => openCourseAssignDialog(course)}>
-            <UserPlus className="w-4 h-4 mr-1" />
-            分配
-          </Button>
+          <>
+            <Button variant="ghost" size="sm" onClick={() => openCourseAssignDialog(course)}>
+              <UserPlus className="w-4 h-4 mr-1" />
+              分配
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => openDownloadDialog({ entityType: 'course', id: course.id, title: course.title })}>
+              <Download className="w-4 h-4 mr-1" />
+              下载
+            </Button>
+          </>
         ) : canManage ? (
           courseView === 'active' ? (
             <>
@@ -1028,37 +1164,43 @@ export function CourseManagementPage({ initialCourseTab }: { initialCourseTab?: 
                 <UserPlus className="w-4 h-4 mr-1" />
                 分配
               </Button>
-              {(!course.ownerTeacherId || course.ownerTeacherId === user?.id) && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => handleCoursePublish(course)}
-                  disabled={publishingCourseId === course.id}
-                >
-                  {publishingCourseId === course.id ? (
-                    <Loader2 className="w-4 h-4 mr-1 animate-spin" />
-                  ) : null}
-                  {course.visibilityStatus === 'public' ? '取消发布' : '发布'}
-                </Button>
-              )}
-              <Button variant="ghost" size="sm" onClick={() => openShareDialog(course)}>
-                <Share2 className="w-4 h-4 mr-1" />
-                分享
+              <Button variant="outline" size="sm" onClick={() => openDownloadDialog({ entityType: 'course', id: course.id, title: course.title })}>
+                <Download className="w-4 h-4 mr-1" />
+                下载
               </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => handleCourseDelete(course)}
-                disabled={deletingCourseId === course.id}
-                className="text-red-600 hover:text-red-700 hover:bg-red-50"
-              >
-                {deletingCourseId === course.id ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  <Trash2 className="w-4 h-4 mr-1" />
-                )}
-                删除
-              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-transparent text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900">
+                  <MoreVertical className="w-4 h-4" />
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onSelect={() => handleCourseEdit(course.id)}>
+                    <Pencil className="w-4 h-4 mr-1" />
+                    编辑
+                  </DropdownMenuItem>
+                  {(!course.ownerTeacherId || course.ownerTeacherId === user?.id) && (
+                    <DropdownMenuItem
+                      onSelect={() => handleCoursePublish(course)}
+                      disabled={publishingCourseId === course.id}
+                    >
+                      <Globe className="w-4 h-4 mr-1" />
+                      {course.visibilityStatus === 'public' ? '取消公开' : '公开'}
+                    </DropdownMenuItem>
+                  )}
+                  <DropdownMenuItem onSelect={() => openShareDialog(course)}>
+                    <Share2 className="w-4 h-4 mr-1" />
+                    分享
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    onSelect={() => handleCourseDelete(course)}
+                    disabled={deletingCourseId === course.id}
+                    variant="destructive"
+                  >
+                    <Trash2 className="w-4 h-4 mr-1" />
+                    删除
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </>
           ) : (
             <Button
@@ -1072,10 +1214,16 @@ export function CourseManagementPage({ initialCourseTab }: { initialCourseTab?: 
             </Button>
           )
         ) : (
-          <Button variant="ghost" size="sm" onClick={() => openCourseAssignDialog(course)}>
-            <UserPlus className="w-4 h-4 mr-1" />
-            分配
-          </Button>
+          <>
+            <Button variant="ghost" size="sm" onClick={() => openCourseAssignDialog(course)}>
+              <UserPlus className="w-4 h-4 mr-1" />
+              分配
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => openDownloadDialog({ entityType: 'course', id: course.id, title: course.title })}>
+              <Download className="w-4 h-4 mr-1" />
+              下载
+            </Button>
+          </>
         )}
       </div>
     </div>
@@ -1101,6 +1249,9 @@ export function CourseManagementPage({ initialCourseTab }: { initialCourseTab?: 
                   <Button variant={myTaskView === 'active' ? 'default' : 'outline'} size="sm" onClick={() => setMyTaskView('active')}>
                     我的任务
                   </Button>
+                  <Button variant={myTaskView === 'shared' ? 'default' : 'outline'} size="sm" onClick={() => setMyTaskView('shared')}>
+                    分享给我的
+                  </Button>
                   <Button variant={myTaskView === 'public' ? 'default' : 'outline'} size="sm" onClick={() => setMyTaskView('public')}>
                     公开任务
                   </Button>
@@ -1120,13 +1271,21 @@ export function CourseManagementPage({ initialCourseTab }: { initialCourseTab?: 
                   </Button>
                 </div>
               </div>
-              {(myTaskView === 'recycle' && loadingDeletedTasks) || (myTaskView === 'public' && loadingPublicTasks) ? (
+              {(myTaskView === 'recycle' && loadingDeletedTasks) ||
+              (myTaskView === 'public' && loadingPublicTasks) ||
+              (myTaskView === 'shared' && loadingSharedTasks) ? (
                 <div className="flex justify-center py-8">
                   <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
                 </div>
               ) : filteredMyTasks.length === 0 ? (
                 <p className="text-muted-foreground py-8 text-center">
-                  {myTaskView === 'active' ? '暂无任务' : myTaskView === 'public' ? '暂无公开任务' : '回收站暂无任务'}
+                  {myTaskView === 'active'
+                    ? '暂无任务'
+                    : myTaskView === 'shared'
+                      ? '暂无分享任务'
+                      : myTaskView === 'public'
+                        ? '暂无公开任务'
+                        : '回收站暂无任务'}
                 </p>
               ) : (
                 <>
@@ -1157,7 +1316,7 @@ export function CourseManagementPage({ initialCourseTab }: { initialCourseTab?: 
                       renderTaskRow(task, {
                         canManage: myTaskView === 'active',
                         selectable: myTaskView === 'active' || myTaskView === 'public',
-                        assignable: myTaskView === 'active' || myTaskView === 'public',
+                        assignable: myTaskView === 'active' || myTaskView === 'public' || myTaskView === 'shared',
                       })
                     )}
                   </div>
@@ -1244,7 +1403,7 @@ export function CourseManagementPage({ initialCourseTab }: { initialCourseTab?: 
             </CardHeader>
             <CardContent className="p-6 space-y-4 overflow-y-auto">
               <div className="space-y-2 border rounded-lg p-3 bg-muted/30">
-                <p className="text-sm font-medium">发布方式</p>
+                <p className="text-sm font-medium">发送方式</p>
                 <div className="flex items-center gap-4 text-sm">
                   <label className="flex items-center gap-1">
                     <input type="radio" checked={publishMode === 'now'} onChange={() => setPublishMode('now')} />
@@ -1327,7 +1486,7 @@ export function CourseManagementPage({ initialCourseTab }: { initialCourseTab?: 
             </CardHeader>
             <CardContent className="p-6 space-y-4 overflow-y-auto">
               <div className="space-y-2 border rounded-lg p-3 bg-muted/30">
-                <p className="text-sm font-medium">发布方式</p>
+                <p className="text-sm font-medium">发送方式</p>
                 <div className="flex items-center gap-4 text-sm">
                   <label className="flex items-center gap-1">
                     <input type="radio" checked={publishMode === 'now'} onChange={() => setPublishMode('now')} />
@@ -1477,6 +1636,68 @@ export function CourseManagementPage({ initialCourseTab }: { initialCourseTab?: 
                 确认分配
               </Button>
             </div>
+          </Card>
+        </div>
+      )}
+
+      {/* 下载弹窗 */}
+      {downloadDialogOpen && downloadDialogTarget && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <Card className="w-[640px] max-h-[80vh] flex flex-col overflow-hidden">
+            <CardHeader className="border-b">
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle>下载文档</CardTitle>
+                  <CardDescription className="mt-1">{downloadDialogTarget.title}</CardDescription>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setDownloadDialogOpen(false);
+                    setDownloadDialogTarget(null);
+                  }}
+                  className="h-8 w-8 p-0"
+                >
+                  <X className="w-4 h-4" />
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent className="p-6 space-y-3 overflow-y-auto">
+              {downloadLoading ? (
+                <div className="flex justify-center py-8">
+                  <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+                </div>
+              ) : downloadItems.length === 0 ? (
+                <p className="text-sm text-muted-foreground">暂无可下载文档</p>
+              ) : (
+                downloadItems.map((item) => (
+                  <div key={item.key} className="flex items-center justify-between border rounded-md px-3 py-2">
+                    <div>
+                      <p className="text-sm font-medium">{item.label}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {item.status === 'ready'
+                          ? `最近更新：${formatTimeLabel(item.updatedAt)}`
+                          : '此文件由于历史版本原因缺失'}
+                      </p>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant={item.status === 'ready' ? 'default' : 'outline'}
+                      onClick={() => handleDownloadItem(item)}
+                      disabled={downloadingKey === item.key}
+                    >
+                      {downloadingKey === item.key ? (
+                        <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                      ) : (
+                        <Download className="w-4 h-4 mr-1" />
+                      )}
+                      下载
+                    </Button>
+                  </div>
+                ))
+              )}
+            </CardContent>
           </Card>
         </div>
       )}

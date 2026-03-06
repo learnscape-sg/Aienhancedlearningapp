@@ -43,7 +43,7 @@ import {
   prefSubjectIdToDisplay,
   GRADE_OPTIONS,
 } from '../hooks/useTeacherPreferences';
-import { downloadMarkdownAsPdf } from '../lib/markdownToPdf';
+import { downloadMarkdownAsPdf, markdownToPdfBlob } from '../lib/markdownToPdf';
 import { Tabs, TabsList, TabsTrigger } from './ui/tabs';
 import { Textarea } from './ui/textarea';
 import { TypingText } from './ui/typing-text';
@@ -74,6 +74,52 @@ type ParsedVideoRef = {
   platform: 'youtube' | 'bilibili';
   id: string;
 };
+
+type PersistedDocumentAsset = {
+  key: string;
+  label: string;
+  format: 'md' | 'pdf';
+  url?: string;
+  bucket?: string;
+  objectPath?: string;
+  mimeType?: string;
+  updatedAt?: string;
+};
+
+async function persistTaskDocumentAssets(markdown: string, topic: string): Promise<PersistedDocumentAsset[]> {
+  const now = new Date().toISOString();
+  const base = topic || '任务';
+  const assets: PersistedDocumentAsset[] = [];
+
+  const mdFile = new File([markdown], `任务文档-${base}-${Date.now()}.md`, { type: 'text/markdown;charset=utf-8' });
+  const mdUploaded = await uploadMaterialResource(mdFile);
+  assets.push({
+    key: 'task-md',
+    label: '任务文档.md',
+    format: 'md',
+    url: mdUploaded.url,
+    bucket: mdUploaded.bucket,
+    objectPath: mdUploaded.objectPath,
+    mimeType: mdUploaded.mimeType,
+    updatedAt: now,
+  });
+
+  const pdfBlob = await markdownToPdfBlob(markdown);
+  const pdfFile = new File([pdfBlob], `任务文档-${base}-${Date.now()}.pdf`, { type: 'application/pdf' });
+  const pdfUploaded = await uploadMaterialResource(pdfFile);
+  assets.push({
+    key: 'task-pdf',
+    label: '任务文档.pdf',
+    format: 'pdf',
+    url: pdfUploaded.url,
+    bucket: pdfUploaded.bucket,
+    objectPath: pdfUploaded.objectPath,
+    mimeType: pdfUploaded.mimeType,
+    updatedAt: now,
+  });
+
+  return assets;
+}
 
 function parseVideoUrl(url: string): ParsedVideoRef | null {
   try {
@@ -809,6 +855,16 @@ export function TeachingResourcesPage() {
 
       // 2. Save task to tasks table, then create course from taskIds
       const subjectMeta = splitSubjectValue((entrySubject === CUSTOM_SUBJECT_OPTION ? entryCustomSubject : entrySubject).trim());
+      let taskDocumentAssets: PersistedDocumentAsset[] = [];
+      if (taskDesignMarkdownRef.current?.trim()) {
+        try {
+          taskDocumentAssets = await persistTaskDocumentAssets(taskDesignMarkdownRef.current, entryTopic);
+        } catch (error) {
+          console.error('Persist task documents failed:', error);
+          taskDocumentAssets = [];
+        }
+      }
+
       const { taskId } = await saveTask(task, user?.id, {
         subject: subjectMeta.subject,
         subjectCustom: subjectMeta.subjectCustom,
@@ -820,6 +876,7 @@ export function TeachingResourcesPage() {
         difficulty: entryDifficulty,
         prerequisites: entryPrerequisites,
         source: 'task_generation',
+        documentAssets: taskDocumentAssets.length > 0 ? { task: taskDocumentAssets } : undefined,
       });
       void trackProductEvent({
         eventName: 'task_create_succeeded',

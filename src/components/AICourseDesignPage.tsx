@@ -42,6 +42,7 @@ import {
   generateTaskAsset,
   saveTask,
   createCourse,
+  uploadMaterialResource,
   trackProductEvent,
 } from '../lib/backendApi';
 import type {
@@ -50,7 +51,7 @@ import type {
   SystemTaskPlan,
 } from '../types/backend';
 import { saveCourseMetaToSupabase } from '../lib/coursesRepository';
-import { downloadMarkdownAsPdf } from '../lib/markdownToPdf';
+import { downloadMarkdownAsPdf, markdownToPdfBlob } from '../lib/markdownToPdf';
 import { SUBJECT_OPTIONS, CUSTOM_SUBJECT_OPTION, splitSubjectValue } from '../lib/subjects';
 import { TaskPreviewEdit } from './TaskPreviewEdit';
 
@@ -81,6 +82,59 @@ const downloadMarkdownFile = (content: string, filename: string) => {
   a.click();
   URL.revokeObjectURL(url);
 };
+
+type PersistedDocumentAsset = {
+  key: string;
+  label: string;
+  format: 'md' | 'pdf';
+  url?: string;
+  bucket?: string;
+  objectPath?: string;
+  mimeType?: string;
+  updatedAt?: string;
+};
+
+async function persistMarkdownAndPdfAssets(params: {
+  markdown: string;
+  mdFileName: string;
+  pdfFileName: string;
+  mdKey: string;
+  mdLabel: string;
+  pdfKey: string;
+  pdfLabel: string;
+}): Promise<PersistedDocumentAsset[]> {
+  const assets: PersistedDocumentAsset[] = [];
+  const now = new Date().toISOString();
+
+  const mdFile = new File([params.markdown], params.mdFileName, { type: 'text/markdown;charset=utf-8' });
+  const mdUploaded = await uploadMaterialResource(mdFile);
+  assets.push({
+    key: params.mdKey,
+    label: params.mdLabel,
+    format: 'md',
+    url: mdUploaded.url,
+    bucket: mdUploaded.bucket,
+    objectPath: mdUploaded.objectPath,
+    mimeType: mdUploaded.mimeType,
+    updatedAt: now,
+  });
+
+  const pdfBlob = await markdownToPdfBlob(params.markdown);
+  const pdfFile = new File([pdfBlob], params.pdfFileName, { type: 'application/pdf' });
+  const pdfUploaded = await uploadMaterialResource(pdfFile);
+  assets.push({
+    key: params.pdfKey,
+    label: params.pdfLabel,
+    format: 'pdf',
+    url: pdfUploaded.url,
+    bucket: pdfUploaded.bucket,
+    objectPath: pdfUploaded.objectPath,
+    mimeType: pdfUploaded.mimeType,
+    updatedAt: now,
+  });
+
+  return assets;
+}
 
 /** 任务 topic 仅存课题；任务标题独立来自 task_json.title */
 const buildTaskTopicForStorage = (params: { topic: string }): string => params.topic.trim();
@@ -379,6 +433,40 @@ export function AICourseDesignPage({ onNextStep }: AICourseDesignPageProps) {
     try {
       const batchId = createGenerationBatchId();
       const taskIds: string[] = [];
+      const courseDocumentAssets: PersistedDocumentAsset[] = [];
+
+      if (documents?.studentTaskSheet?.trim()) {
+        try {
+          const assets = await persistMarkdownAndPdfAssets({
+            markdown: documents.studentTaskSheet,
+            mdFileName: `自学任务书-${topic || '课程'}-${Date.now()}.md`,
+            pdfFileName: `自学任务书-${topic || '课程'}-${Date.now()}.pdf`,
+            mdKey: 'course-student-md',
+            mdLabel: '自学任务书.md',
+            pdfKey: 'course-student-pdf',
+            pdfLabel: '自学任务书.pdf',
+          });
+          courseDocumentAssets.push(...assets);
+        } catch (error) {
+          console.error('Persist student task sheet failed:', error);
+        }
+      }
+      if (documents?.teacherGuide?.trim()) {
+        try {
+          const assets = await persistMarkdownAndPdfAssets({
+            markdown: documents.teacherGuide,
+            mdFileName: `教师指南-${topic || '课程'}-${Date.now()}.md`,
+            pdfFileName: `教师指南-${topic || '课程'}-${Date.now()}.pdf`,
+            mdKey: 'course-teacher-md',
+            mdLabel: '教师指南.md',
+            pdfKey: 'course-teacher-pdf',
+            pdfLabel: '教师指南.pdf',
+          });
+          courseDocumentAssets.push(...assets);
+        } catch (error) {
+          console.error('Persist teacher guide failed:', error);
+        }
+      }
 
       for (let i = 0; i < plan.tasks.length; i++) {
         const task = plan.tasks[i];
@@ -407,6 +495,7 @@ export function AICourseDesignPage({ onNextStep }: AICourseDesignPageProps) {
         topic,
         grade,
         language,
+        documentAssets: courseDocumentAssets.length > 0 ? { course: courseDocumentAssets } : undefined,
       });
       void trackProductEvent({
         eventName: 'course_create_succeeded',
