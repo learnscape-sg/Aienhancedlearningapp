@@ -137,7 +137,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const AUTH_TIMEOUT_MS = 8000;
     let initDone = false;
-    let initialLoadDone = false; // 初始化完成前，onAuthStateChange 不覆盖 user，避免 fallback 导致 onboarding 闪一下
 
     const initializeAuth = async () => {
       try {
@@ -145,14 +144,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (initDone) return;
 
         if (session?.user) {
-          // 先加载 profile，再结束 loading，避免 fallback user（空 grade/interests）导致 onboarding 闪一下
+          // 先展示占位，profile 到达后再更新
+          setUser(createFallbackUser(session.user));
+          setPreferences({});
+          setLoading(false);
+
           const result = await loadProfileFromSupabase(session.user.id, session.user.email ?? '');
           if (initDone) return;
           if (result) {
             applyProfileResult(result);
-          } else {
-            setUser(createFallbackUser(session.user));
-            setPreferences({});
           }
         } else {
           setUser(null);
@@ -165,7 +165,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } finally {
         if (!initDone) {
           initDone = true;
-          initialLoadDone = true;
           setLoading(false);
         }
       }
@@ -175,7 +174,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const timeoutId = setTimeout(() => {
       if (!initDone) {
         initDone = true;
-        initialLoadDone = true;
         console.warn('[Auth] 初始化超时(8s)，强制结束 loading');
         setLoading(false);
       }
@@ -189,7 +187,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(null);
         setPreferences({});
       } else if (session?.user) {
-        if (!initialLoadDone) return; // 初始化完成前不覆盖，避免 fallback 导致 onboarding 闪一下
+        // 使用 setTimeout 延后执行，避免在 auth 回调中直接 await 引发死锁
         loadProfileFromSupabase(session.user.id, session.user.email ?? '')
           .then((result) => {
             if (result) applyProfileResult(result);
