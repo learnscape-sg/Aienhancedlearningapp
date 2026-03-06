@@ -26,12 +26,14 @@ function CourseListBySubject({
   navigate,
   buttonLabel,
   showBadge,
+  buttonDisabled,
 }: {
   groups: Array<{ subject: string; courses: StudentCourseItem[] }>;
   selectedSubject: string;
   navigate: (path: string) => void;
   buttonLabel: string;
   showBadge: boolean;
+  buttonDisabled?: boolean;
 }) {
   if (groups.length === 0) return null;
   const courses =
@@ -48,6 +50,7 @@ function CourseListBySubject({
           navigate={navigate}
           buttonLabel={buttonLabel}
           showBadge={showBadge}
+          buttonDisabled={buttonDisabled}
         />
       ))}
     </div>
@@ -60,15 +63,18 @@ function CourseCard({
   navigate,
   buttonLabel,
   showBadge,
+  buttonDisabled,
 }: {
   course: StudentCourseItem;
   color: string;
   navigate: (path: string) => void;
   buttonLabel: string;
   showBadge: boolean;
+  buttonDisabled?: boolean;
 }) {
   const actualProgress = course.progress ?? 0;
   const handleClick = () => {
+    if (buttonDisabled) return;
     const params = new URLSearchParams();
     if (course.groupId) params.set('groupId', course.groupId);
     if (course.classId) params.set('classId', course.classId);
@@ -104,6 +110,7 @@ function CourseCard({
           <Button
             size="sm"
             onClick={handleClick}
+            disabled={buttonDisabled}
             className="shrink-0 bg-primary hover:bg-primary-hover text-primary-foreground h-8 px-3 text-xs"
           >
             <Play className="w-3.5 h-3.5 mr-1" />
@@ -320,6 +327,7 @@ export function HomePage({ onStartChapter }: HomePageProps) {
                           navigate={navigate}
                           buttonLabel="复习"
                           showBadge={true}
+                          buttonDisabled={true}
                         />
                       )}
                     </TabsContent>
