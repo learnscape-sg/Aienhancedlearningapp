@@ -82,12 +82,8 @@ const downloadMarkdownFile = (content: string, filename: string) => {
   URL.revokeObjectURL(url);
 };
 
-/** 任务 topic 存「课题 + 任务标题」，grade/subject 独立列，展示时拼接避免重复 */
-const buildTaskTopicForStorage = (params: { topic: string; taskTitle?: string }): string => {
-  const topicPart = params.topic.trim();
-  const titlePart = (params.taskTitle || '').trim();
-  return titlePart ? `${topicPart} - ${titlePart}` : topicPart;
-};
+/** 任务 topic 仅存课题；任务标题独立来自 task_json.title */
+const buildTaskTopicForStorage = (params: { topic: string }): string => params.topic.trim();
 
 interface AICourseDesignPageProps {
   onNextStep?: (data: { plan: SystemTaskPlan; courseId?: string; courseUrl?: string }) => void;
@@ -386,10 +382,7 @@ export function AICourseDesignPage({ onNextStep }: AICourseDesignPageProps) {
 
       for (let i = 0; i < plan.tasks.length; i++) {
         const task = plan.tasks[i];
-        const taskTopic = buildTaskTopicForStorage({
-          topic,
-          taskTitle: task.title || task.outputGoal,
-        });
+        const taskTopic = buildTaskTopicForStorage({ topic });
         try {
           const { taskId } = await saveTask(task, user?.id, {
             subject: subjectMeta.subject,

@@ -4,6 +4,7 @@ import { listTeacherTasks } from '../lib/backendApi';
 
 export interface TaskItem {
   taskId: string;
+  taskTitle?: string;
   subject?: string;
   grade?: string;
   topic?: string;
@@ -33,6 +34,7 @@ export function TasksProvider({ children }: { children: ReactNode }) {
       const { tasks: taskList } = await listTeacherTasks(user.id, { deletedOnly: false });
       const mapped: TaskItem[] = (taskList ?? []).map((row) => ({
         taskId: row.taskId,
+        taskTitle: row.taskTitle,
         subject: row.subject,
         grade: row.grade,
         topic: row.topic,

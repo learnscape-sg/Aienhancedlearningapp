@@ -359,9 +359,11 @@ export function CourseManagementPage({ initialCourseTab }: { initialCourseTab?: 
     const grade = task.grade?.trim() || '';
     const subject = task.subject?.trim() || '';
     const topic = task.topic?.trim() || task.subject || '未命名任务';
+    const taskTitle = task.taskTitle?.trim() || '';
     const taskTypeLabel = task.taskType ? (TASK_TYPE_LABELS[task.taskType] ?? task.taskType) : null;
     const base = grade && subject ? `${grade} - ${subject} - ${topic}` : topic;
-    return taskTypeLabel ? `${base} - ${taskTypeLabel}` : base;
+    const withTitle = taskTitle ? `${base} - ${taskTitle}` : base;
+    return taskTypeLabel ? `${withTitle} - ${taskTypeLabel}` : withTitle;
   };
 
   const toggleTaskSelection = (taskId: string) => {

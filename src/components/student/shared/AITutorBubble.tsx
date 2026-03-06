@@ -1,9 +1,10 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { AnimatedAvatar, type AvatarState } from './AnimatedAvatar';
 
-const AVATAR_SIZE = 72; // 144 缩小一倍
-const BUBBLE_WIDTH = 360;
-const BUBBLE_GAP = 8;
+const SIZE_SCALE = 1.5;
+const AVATAR_SIZE = Math.round(72 * SIZE_SCALE);
+const BUBBLE_WIDTH = Math.round(360 * SIZE_SCALE);
+const BUBBLE_GAP = Math.round(8 * SIZE_SCALE);
 const BUBBLE_MAX_VH = 0.8; // 50% × 1.6 ≈ 80%
 
 /** 获取视口信息（优先 visualViewport，兼容平板/横竖屏/缩放） */
@@ -306,7 +307,8 @@ export const AITutorBubble: React.FC<AITutorBubbleProps> = ({
       {isOpen && (
         <div
           data-bubble-content
-          className="mb-2 w-[360px] max-h-[80vh] flex flex-col rounded-2xl border border-slate-200 bg-white shadow-2xl overflow-hidden order-first"
+          className="mb-2 flex flex-col rounded-2xl border border-slate-200 bg-white shadow-2xl overflow-hidden order-first"
+          style={{ width: BUBBLE_WIDTH, maxHeight: `${Math.round(BUBBLE_MAX_VH * 100)}vh` }}
         >
           {children}
         </div>

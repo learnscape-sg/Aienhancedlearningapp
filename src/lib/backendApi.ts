@@ -322,6 +322,7 @@ export async function listTeacherTasks(
 ): Promise<{
   tasks: {
     taskId: string;
+    taskTitle?: string;
     subject?: string;
     subjectRaw?: string;
     subjectCustom?: string;
@@ -401,6 +402,7 @@ export async function listPublicTasks(params?: {
 }): Promise<{
   tasks: {
     taskId: string;
+    taskTitle?: string;
     subject?: string;
     grade?: string;
     topic?: string;
