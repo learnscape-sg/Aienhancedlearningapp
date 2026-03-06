@@ -327,6 +327,7 @@ export function HomePage({ onStartChapter }: HomePageProps) {
                           navigate={navigate}
                           buttonLabel="复习"
                           showBadge={true}
+                          buttonDisabled={true}
                         />
                       )}
                     </TabsContent>
