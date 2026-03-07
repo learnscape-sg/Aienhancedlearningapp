@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { getStudentMetrics, type StudentMetrics } from '@/lib/backendApi';
+import { useAuth } from '@/components/AuthContext';
 
 interface AnalyticsData {
   totalChapters: number;
@@ -18,10 +19,43 @@ interface AnalyticsData {
 }
 
 export function useAnalytics() {
+  const { user, profileResolved } = useAuth();
   const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
   const [loading, setLoading] = useState(true);
 
   const loadAnalytics = async () => {
+    if (!profileResolved) {
+      setLoading(true);
+      return;
+    }
+
+    if (!user) {
+      setAnalytics(null);
+      setLoading(false);
+      return;
+    }
+
+    if (user?.role && user.role !== 'student') {
+      // Non-student roles should not call student-only analytics endpoints.
+      setAnalytics({
+        totalChapters: 0,
+        completedChapters: 0,
+        totalTimeSpent: 0,
+        averageScore: 0,
+        recentQuizzes: [],
+        weeklyProgress: [],
+        weeklyGoalMinutes: 70,
+        weeklyStudyMinutes: 0,
+        weeklyProgressPercent: 0,
+        streakDays: 0,
+        badges: [],
+        earnedBadges: 0,
+        badgeDeltaVsLastWeek: 0,
+      });
+      setLoading(false);
+      return;
+    }
+
     try {
       const metrics: StudentMetrics = await getStudentMetrics();
       setAnalytics({
@@ -40,7 +74,15 @@ export function useAnalytics() {
         badgeDeltaVsLastWeek: metrics.badgeDeltaVsLastWeek,
       });
     } catch (error) {
-      console.error('Error loading analytics:', error);
+      // For non-student access/unauthorized edge cases, fallback silently.
+      const message = error instanceof Error ? error.message : String(error);
+      const isExpectedAuthEdge =
+        message.includes('Student access required') ||
+        message.includes('Unauthorized. Missing bearer token') ||
+        message.includes('Unauthorized. Invalid token');
+      if (!isExpectedAuthEdge) {
+        console.error('Error loading analytics:', error);
+      }
       // Graceful fallback: show empty-state values instead of mock numbers.
       setAnalytics({
         totalChapters: 0,
@@ -64,7 +106,7 @@ export function useAnalytics() {
 
   useEffect(() => {
     loadAnalytics();
-  }, []);
+  }, [profileResolved, user?.id, user?.role]);
 
   return {
     analytics,

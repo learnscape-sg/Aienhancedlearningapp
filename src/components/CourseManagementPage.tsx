@@ -199,6 +199,7 @@ export function CourseManagementPage({ initialCourseTab }: { initialCourseTab?: 
       .then((res) => {
         const mapped: TaskItem[] = (res.tasks ?? []).map((row) => ({
           taskId: row.taskId,
+          taskDisplayTitle: row.taskDisplayTitle,
           taskTitle: row.taskTitle,
           subject: row.subject,
           grade: row.grade,
@@ -226,6 +227,7 @@ export function CourseManagementPage({ initialCourseTab }: { initialCourseTab?: 
       .then((res) => {
         const mapped: TaskItem[] = (res.tasks ?? []).map((row) => ({
           taskId: row.taskId,
+          taskDisplayTitle: row.taskDisplayTitle,
           taskTitle: row.taskTitle,
           subject: row.subject,
           grade: row.grade,
@@ -379,7 +381,9 @@ export function CourseManagementPage({ initialCourseTab }: { initialCourseTab?: 
   const filteredMyTasks = useMemo(
     () =>
       taskListForView.filter((task) =>
-        `${task.topic || ''} ${task.subject || ''}`.toLowerCase().includes(taskSearchQuery.toLowerCase())
+        `${task.taskDisplayTitle || ''} ${task.topic || ''} ${task.subject || ''}`
+          .toLowerCase()
+          .includes(taskSearchQuery.toLowerCase())
       ),
     [taskListForView, taskSearchQuery]
   );
@@ -415,6 +419,8 @@ export function CourseManagementPage({ initialCourseTab }: { initialCourseTab?: 
   });
 
   const taskDisplayName = (task: TaskItem) => {
+    const persisted = task.taskDisplayTitle?.trim();
+    if (persisted) return persisted;
     const grade = task.grade?.trim() || '';
     const subject = task.subject?.trim() || '';
     const topic = task.topic?.trim() || task.subject || '未命名任务';

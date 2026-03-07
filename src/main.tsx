@@ -11,25 +11,32 @@ import { SharedTwinLandingPage } from './components/shared/SharedTwinLandingPage
 import { ForgotPasswordPage } from './components/ForgotPasswordPage';
 import { ResetPasswordPage } from './components/ResetPasswordPage';
 import { AdminPortal } from './components/admin/AdminPortal';
+import { MaintenancePage } from './components/MaintenancePage';
 import './styles/globals.css';
 import './styles/tenant-compat.css';
+
+const MAINTENANCE_MODE = true;
 
 createRoot(document.getElementById('root')!).render(
   <AuthProvider>
     <FontSizeProvider>
     <BrowserRouter>
       <FeedbackButton />
-      <Routes>
-        <Route path="/" element={<App />} />
-        <Route path="/app" element={<App />} />
-        <Route path="/app/:space" element={<App />} />
-        <Route path="/shared-course/:token" element={<SharedCourseLandingPage />} />
-        <Route path="/shared-twin/:token" element={<SharedTwinLandingPage />} />
-        <Route path="/forgot-password" element={<ForgotPasswordPage />} />
-        <Route path="/reset-password" element={<ResetPasswordPage />} />
-        <Route path="/course/:id" element={<CoursePage />} />
-        <Route path="/admin/*" element={<AdminPortal />} />
-      </Routes>
+      {MAINTENANCE_MODE ? (
+        <MaintenancePage />
+      ) : (
+        <Routes>
+          <Route path="/" element={<App />} />
+          <Route path="/app" element={<App />} />
+          <Route path="/app/:space" element={<App />} />
+          <Route path="/shared-course/:token" element={<SharedCourseLandingPage />} />
+          <Route path="/shared-twin/:token" element={<SharedTwinLandingPage />} />
+          <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+          <Route path="/reset-password" element={<ResetPasswordPage />} />
+          <Route path="/course/:id" element={<CoursePage />} />
+          <Route path="/admin/*" element={<AdminPortal />} />
+        </Routes>
+      )}
     </BrowserRouter>
     </FontSizeProvider>
   </AuthProvider>

@@ -404,9 +404,6 @@ export function HomePage({ onStartChapter }: HomePageProps) {
                     <p className={`text-xs font-medium ${achievement.earned ? 'text-[#22C55E]' : 'text-gray-500'}`}>
                       {achievement.name}
                     </p>
-                    {achievement.condition && (
-                      <p className="text-[10px] text-muted-foreground mt-0.5">{achievement.condition}</p>
-                    )}
                   </div>
                 ))}
                 {(!analytics?.badges || analytics.badges.length === 0) && (

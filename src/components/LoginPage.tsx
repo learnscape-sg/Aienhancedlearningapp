@@ -123,6 +123,7 @@ export function LoginPage({ onSuccess }: LoginPageProps) {
                         id="email"
                         type="text"
                         placeholder="输入邮箱、手机号或账号名"
+                        autoComplete="username"
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
                         required
@@ -142,6 +143,7 @@ export function LoginPage({ onSuccess }: LoginPageProps) {
                         id="password"
                         type="password"
                         placeholder="输入您的密码"
+                        autoComplete="current-password"
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
                         required

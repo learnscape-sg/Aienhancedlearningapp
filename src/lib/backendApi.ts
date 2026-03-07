@@ -347,6 +347,7 @@ export async function listTeacherTasks(
 ): Promise<{
   tasks: {
     taskId: string;
+    taskDisplayTitle?: string;
     taskTitle?: string;
     subject?: string;
     subjectRaw?: string;
@@ -432,6 +433,7 @@ export async function listPublicTasks(params?: {
 }): Promise<{
   tasks: {
     taskId: string;
+    taskDisplayTitle?: string;
     taskTitle?: string;
     subject?: string;
     grade?: string;
@@ -460,6 +462,7 @@ export async function listPublicTasks(params?: {
 export async function listSharedTasks(teacherId: string): Promise<{
   tasks: {
     taskId: string;
+    taskDisplayTitle?: string;
     taskTitle?: string;
     subject?: string;
     subjectRaw?: string;
@@ -488,6 +491,7 @@ export async function listSharedTasks(teacherId: string): Promise<{
   return apiCall<{
     tasks: {
       taskId: string;
+      taskDisplayTitle?: string;
       taskTitle?: string;
       subject?: string;
       subjectRaw?: string;

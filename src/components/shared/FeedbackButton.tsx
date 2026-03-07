@@ -27,7 +27,6 @@ export function FeedbackButton() {
   // 教师、家长、Admin 可填写反馈；匿名用户和学生隐藏反馈按钮
   const canShowFeedback =
     user?.role === 'teacher' || user?.role === 'parent' || user?.role === 'admin';
-  if (!canShowFeedback) return null;
   const [isOpen, setIsOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitStatus, setSubmitStatus] = useState<'idle' | 'success' | 'error'>('idle');
@@ -46,6 +45,8 @@ export function FeedbackButton() {
       pageName: getPageName(pathname || '/'),
     }));
   }, [pathname]);
+
+  if (!canShowFeedback) return null;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

@@ -18,6 +18,7 @@ interface AuthContextType {
   user: User | null;
   preferences: ProfilePreferences;
   loading: boolean;
+  profileResolved: boolean;
   login: (email: string, password: string, role?: UserRole) => Promise<void>;
   register: (email: string, password: string, name: string, role: UserRole) => Promise<void>;
   logout: () => Promise<void>;
@@ -104,6 +105,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [preferences, setPreferences] = useState<ProfilePreferences>({});
   const [loading, setLoading] = useState(true);
+  const [profileResolved, setProfileResolved] = useState(false);
 
   const applyProfileResult = (result: { user: User; preferences: ProfilePreferences } | null) => {
     if (result) {
@@ -144,6 +146,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (initDone) return;
 
         if (session?.user) {
+          setProfileResolved(false);
           // 先展示占位，profile 到达后再更新
           setUser(createFallbackUser(session.user));
           setPreferences({});
@@ -153,15 +156,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           if (initDone) return;
           if (result) {
             applyProfileResult(result);
+          } else {
+            setUser(createFallbackUser(session.user));
+            setPreferences({});
           }
+          setProfileResolved(true);
         } else {
           setUser(null);
           setPreferences({});
+          setProfileResolved(true);
         }
       } catch (error) {
         console.error('[Auth] Error initializing auth:', error);
         setUser(null);
         setPreferences({});
+        setProfileResolved(true);
       } finally {
         if (!initDone) {
           initDone = true;
@@ -186,7 +195,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (event === 'SIGNED_OUT') {
         setUser(null);
         setPreferences({});
+        setProfileResolved(true);
       } else if (session?.user) {
+        setProfileResolved(false);
         // 使用 setTimeout 延后执行，避免在 auth 回调中直接 await 引发死锁
         loadProfileFromSupabase(session.user.id, session.user.email ?? '')
           .then((result) => {
@@ -195,8 +206,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               setUser(createFallbackUser(session.user));
               setPreferences({});
             }
+            setProfileResolved(true);
           })
-          .catch((err) => console.error('[Auth] onAuthStateChange 加载 profile 失败:', err));
+          .catch((err) => {
+            console.error('[Auth] onAuthStateChange 加载 profile 失败:', err);
+            setProfileResolved(true);
+          });
       }
     });
 
@@ -207,6 +222,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const login = async (email: string, password: string, _role?: UserRole) => {
+    setProfileResolved(false);
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) throw new Error(error.message || '登录失败');
 
@@ -217,6 +233,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(createFallbackUser(data.user));
       setPreferences({});
     }
+    setProfileResolved(true);
   };
 
   const register = async (email: string, password: string, name: string, role: UserRole) => {
@@ -249,6 +266,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         interests: [],
         role,
       });
+      setProfileResolved(true);
     }
   };
 
@@ -307,6 +325,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       user,
       preferences,
       loading,
+      profileResolved,
       login,
       register,
       logout,

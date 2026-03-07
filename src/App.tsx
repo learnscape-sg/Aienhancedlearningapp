@@ -49,7 +49,7 @@ type AppState = 'login' | 'onboarding' | 'dashboard' | 'chapter' | 'quiz' | 'lea
 const TEACHER_SECTIONS = ['overview', 'course-design', 'courses', 'materials', 'classes', 'settings'];
 
 function AppContent() {
-  const { user, loading, login } = useAuth();
+  const { user, loading, profileResolved, login } = useAuth();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { i18n } = useTranslation();
@@ -172,6 +172,10 @@ function AppContent() {
         if (!sectionFromUrl) setActiveSection('overview');
         setAppState('dashboard');
       } else {
+        if (!profileResolved) {
+          setAppState('dashboard');
+          return;
+        }
         const needsOnboarding = !user.grade && (!user.interests || user.interests.length === 0);
         setAppState(needsOnboarding ? 'onboarding' : 'dashboard');
         if (!needsOnboarding && !sectionFromUrl) {
@@ -181,7 +185,7 @@ function AppContent() {
     } else {
       setAppState('login');
     }
-  }, [user, searchParams]);
+  }, [user, profileResolved, searchParams]);
 
   // Loading state
   if (loading) {
