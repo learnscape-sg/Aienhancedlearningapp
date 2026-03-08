@@ -15,7 +15,7 @@ import { MaintenancePage } from './components/MaintenancePage';
 import './styles/globals.css';
 import './styles/tenant-compat.css';
 
-const MAINTENANCE_MODE = true;
+const MAINTENANCE_MODE = false;
 
 createRoot(document.getElementById('root')!).render(
   <AuthProvider>

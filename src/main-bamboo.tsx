@@ -14,7 +14,7 @@ import { AdminPortal } from './components/admin/AdminPortal';
 import { MaintenancePage } from './components/MaintenancePage';
 import './styles/globals-bamboo.css';
 
-const MAINTENANCE_MODE = true;
+const MAINTENANCE_MODE = false;
 
 createRoot(document.getElementById('root')!).render(
   <AuthProvider>

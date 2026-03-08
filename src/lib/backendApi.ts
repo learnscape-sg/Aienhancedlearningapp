@@ -177,6 +177,7 @@ export async function generateCurriculumDesign(
   grade: string,
   topic: string,
   textbook: string,
+  pedagogy: string = '',
   context: string = '',
   language: Language = 'zh'
 ): Promise<CurriculumDesign> {
@@ -187,6 +188,7 @@ export async function generateCurriculumDesign(
       grade,
       topic,
       textbook,
+      pedagogy,
       context,
       language,
     }),
@@ -197,6 +199,7 @@ export async function generateTaskDocuments(
   subject: string,
   topic: string,
   curriculum: CurriculumDesign,
+  pedagogy: string = '',
   context: string = '',
   language?: 'zh' | 'en'
 ): Promise<TaskDocuments> {
@@ -206,6 +209,7 @@ export async function generateTaskDocuments(
       subject,
       topic,
       curriculumJson: JSON.stringify(curriculum),
+      pedagogy,
       context,
       ...(language && { language }),
     }),
@@ -216,6 +220,7 @@ export async function generateSystemTaskPlan(
   taskSheetMarkdown: string,
   subject: string,
   grade: string,
+  pedagogy: string = '',
   context: string = '',
   language?: 'zh' | 'en'
 ): Promise<SystemTaskPlan> {
@@ -225,6 +230,7 @@ export async function generateSystemTaskPlan(
       taskSheetMarkdown,
       subject,
       grade,
+      pedagogy,
       context,
       ...(language && { language }),
     }),
@@ -259,6 +265,7 @@ export async function createCourse(
     subjectIsCustom?: boolean;
     topic?: string;
     grade?: string;
+    pedagogy?: string;
     language?: 'zh' | 'en';
     documentAssets?: {
       course?: Array<{
@@ -275,7 +282,11 @@ export async function createCourse(
   }
 ): Promise<{ courseId: string; url: string }> {
   const base = Array.isArray((input as { taskIds?: string[] }).taskIds)
-    ? { taskIds: (input as { taskIds: string[] }).taskIds, ...(meta?.language && { language: meta.language }) }
+    ? {
+        taskIds: (input as { taskIds: string[] }).taskIds,
+        ...(meta?.language && { language: meta.language }),
+        ...(meta?.pedagogy && { pedagogy: meta.pedagogy }),
+      }
     : {
         plan: input as SystemTaskPlan,
         ...(meta && {
@@ -284,6 +295,7 @@ export async function createCourse(
           subjectIsCustom: meta.subjectIsCustom,
           topic: meta.topic,
           grade: meta.grade,
+          pedagogy: meta.pedagogy,
           language: meta.language,
           documentAssets: meta.documentAssets,
         }),

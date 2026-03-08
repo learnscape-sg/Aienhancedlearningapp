@@ -152,6 +152,7 @@ export function AICourseDesignPage({ onNextStep }: AICourseDesignPageProps) {
   const [grade, setGrade] = useState('');
   const [topic, setTopic] = useState('');
   const [textbook, setTextbook] = useState('');
+  const [pedagogy, setPedagogy] = useState('');
   const [context, setContext] = useState('');
   const [language, setLanguage] = useState<'zh' | 'en'>('zh');
 
@@ -207,6 +208,7 @@ export function AICourseDesignPage({ onNextStep }: AICourseDesignPageProps) {
     setPlan(null);
 
     const textbookVal = textbook.trim() || '统编版';
+    const pedagogyVal = pedagogy.trim();
     const contextVal = context.trim();
     void trackProductEvent({
       eventName: 'task_create_started',
@@ -223,6 +225,7 @@ export function AICourseDesignPage({ onNextStep }: AICourseDesignPageProps) {
         grade.trim(),
         topic.trim(),
         textbookVal,
+        pedagogyVal,
         contextVal,
         language
       );
@@ -233,6 +236,7 @@ export function AICourseDesignPage({ onNextStep }: AICourseDesignPageProps) {
         effectiveSubject,
         topic.trim(),
         curriculumResult,
+        pedagogyVal,
         contextVal,
         language
       );
@@ -243,6 +247,7 @@ export function AICourseDesignPage({ onNextStep }: AICourseDesignPageProps) {
         documentsResult.studentTaskSheet,
         effectiveSubject,
         grade.trim(),
+        pedagogyVal,
         contextVal,
         language
       );
@@ -310,6 +315,7 @@ export function AICourseDesignPage({ onNextStep }: AICourseDesignPageProps) {
     setGenError(null);
     setGenStep('curriculum');
     const textbookVal = textbook.trim() || '统编版';
+    const pedagogyVal = pedagogy.trim();
     const contextVal = context.trim();
     const effectiveSubject = (subject === CUSTOM_SUBJECT_OPTION ? customSubject : subject).trim();
     try {
@@ -318,6 +324,7 @@ export function AICourseDesignPage({ onNextStep }: AICourseDesignPageProps) {
         grade.trim(),
         topic.trim(),
         textbookVal,
+        pedagogyVal,
         contextVal,
         language
       );
@@ -327,6 +334,7 @@ export function AICourseDesignPage({ onNextStep }: AICourseDesignPageProps) {
         effectiveSubject,
         topic.trim(),
         curriculumResult,
+        pedagogyVal,
         contextVal,
         language
       );
@@ -336,6 +344,7 @@ export function AICourseDesignPage({ onNextStep }: AICourseDesignPageProps) {
         documentsResult.studentTaskSheet,
         effectiveSubject,
         grade.trim(),
+        pedagogyVal,
         contextVal,
         language
       );
@@ -494,6 +503,7 @@ export function AICourseDesignPage({ onNextStep }: AICourseDesignPageProps) {
         subjectIsCustom: subjectMeta.subjectIsCustom,
         topic,
         grade,
+        pedagogy: pedagogy.trim() || undefined,
         language,
         documentAssets: courseDocumentAssets.length > 0 ? { course: courseDocumentAssets } : undefined,
       });
@@ -633,6 +643,16 @@ export function AICourseDesignPage({ onNextStep }: AICourseDesignPageProps) {
                 placeholder="如：统编版（可选）"
                 value={textbook}
                 onChange={(e) => setTextbook(e.target.value)}
+                className="h-12"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="pedagogy">教学法（可选）</Label>
+              <Input
+                id="pedagogy"
+                placeholder="如：PBL、5E、项目制学习"
+                value={pedagogy}
+                onChange={(e) => setPedagogy(e.target.value)}
                 className="h-12"
               />
             </div>

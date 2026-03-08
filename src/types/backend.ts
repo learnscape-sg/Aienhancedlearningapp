@@ -10,6 +10,7 @@ export interface TeacherInputData {
   grade: string;
   topic: string;
   textbookVersion?: string;
+  pedagogy?: string;
   classPeriod?: string;
   additionalContext?: string;
 }
@@ -79,6 +80,7 @@ export interface SystemTaskPlan {
   tasks: SystemTask[];
   learningGoals?: LearningGoal[];
   bigConcept?: string;
+  pedagogy?: string;
 }
 
 // --- Materials (teaching resources: video search, content, questions) ---
