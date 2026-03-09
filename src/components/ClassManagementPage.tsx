@@ -69,6 +69,7 @@ export function ClassManagementPage() {
   const [classes, setClasses] = useState<ClassWithCount[]>([]);
   const [tenantClasses, setTenantClasses] = useState<ClassWithCount[]>([]);
   const [classesLoading, setClassesLoading] = useState(true);
+  const [tenantClassesLoading, setTenantClassesLoading] = useState(false);
   const [selectedClassId, setSelectedClassId] = useState<string | null>(null);
   const [classDetail, setClassDetail] = useState<{
     id: string;
@@ -118,26 +119,18 @@ export function ClassManagementPage() {
   const [selectedStudentsForGroup, setSelectedStudentsForGroup] = useState<string[]>([]);
   const [addingToGroup, setAddingToGroup] = useState(false);
 
-  const loadClasses = async () => {
+  const normalizeClassRows = (rows: ClassItem[]): ClassWithCount[] =>
+    (rows ?? []).map((c) => ({
+      ...c,
+      studentCount: c.studentCount ?? 0,
+    }));
+
+  const loadManagedClasses = async () => {
     if (!user?.id) return;
     setClassesLoading(true);
     try {
-      const [managedRes, tenantRes] = await Promise.all([
-        listTeacherClasses(user.id),
-        listTeacherClasses(user.id, { scope: 'tenant' }),
-      ]);
-      setClasses(
-        (managedRes.classes ?? []).map((c) => ({
-          ...c,
-          studentCount: c.studentCount ?? 0,
-        }))
-      );
-      setTenantClasses(
-        (tenantRes.classes ?? []).map((c) => ({
-          ...c,
-          studentCount: c.studentCount ?? 0,
-        }))
-      );
+      const managedRes = await listTeacherClasses(user.id);
+      setClasses(normalizeClassRows(managedRes.classes ?? []));
     } catch (err) {
       console.error('Failed to load classes:', err);
     } finally {
@@ -145,9 +138,28 @@ export function ClassManagementPage() {
     }
   };
 
+  const loadTenantClasses = async () => {
+    if (!user?.id) return;
+    if (tenantClassesLoading) return;
+    setTenantClassesLoading(true);
+    try {
+      const tenantRes = await listTeacherClasses(user.id, { scope: 'tenant' });
+      setTenantClasses(normalizeClassRows(tenantRes.classes ?? []));
+    } catch (err) {
+      console.error('Failed to load tenant classes:', err);
+    } finally {
+      setTenantClassesLoading(false);
+    }
+  };
+
   useEffect(() => {
-    loadClasses();
+    loadManagedClasses();
   }, [user?.id]);
+
+  useEffect(() => {
+    if (!addExistingOpen || !user?.id || tenantClasses.length > 0) return;
+    loadTenantClasses();
+  }, [addExistingOpen, user?.id, tenantClasses.length]);
 
   useEffect(() => {
     if (selectedClassId && user?.id) {
@@ -222,7 +234,7 @@ export function ClassManagementPage() {
       setNewClassOpen(false);
       setNewClassName('');
       setNewClassGrade('');
-      loadClasses();
+      loadManagedClasses();
     } catch (err) {
       setCreateError(err instanceof Error ? err.message : '创建失败');
     } finally {
@@ -245,16 +257,14 @@ export function ClassManagementPage() {
       setAddStudentSearchQuery('');
       setAddStudentSearchResults([]);
       setAddStudentSelected(null);
-      if (selectedClassId) {
-        const res = await getClass(selectedClassId);
-        setClassDetail({
-          id: res.id,
-          name: res.name,
-          grade: res.grade,
-          students: res.students ?? [],
-        });
-      }
-      loadClasses();
+      setClassDetail((prev) => {
+        if (!prev) return prev;
+        const exists = prev.students.some((s) => s.id === toAdd.id);
+        return exists ? prev : { ...prev, students: [...prev.students, toAdd] };
+      });
+      setClasses((prev) =>
+        prev.map((c) => (c.id === selectedClassId ? { ...c, studentCount: (c.studentCount ?? 0) + 1 } : c))
+      );
     } catch (err) {
       setAddStudentError(err instanceof Error ? err.message : '添加失败');
     } finally {
@@ -296,7 +306,7 @@ export function ClassManagementPage() {
         grade: res.grade,
         students: res.students ?? [],
       });
-      loadClasses();
+      loadManagedClasses();
     } catch (err) {
       setBulkCreateError(err instanceof Error ? err.message : '批量创建失败');
     } finally {
@@ -315,7 +325,7 @@ export function ClassManagementPage() {
           students: classDetail.students.filter((s) => s.id !== studentId),
         });
       }
-      loadClasses();
+      loadManagedClasses();
     } catch (err) {
       console.error('Failed to remove student:', err);
       alert(err instanceof Error ? err.message : '移出失败');
@@ -330,7 +340,7 @@ export function ClassManagementPage() {
         setSelectedClassId(null);
         setClassDetail(null);
       }
-      loadClasses();
+      loadManagedClasses();
     } catch (err) {
       console.error('Failed to delete class:', err);
       alert(err instanceof Error ? err.message : '删除失败');
@@ -811,13 +821,14 @@ export function ClassManagementPage() {
               <select
                 id="existing-grade"
                 value={existingGrade}
+                disabled={tenantClassesLoading}
                 onChange={(e) => {
                   setExistingGrade(e.target.value);
                   setExistingClassId('');
                 }}
                 className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
               >
-                <option value="">请选择年级</option>
+                <option value="">{tenantClassesLoading ? '加载年级中...' : '请选择年级'}</option>
                 {gradeOptions.map((grade) => (
                   <option key={grade} value={grade}>
                     {grade}
@@ -830,11 +841,11 @@ export function ClassManagementPage() {
               <select
                 id="existing-class"
                 value={existingClassId}
-                disabled={!existingGrade}
+                disabled={!existingGrade || tenantClassesLoading}
                 onChange={(e) => setExistingClassId(e.target.value)}
                 className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60"
               >
-                <option value="">请选择班级</option>
+                <option value="">{tenantClassesLoading ? '加载班级中...' : '请选择班级'}</option>
                 {classesForSelectedGrade.map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.name}
@@ -842,6 +853,9 @@ export function ClassManagementPage() {
                 ))}
               </select>
             </div>
+            {!tenantClassesLoading && tenantClasses.length === 0 ? (
+              <p className="text-sm text-muted-foreground">当前租户暂无可添加班级</p>
+            ) : null}
             {addExistingError ? <p className="text-sm text-destructive">{addExistingError}</p> : null}
           </div>
           <DialogFooter>
@@ -855,7 +869,7 @@ export function ClassManagementPage() {
                 setAddingExisting(true);
                 try {
                   await addExistingClassForTeacher(existingClassId);
-                  await loadClasses();
+                  await loadManagedClasses();
                   setSelectedClassId(existingClassId);
                   setAddExistingOpen(false);
                 } catch (err) {

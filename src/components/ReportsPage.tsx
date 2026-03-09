@@ -5,11 +5,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Badge } from './ui/badge';
 import { Progress } from './ui/progress';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
-import { useAnalytics } from './useAnalytics';
 import {
-  getStudentReports,
-  getStudentTraitsSummary,
+  getStudentDashboard,
   trackProductEvent,
+  type StudentMetrics,
   type StudentReportsData,
   type StudentTraitsSummary,
 } from '@/lib/backendApi';
@@ -51,42 +50,35 @@ type RangeValue = 'week' | 'month' | 'year';
 
 export function ReportsPage() {
   const [timeRange, setTimeRange] = useState<RangeValue>('week');
-  const { analytics, loading: analyticsLoading, refresh } = useAnalytics();
+  const [analytics, setAnalytics] = useState<StudentMetrics | null>(null);
 
   const [traitsSummary, setTraitsSummary] = useState<StudentTraitsSummary | null>(null);
   const [reportsData, setReportsData] = useState<StudentReportsData | null>(null);
-  const [reportsLoading, setReportsLoading] = useState(true);
+  const [dashboardLoading, setDashboardLoading] = useState(true);
 
   const hasTrackedViewRef = useRef(false);
   const previousRangeRef = useRef<RangeValue | null>(null);
 
-  const loadTraits = useCallback(async (range: RangeValue) => {
+  const loadDashboard = useCallback(async (range: RangeValue) => {
+    setDashboardLoading(true);
     try {
-      const data = await getStudentTraitsSummary(range);
-      setTraitsSummary(data);
+      const data = await getStudentDashboard(range);
+      setAnalytics(data.metrics ?? null);
+      setTraitsSummary(data.traits ?? null);
+      setReportsData(data.reports ?? null);
     } catch (error) {
-      console.error('Failed to load student traits summary:', error);
+      console.error('Failed to load student dashboard:', error);
+      setAnalytics(null);
       setTraitsSummary(null);
-    }
-  }, []);
-
-  const loadReports = useCallback(async (range: RangeValue) => {
-    setReportsLoading(true);
-    try {
-      const data = await getStudentReports(range);
-      setReportsData(data);
-    } catch (error) {
-      console.error('Failed to load student reports:', error);
       setReportsData(null);
     } finally {
-      setReportsLoading(false);
+      setDashboardLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    void loadTraits(timeRange);
-    void loadReports(timeRange);
-  }, [loadReports, loadTraits, timeRange]);
+    void loadDashboard(timeRange);
+  }, [loadDashboard, timeRange]);
 
   useEffect(() => {
     const prev = previousRangeRef.current;
@@ -107,7 +99,7 @@ export function ReportsPage() {
 
   useEffect(() => {
     if (hasTrackedViewRef.current) return;
-    if (analyticsLoading || reportsLoading) return;
+    if (dashboardLoading) return;
     hasTrackedViewRef.current = true;
     void trackProductEvent({
       eventName: 'report_viewed',
@@ -120,7 +112,7 @@ export function ReportsPage() {
         hasReportsData: Boolean(reportsData),
       },
     }).catch(() => undefined);
-  }, [analyticsLoading, reportsLoading, reportsData, timeRange, traitsSummary?.latest]);
+  }, [dashboardLoading, reportsData, timeRange, traitsSummary?.latest]);
 
   const handleRefresh = async () => {
     void trackProductEvent({
@@ -129,8 +121,7 @@ export function ReportsPage() {
       language: 'zh',
       properties: { reportType: 'student_progress', timeRange },
     }).catch(() => undefined);
-    refresh();
-    await Promise.all([loadTraits(timeRange), loadReports(timeRange)]);
+    await loadDashboard(timeRange);
   };
 
   const effectiveTraits = useMemo(() => {
@@ -199,7 +190,7 @@ export function ReportsPage() {
   );
   const subjectPerformanceData = useMemo(() => reportsData?.subjectPerformance ?? [], [reportsData?.subjectPerformance]);
 
-  if (analyticsLoading || reportsLoading) {
+  if (dashboardLoading) {
     return (
       <div className="p-4 md:p-6">
         <div className="flex items-center justify-center h-64">

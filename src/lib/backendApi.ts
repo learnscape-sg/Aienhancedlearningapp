@@ -645,6 +645,7 @@ export interface ClassGroup {
   id: string;
   classId: string;
   name: string;
+  groupType?: 'basic' | 'advanced' | 'challenge';
   teacherId: string;
   createdAt?: string;
   studentCount?: number;
@@ -661,17 +662,26 @@ export async function listClassGroups(
   return res;
 }
 
-export async function createClassGroup(classId: string, name: string): Promise<ClassGroup> {
+export async function createClassGroup(
+  classId: string,
+  name: string,
+  groupType?: 'basic' | 'advanced' | 'challenge'
+): Promise<ClassGroup> {
   return apiCall(`/api/classes/${encodeURIComponent(classId)}/groups`, {
     method: 'POST',
-    body: JSON.stringify({ name }),
+    body: JSON.stringify({ name, ...(groupType ? { groupType } : {}) }),
   });
 }
 
-export async function updateClassGroup(classId: string, groupId: string, name: string): Promise<{ id: string; name: string }> {
+export async function updateClassGroup(
+  classId: string,
+  groupId: string,
+  name: string,
+  groupType?: 'basic' | 'advanced' | 'challenge'
+): Promise<{ id: string; name?: string; groupType?: 'basic' | 'advanced' | 'challenge' }> {
   return apiCall(`/api/classes/${encodeURIComponent(classId)}/groups/${encodeURIComponent(groupId)}`, {
     method: 'PATCH',
-    body: JSON.stringify({ name }),
+    body: JSON.stringify({ name, ...(groupType ? { groupType } : {}) }),
   });
 }
 
@@ -965,12 +975,20 @@ export async function searchTeachers(query: string): Promise<{ teachers: Teacher
 
 export async function listTeacherCoursesWithStats(
   teacherId: string,
-  options?: { includeDeleted?: boolean; deletedOnly?: boolean; restorableOnly?: boolean }
+  options?: {
+    includeDeleted?: boolean;
+    deletedOnly?: boolean;
+    restorableOnly?: boolean;
+    page?: number;
+    perPage?: number;
+  }
 ): Promise<{ courses: TeacherCourseItem[] }> {
   const qs = new URLSearchParams({ teacherId });
   if (options?.includeDeleted) qs.set('includeDeleted', 'true');
   if (options?.deletedOnly) qs.set('deletedOnly', 'true');
   if (options?.restorableOnly) qs.set('restorableOnly', 'true');
+  if (options?.page && options.page > 0) qs.set('page', String(options.page));
+  if (options?.perPage && options.perPage > 0) qs.set('perPage', String(options.perPage));
   return apiCall<{ courses: TeacherCourseItem[] }>(`/api/teacher-courses?${qs.toString()}`, {
     method: 'GET',
   });
@@ -1898,6 +1916,7 @@ export async function generateTaskDesign(params: {
   topic: string;
   grade: string;
   duration: string | number;
+  taskType?: 'mastery' | 'guided' | 'autonomous';
   difficulty?: string;
   prerequisites?: string;
   objective?: string;
@@ -1908,6 +1927,7 @@ export async function generateTaskDesign(params: {
     topic: params.topic.trim(),
     grade: params.grade.trim(),
     duration: params.duration,
+    taskType: params.taskType,
     difficulty: params.difficulty?.trim() || '',
     prerequisites: params.prerequisites?.trim() || '',
   };
@@ -2089,6 +2109,19 @@ export async function getStudentReports(
 ): Promise<StudentReportsData> {
   const qs = new URLSearchParams({ range });
   return apiCall<StudentReportsData>(`/api/student-reports?${qs}`, { method: 'GET' });
+}
+
+export type StudentDashboardData = {
+  metrics: StudentMetrics;
+  reports: StudentReportsData;
+  traits: StudentTraitsSummary;
+};
+
+export async function getStudentDashboard(
+  range: 'week' | 'month' | 'year' = 'month'
+): Promise<StudentDashboardData> {
+  const qs = new URLSearchParams({ range });
+  return apiCall<StudentDashboardData>(`/api/student-dashboard?${qs}`, { method: 'GET' });
 }
 
 export async function getRuntimePolicy(params: {

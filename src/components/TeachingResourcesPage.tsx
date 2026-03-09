@@ -315,7 +315,6 @@ function buildSystemTask(opts: {
   topic: string;
   subject: string;
   grade: string;
-  difficulty: string;
   learningObjective: string;
   selectedVideoItem: VideoSearchItem | null;
   customTextInstruction?: string;
@@ -395,13 +394,17 @@ function buildSystemTask(opts: {
   };
 }
 
-const DIFFICULTY_OPTIONS = ['基础', '提升', '挑战'] as const;
-
 const TASK_TYPES = [
   { id: 'mastery', label: '掌握型任务', available: true },
   { id: 'guided', label: '引导型任务', available: false },
   { id: 'autonomous', label: '自主型任务', available: false },
 ] as const;
+
+const TASK_TYPE_DIFFICULTY: Record<(typeof TASK_TYPES)[number]['id'], '基础' | '提升' | '挑战'> = {
+  mastery: '基础',
+  guided: '提升',
+  autonomous: '挑战',
+};
 
 const DEFAULT_TEXT_INSTRUCTION = `请打开洋葱APP学习（指定某单元某课），完成后进入下一步
 或者
@@ -423,7 +426,6 @@ export function TeachingResourcesPage() {
   const [entryGrade, setEntryGrade] = useState('');
   const [entryLanguage, setEntryLanguage] = useState<'zh' | 'en'>('zh');
   const [entryDuration, setEntryDuration] = useState('');
-  const [entryDifficulty, setEntryDifficulty] = useState('');
   const [entryPrerequisites, setEntryPrerequisites] = useState('');
   const [learningObjective, setLearningObjective] = useState('');
   const [videoContent, setVideoContent] = useState<VideoContentResult | null>(null);
@@ -526,6 +528,7 @@ export function TeachingResourcesPage() {
     const effectiveSubject = (entrySubject === CUSTOM_SUBJECT_OPTION ? entryCustomSubject : entrySubject).trim();
     const topic = entryTopic.trim();
     if (!topic || !effectiveSubject) return;
+    const autoDifficulty = TASK_TYPE_DIFFICULTY[taskType];
     setTaskDesignReady(false);
     setRestReady(false);
     void trackProductEvent({
@@ -540,7 +543,8 @@ export function TeachingResourcesPage() {
       topic,
       grade: entryGrade,
       duration: entryDuration.trim() || '15',
-      difficulty: entryDifficulty || undefined,
+      taskType,
+      difficulty: autoDifficulty,
       prerequisites: entryPrerequisites || undefined,
       language: entryLanguage,
     });
@@ -587,6 +591,79 @@ export function TeachingResourcesPage() {
       }).catch(() => undefined);
     } finally {
       setObjectiveLoading(false);
+    }
+  };
+
+  const triggerTaskRestGeneration = () => {
+    if (!learningObjective.trim()) return;
+    const effectiveSubject = (entrySubject === CUSTOM_SUBJECT_OPTION ? entryCustomSubject : entrySubject).trim();
+    setError(null);
+    setKeyIdeas([]);
+    setKeyIdeasText('');
+    setKeyIdeasEditing(false);
+    setPracticeQuestions([]);
+    setEditingPracticeIndex(null);
+    setExitTicketQuestions([]);
+    setRestReady(false);
+    const autoDifficulty = TASK_TYPE_DIFFICULTY[taskType];
+    const promise = generateTaskDesign({
+      subject: effectiveSubject,
+      topic: entryTopic.trim(),
+      grade: entryGrade,
+      duration: entryDuration.trim() || '15',
+      taskType,
+      difficulty: autoDifficulty,
+      prerequisites: entryPrerequisites || undefined,
+      objective: learningObjective.trim(),
+      language: entryLanguage,
+    });
+    promise
+      .then((res) => {
+        taskDesignJsonRef.current = res.json ?? null;
+        taskDesignMarkdownRef.current = res.markdown ?? null;
+        setRestReady(true);
+      })
+      .catch((e) => {
+        const message = e instanceof Error ? e.message : '生成任务内容失败';
+        setError(message);
+        void trackProductEvent({
+          eventName: 'task_design_generation_failed',
+          role: 'teacher',
+          teacherId: user?.id,
+          language: entryLanguage,
+          properties: {
+            source: 'TeachingResourcesPage',
+            stage: 'task_rest',
+            subject: effectiveSubject,
+            grade: entryGrade,
+            topic: entryTopic.trim(),
+            errorMessage: message,
+          },
+        }).catch(() => undefined);
+      });
+  };
+
+  const handleRetryCurrentStep = () => {
+    if (step === 0) {
+      handleStartTaskDesign();
+      return;
+    }
+    if (step === 1) {
+      void handleStartPlanning();
+      return;
+    }
+    if (step === 2) {
+      if (!restReady && learningObjective.trim()) {
+        triggerTaskRestGeneration();
+        return;
+      }
+      if (searchQuery.trim()) {
+        void handleSearchVideos();
+      }
+      return;
+    }
+    if (step === 6) {
+      void handleGenerateTask();
     }
   };
 
@@ -839,7 +916,6 @@ export function TeachingResourcesPage() {
         topic: entryTopic,
         subject: (entrySubject === CUSTOM_SUBJECT_OPTION ? entryCustomSubject : entrySubject).trim(),
         grade: entryGrade,
-        difficulty: entryDifficulty,
         learningObjective,
         selectedVideoItem,
         customTextInstruction: !selectedVideoItem && videoContent ? videoContent.title : undefined,
@@ -873,7 +949,7 @@ export function TeachingResourcesPage() {
         topic: entryTopic,
         taskType,
         durationMin: parseInt(entryDuration, 10) || 15,
-        difficulty: entryDifficulty,
+        difficulty: TASK_TYPE_DIFFICULTY[taskType],
         prerequisites: entryPrerequisites,
         source: 'task_generation',
         documentAssets: taskDocumentAssets.length > 0 ? { task: taskDocumentAssets } : undefined,
@@ -1028,7 +1104,12 @@ export function TeachingResourcesPage() {
       )}
 
       {error && (
-        <p className="text-sm text-destructive mb-2">{error}</p>
+        <div className="mb-2 flex items-center gap-3">
+          <p className="text-sm text-destructive">{error}</p>
+          <Button variant="outline" size="sm" onClick={handleRetryCurrentStep}>
+            重试当前步骤
+          </Button>
+        </div>
       )}
 
       {/* Entry Page (step 0) */}
@@ -1150,21 +1231,6 @@ export function TeachingResourcesPage() {
                 >
                   <option value="zh">简体中文</option>
                   <option value="en">English</option>
-                </select>
-              </div>
-              <div>
-                <label className="text-sm font-medium text-muted-foreground block mb-1">
-                  难度 <span className="text-xs text-muted-foreground">（可选）</span>
-                </label>
-                <select
-                  value={entryDifficulty}
-                  onChange={(e) => setEntryDifficulty(e.target.value)}
-                  className="w-full h-11 rounded-md border border-input bg-background px-3 py-2 text-sm"
-                >
-                  <option value="">请选择</option>
-                  {DIFFICULTY_OPTIONS.map((d) => (
-                    <option key={d} value={d}>{d}</option>
-                  ))}
                 </select>
               </div>
               <div>
@@ -1292,12 +1358,14 @@ export function TeachingResourcesPage() {
                       setExitTicketQuestions([]);
                       setRestReady(false);
                       // 启动 task.json 生成（Phase 2），后台运行，用户选择素材时并行
+                      const autoDifficulty = TASK_TYPE_DIFFICULTY[taskType];
                       const promise = generateTaskDesign({
                         subject: effectiveSubject,
                         topic: entryTopic.trim(),
                         grade: entryGrade,
                         duration: entryDuration.trim() || '15',
-                        difficulty: entryDifficulty || undefined,
+                        taskType,
+                        difficulty: autoDifficulty,
                         prerequisites: entryPrerequisites || undefined,
                         objective: learningObjective.trim(),
                         language: entryLanguage,
