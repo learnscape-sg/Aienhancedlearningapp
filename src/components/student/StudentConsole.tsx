@@ -876,7 +876,7 @@ const StudentConsole: React.FC<StudentConsoleProps> = ({
     }
     setGuidedStep(1);
     setMaxStepReached(1);
-  }, [currentTaskIndex, courseId, taskInputsByIndex]);
+  }, [currentTaskIndex, courseId]);
 
   useEffect(() => {
     const nextTaskInput = normalizeTaskInputs({
