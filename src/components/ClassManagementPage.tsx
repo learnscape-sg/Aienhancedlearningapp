@@ -102,10 +102,8 @@ export function ClassManagementPage() {
   const [bulkIdentifiersInput, setBulkIdentifiersInput] = useState('');
   const [bulkCreating, setBulkCreating] = useState(false);
   const [bulkCreateError, setBulkCreateError] = useState('');
-  const [bulkCreateResult, setBulkCreateResult] = useState<{
-    summary: { created: number; updated: number; skipped: number; errors: number };
-    results: Array<{ identifier: string; status: 'created' | 'updated' | 'skipped' | 'error'; userId?: string; message?: string }>;
-  } | null>(null);
+  type BulkCreateResult = Awaited<ReturnType<typeof teacherBatchCreateStudents>>;
+  const [bulkCreateResult, setBulkCreateResult] = useState<BulkCreateResult | null>(null);
 
   const [detailTab, setDetailTab] = useState<'students' | 'groups'>('students');
   const [groups, setGroups] = useState<ClassGroup[]>([]);
@@ -585,11 +583,11 @@ export function ClassManagementPage() {
                     }}
                   >
                     <UserPlus className="w-4 h-4 mr-1" />
-                    批量创建
+                    创建新账号
                   </Button>
                   <Button size="sm" onClick={() => setAddStudentOpen(true)}>
                     <UserPlus className="w-4 h-4 mr-1" />
-                    添加学生
+                    搜索已有账号
                   </Button>
                 </div>
               )}

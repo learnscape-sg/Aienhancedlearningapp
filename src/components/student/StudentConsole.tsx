@@ -1972,29 +1972,6 @@ CRITICAL: Output language must be 简体中文 only.
     }
   };
 
-  const handlePrevTask = () => {
-    if (isTyping) return;
-    if (currentTaskIndex > 0) {
-      const prevIndex = currentTaskIndex - 1;
-      setIsAssetLoading(false);
-      greetingSentRef.current.add(prevIndex);
-      setCurrentTaskIndex(prevIndex);
-      const progressPct = Math.round(((prevIndex + 1) / plan.tasks.length) * 100);
-      reportProgress(progressPct, false, prevIndex);
-      if (typeof window !== 'undefined') {
-        localStorage.setItem(taskIndexStorageKey, prevIndex.toString());
-      }
-      setEditCounts({ mindMap: 0, table: 0, text: 0, math: 0 });
-      setLastDoneClickTime(null);
-      setHasEditAfterDone(false);
-      setTimeout(() => {
-        if (chatContainerRef.current) {
-          chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
-        }
-      }, 100);
-    }
-  };
-
   const switchToTaskIndex = (targetIndex: number) => {
     if (isTyping || targetIndex < 0 || targetIndex >= plan.tasks.length || targetIndex === currentTaskIndex) return;
     setIsAssetLoading(false);
@@ -4155,24 +4132,6 @@ CRITICAL: Output language must be 简体中文 only.
         {/* Fixed Bottom: 导航 + hint text + 我卡住了 / 我做完了 （z-50 高于气泡，确保气泡打开时仍可点击） */}
         <div className="relative z-50 bg-white border-t border-slate-200 p-4 shrink-0 flex items-center justify-between gap-4">
             <div className="flex items-center gap-4 min-w-0">
-                {plan.tasks.length > 1 && (
-                    <div className="flex items-center gap-2 shrink-0">
-                        <button
-                            onClick={handlePrevTask}
-                            disabled={currentTaskIndex === 0 || isTyping}
-                            className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium bg-slate-100 text-slate-700 hover:bg-slate-200 disabled:opacity-40 disabled:cursor-not-allowed border border-slate-200"
-                        >
-                            <ArrowLeft size={14} /> 上一个
-                        </button>
-                        <button
-                            onClick={handleNextTask}
-                            disabled={currentTaskIndex >= plan.tasks.length - 1 || isTyping}
-                            className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium bg-slate-100 text-slate-700 hover:bg-slate-200 disabled:opacity-40 disabled:cursor-not-allowed border border-slate-200"
-                        >
-                            下一个 <ArrowRight size={14} />
-                        </button>
-                    </div>
-                )}
                 <p className="text-xs text-slate-500">
                     {t('hintClickDone')}
                 </p>
