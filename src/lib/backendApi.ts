@@ -462,6 +462,7 @@ export async function listPublicTasks(params?: {
     ownerTeacherName?: string;
     publishedAt?: string;
     createdAt?: string;
+    updatedAt?: string;
   }[];
 }> {
   const qs = new URLSearchParams({ public: 'true' });

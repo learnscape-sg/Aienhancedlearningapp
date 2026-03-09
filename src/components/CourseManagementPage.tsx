@@ -72,6 +72,30 @@ const TASK_TYPE_LABELS: Record<string, string> = {
   autonomous: '自主型任务',
 };
 
+const parseUpdatedTime = (value?: string | null): number => {
+  if (!value) return 0;
+  if (value === '刚刚') return Number.MAX_SAFE_INTEGER;
+
+  const direct = Date.parse(value);
+  if (!Number.isNaN(direct)) return direct;
+
+  // Supports display strings like "3-9 11:05" from backend.
+  const match = value.match(/^(\d{1,2})-(\d{1,2})\s+(\d{1,2}):(\d{2})$/);
+  if (!match) return 0;
+  const [, monthRaw, dayRaw, hourRaw, minuteRaw] = match;
+  const year = new Date().getFullYear();
+  const parsed = new Date(
+    year,
+    Number(monthRaw) - 1,
+    Number(dayRaw),
+    Number(hourRaw),
+    Number(minuteRaw),
+    0,
+    0
+  ).getTime();
+  return Number.isNaN(parsed) ? 0 : parsed;
+};
+
 interface Course {
   id: string;
   title: string;
@@ -238,7 +262,7 @@ export function CourseManagementPage({ initialCourseTab }: { initialCourseTab?: 
           publicStatus: row.publicStatus ?? 'public',
           assignmentStatus: row.assignmentStatus ?? 'unassigned',
           shareStatus: row.shareStatus ?? 'none',
-          updatedAt: row.createdAt,
+          updatedAt: row.updatedAt ?? row.createdAt,
           teacherId: row.teacherId,
         }));
         setPublicTasks(mapped);
@@ -384,7 +408,7 @@ export function CourseManagementPage({ initialCourseTab }: { initialCourseTab?: 
         `${task.taskDisplayTitle || ''} ${task.topic || ''} ${task.subject || ''}`
           .toLowerCase()
           .includes(taskSearchQuery.toLowerCase())
-      ),
+      ).sort((a, b) => parseUpdatedTime(b.updatedAt) - parseUpdatedTime(a.updatedAt)),
     [taskListForView, taskSearchQuery]
   );
 
@@ -411,12 +435,18 @@ export function CourseManagementPage({ initialCourseTab }: { initialCourseTab?: 
         : courseView === 'public'
           ? publicCourses
           : deletedCourses;
-  const filteredCourses = sourceCourses.filter((course) => {
-    return (
-      course.title.toLowerCase().includes(courseSearchQuery.toLowerCase()) ||
-      course.subject.toLowerCase().includes(courseSearchQuery.toLowerCase())
-    );
-  });
+  const filteredCourses = useMemo(
+    () =>
+      sourceCourses
+        .filter((course) => {
+          return (
+            course.title.toLowerCase().includes(courseSearchQuery.toLowerCase()) ||
+            course.subject.toLowerCase().includes(courseSearchQuery.toLowerCase())
+          );
+        })
+        .sort((a, b) => parseUpdatedTime(b.lastUpdated) - parseUpdatedTime(a.lastUpdated)),
+    [sourceCourses, courseSearchQuery]
+  );
 
   const taskDisplayName = (task: TaskItem) => {
     const persisted = task.taskDisplayTitle?.trim();
