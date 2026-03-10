@@ -49,7 +49,6 @@ export type ProductEventName =
 
 const getBaseUrl = (): string => {
   const url = import.meta.env.VITE_API_URL;
-  console.log('VITE_API_URL=', url);
   if (!url) {
     throw new Error(
       'VITE_API_URL is not set. Add it to .env (e.g. VITE_API_URL=http://localhost:3000)'

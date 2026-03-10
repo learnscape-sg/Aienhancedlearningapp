@@ -120,6 +120,8 @@ interface GuidedQuestion {
   imageUrl?: string;
 }
 
+type OpenInputMode = 'text' | 'upload' | 'draw';
+
 interface GuidedPayload {
   learningObjective?: string;
   whyItMatters?: { meaning_anchor?: string; advance_organizer?: string };
@@ -218,6 +220,15 @@ function extractQuestionStemAndOptions(question: string, options?: string[]): { 
   return { stem: question, options: [] };
 }
 
+function isOpenEndedQuestion(question: GuidedQuestion): boolean {
+  const parsed = extractQuestionStemAndOptions(question.question || '', question.options);
+  const isTrueFalse =
+    question.questionType === 'true_false' ||
+    (!parsed.options?.length && /^(true|false)$/i.test((question.correctAnswer || '').trim()));
+  if (isTrueFalse) return false;
+  return parsed.options.length === 0;
+}
+
 function extractYouTubeVideoId(url: string): string | null {
   try {
     const parsed = new URL(url);
@@ -310,6 +321,8 @@ function createEmptyTaskInputs(): TaskInputs {
     practiceCurrentIndex: 0,
     exitTicketAnswer: '',
     exitTicketAnswers: {},
+    exitTicketImageAnswers: {},
+    exitTicketInputMode: {},
   };
 }
 
@@ -324,6 +337,8 @@ function normalizeTaskInputs(input: Partial<TaskInputs> | undefined): TaskInputs
     practiceCurrentIndex: Number(input?.practiceCurrentIndex) || 0,
     exitTicketAnswer: input?.exitTicketAnswer ?? empty.exitTicketAnswer,
     exitTicketAnswers: input?.exitTicketAnswers ?? empty.exitTicketAnswers,
+    exitTicketImageAnswers: input?.exitTicketImageAnswers ?? empty.exitTicketImageAnswers,
+    exitTicketInputMode: input?.exitTicketInputMode ?? empty.exitTicketInputMode,
   };
 }
 
@@ -359,6 +374,8 @@ function buildTaskInputsByIndex(
     practiceCurrentIndex: record.practiceCurrentIndex,
     exitTicketAnswer: record.exitTicketAnswer,
     exitTicketAnswers: record.exitTicketAnswers,
+    exitTicketImageAnswers: record.exitTicketImageAnswers,
+    exitTicketInputMode: record.exitTicketInputMode,
   });
   return normalizedTaskMap;
 }
@@ -596,7 +613,7 @@ const StudentConsole: React.FC<StudentConsoleProps> = ({
     const taskInput = initialTaskInputMap[currentTaskIndex];
     return taskInput?.practiceImageAnswers ?? restoredSessionRecord?.practiceImageAnswers ?? {};
   });
-  const [practiceInputMode, setPracticeInputMode] = useState<Record<number, 'text' | 'upload' | 'draw'>>(() => {
+  const [practiceInputMode, setPracticeInputMode] = useState<Record<number, OpenInputMode>>(() => {
     const taskInput = initialTaskInputMap[currentTaskIndex];
     return taskInput?.practiceInputMode ?? restoredSessionRecord?.practiceInputMode ?? {};
   });
@@ -620,6 +637,15 @@ const StudentConsole: React.FC<StudentConsoleProps> = ({
     const taskInput = initialTaskInputMap[currentTaskIndex];
     return taskInput?.exitTicketAnswers ?? restoredSessionRecord?.exitTicketAnswers ?? {};
   });
+  const [exitTicketImageAnswers, setExitTicketImageAnswers] = useState<Record<number, string>>(() => {
+    const taskInput = initialTaskInputMap[currentTaskIndex];
+    return taskInput?.exitTicketImageAnswers ?? restoredSessionRecord?.exitTicketImageAnswers ?? {};
+  });
+  const [exitTicketInputMode, setExitTicketInputMode] = useState<Record<number, OpenInputMode>>(() => {
+    const taskInput = initialTaskInputMap[currentTaskIndex];
+    return taskInput?.exitTicketInputMode ?? restoredSessionRecord?.exitTicketInputMode ?? {};
+  });
+  const exitTicketCanvasRefs = useRef<Record<number, React.RefObject<SignatureCanvas>>>({});
   const [showExitTicketAnswer, setShowExitTicketAnswer] = useState(false);
 
   // Edit Count Tracking (for progress tracker)
@@ -803,11 +829,13 @@ const StudentConsole: React.FC<StudentConsoleProps> = ({
   const allExitTicketsCompleted = useMemo(() => {
     if (guidedStep !== 5) return true;
     if (guidedExitTickets.length === 0) return exitTicketAnswer.trim().length > 0;
-    return guidedExitTickets.every((_, idx) => {
+    return guidedExitTickets.every((ticket, idx) => {
       const answer = (exitTicketAnswers[idx] ?? (idx === 0 ? exitTicketAnswer : '')).trim();
-      return answer.length > 0;
+      if (answer.length > 0) return true;
+      if (!isOpenEndedQuestion(ticket)) return false;
+      return !!exitTicketImageAnswers[idx];
     });
-  }, [guidedStep, guidedExitTickets, exitTicketAnswers, exitTicketAnswer]);
+  }, [guidedStep, guidedExitTickets, exitTicketAnswers, exitTicketAnswer, exitTicketImageAnswers]);
   const isGuidedVideoFlow = viewType === 'video_player' && !!guidedPayload?.learningObjective;
 
   // 进入「我能练一练」时重置为第一题
@@ -855,6 +883,8 @@ const StudentConsole: React.FC<StudentConsoleProps> = ({
     setPracticeCurrentIndex(taskInput?.practiceCurrentIndex ?? 0);
     setExitTicketAnswer(taskInput?.exitTicketAnswer ?? '');
     setExitTicketAnswers(taskInput?.exitTicketAnswers ?? {});
+    setExitTicketImageAnswers(taskInput?.exitTicketImageAnswers ?? {});
+    setExitTicketInputMode(taskInput?.exitTicketInputMode ?? {});
     setShowPracticeSolutions({});
     setShowExitTicketAnswer(false);
     if (typeof window !== 'undefined' && courseId) {
@@ -888,6 +918,8 @@ const StudentConsole: React.FC<StudentConsoleProps> = ({
       practiceCurrentIndex,
       exitTicketAnswer,
       exitTicketAnswers,
+      exitTicketImageAnswers,
+      exitTicketInputMode,
     });
     setTaskInputsByIndex((prev) => {
       const prevTaskInput = prev[currentTaskIndex];
@@ -903,6 +935,8 @@ const StudentConsole: React.FC<StudentConsoleProps> = ({
     currentTaskIndex,
     exitTicketAnswer,
     exitTicketAnswers,
+    exitTicketImageAnswers,
+    exitTicketInputMode,
     keywordAnswers,
     practiceChoiceAnswers,
     practiceCurrentIndex,
@@ -1797,7 +1831,7 @@ CRITICAL: Give hints STEP BY STEP, not all at once.
         return;
       }
 
-      // Step 4「我能练一练」：收集手写答案图片，按题目顺序
+      // Step 4/5：收集开放题手写答案图片，按题目顺序
       const practiceImages: string[] =
         guidedStep === 4 && Object.keys(practiceImageAnswers).length > 0
           ? Object.entries(practiceImageAnswers)
@@ -1805,6 +1839,14 @@ CRITICAL: Give hints STEP BY STEP, not all at once.
               .sort((a, b) => Number(a[0]) - Number(b[0]))
               .map(([, v]) => v)
           : [];
+      const exitTicketImages: string[] =
+        guidedStep === 5 && Object.keys(exitTicketImageAnswers).length > 0
+          ? Object.entries(exitTicketImageAnswers)
+              .filter(([, v]) => !!v)
+              .sort((a, b) => Number(a[0]) - Number(b[0]))
+              .map(([, v]) => v)
+          : [];
+      const stepImages = guidedStep === 5 ? exitTicketImages : practiceImages;
 
       const hiddenCtx = `Student clicked 'I'm Done' for guided step ${guidedStep}: "${currentStepTitle}".
 Task: ${currentTask.title}
@@ -1815,8 +1857,10 @@ STEP VERIFICATION PROTOCOL (guided flow):
 - You are verifying step ${guidedStep}/5: "${currentStepTitle}".
 - ${isLightStep
   ? 'This is a lightweight step (reading/watching). Acknowledge and approve directly.'
-  : guidedStep === 4 && practiceImages.length > 0
+  : guidedStep === 4 && stepImages.length > 0
   ? 'Review the student\'s practice answers. HANDWRITTEN IMAGES are attached - compare each answer with the provided reference answer, judge correctness, and give specific encouraging feedback.'
+  : guidedStep === 5 && stepImages.length > 0
+  ? 'Review the student\'s exit-ticket answers. HANDWRITTEN IMAGES are attached - read each image answer and give concise, actionable feedback.'
   : `Review the student's work for this step. Be encouraging but check completeness.`}
 - Language: vivid but concise, 2-4 sentences, max 100 chars. Output in ${contentLanguage === 'en' ? 'English' : 'Simplified Chinese'} only.
 - Do NOT mention other steps, mindmaps, or unrelated concepts.
@@ -1829,7 +1873,7 @@ STEP VERIFICATION PROTOCOL (guided flow):
       handleSendMessage(
         t('guidedDoneStep', { step: currentStepTitle }),
         hiddenCtx,
-        practiceImages.length > 0 ? practiceImages : undefined
+        stepImages.length > 0 ? stepImages : undefined
       );
       return;
     }
@@ -2062,11 +2106,24 @@ CRITICAL: Output language must be 简体中文 only.
       return `当前步骤「${currentStepTitle}」：完成 ${answered}/${totalQ}。题目与答案：${answers.join('；')}${imageInstruction}`;
     }
     if (guidedStep === 5) {
+      let imageSeq = 0;
       const answers = guidedExitTickets.map((item, idx) => ({
         question: item.question,
-        answer: (exitTicketAnswers[idx] ?? (idx === 0 ? exitTicketAnswer : '')).trim() || '(空)',
+        answer: (() => {
+          const text = (exitTicketAnswers[idx] ?? (idx === 0 ? exitTicketAnswer : '')).trim();
+          if (text) return text;
+          if (exitTicketImageAnswers[idx]) {
+            imageSeq += 1;
+            return `[手写答案，见附件图片${imageSeq}]`;
+          }
+          return '(空)';
+        })(),
       }));
-      return `当前步骤「${currentStepTitle}」：学生出门条回答：${JSON.stringify(answers)}`;
+      const imageInstruction =
+        imageSeq > 0
+          ? ' 附件中有手写答案图片，按顺序对应上述题目。请查看图片并结合题目给出反馈。'
+          : '';
+      return `当前步骤「${currentStepTitle}」：学生出门条回答：${JSON.stringify(answers)}${imageInstruction}`;
     }
     return `当前步骤「${currentStepTitle}」：学生已完成。`;
   };
@@ -2264,10 +2321,14 @@ CRITICAL: Output language must be 简体中文 only.
         practiceCurrentIndex,
         exitTicketAnswer,
         exitTicketAnswers,
+        exitTicketImageAnswers,
+        exitTicketInputMode,
       }),
     [
       exitTicketAnswer,
       exitTicketAnswers,
+      exitTicketImageAnswers,
+      exitTicketInputMode,
       keywordAnswers,
       practiceChoiceAnswers,
       practiceCurrentIndex,
@@ -2319,6 +2380,8 @@ CRITICAL: Output language must be 简体中文 only.
         practiceCurrentIndex,
         exitTicketAnswer,
         exitTicketAnswers,
+        exitTicketImageAnswers,
+        exitTicketInputMode,
       });
 
       const qaReview: Array<{
@@ -2341,6 +2404,7 @@ CRITICAL: Output language must be 简体中文 only.
         const taskPracticeTextAnswers = taskInput.practiceTextAnswers ?? {};
         const taskPracticeImageAnswers = taskInput.practiceImageAnswers ?? {};
         const taskExitTicketAnswers = taskInput.exitTicketAnswers ?? {};
+        const taskExitTicketImageAnswers = taskInput.exitTicketImageAnswers ?? {};
         const taskExitTicketAnswer = taskInput.exitTicketAnswer ?? '';
 
         (payload.keyIdeas ?? []).forEach((idea, idx) => {
@@ -2375,11 +2439,13 @@ CRITICAL: Output language must be 简体中文 only.
         });
 
         (payload.exitTicketItems ?? []).forEach((q, idx) => {
+          const textAnswer = taskExitTicketAnswers[idx] || (idx === 0 ? taskExitTicketAnswer : '');
+          const imageAnswer = taskExitTicketImageAnswers[idx] ? '[手写图片已提交]' : '';
           qaReview.push({
             task: `任务${taskIdx + 1}`,
             step: '离场券',
             question: q.question || `离场券 ${idx + 1}`,
-            studentAnswer: taskExitTicketAnswers[idx] || (idx === 0 ? taskExitTicketAnswer : ''),
+            studentAnswer: textAnswer || imageAnswer,
             referenceAnswer: q.correctAnswer || '',
             questionType: q.questionType || '',
           });
@@ -2397,6 +2463,8 @@ CRITICAL: Output language must be 简体中文 only.
       completedTasks,
       exitTicketAnswer,
       exitTicketAnswers,
+      exitTicketImageAnswers,
+      exitTicketInputMode,
       getMergedTaskInputsByIndex,
       keywordAnswers,
       plan.tasks,
@@ -2423,6 +2491,8 @@ CRITICAL: Output language must be 简体中文 only.
         practiceCurrentIndex,
         exitTicketAnswer,
         exitTicketAnswers,
+        exitTicketImageAnswers,
+        exitTicketInputMode,
         messages,
         visualizationData,
         mindMapInput,
@@ -2460,6 +2530,8 @@ CRITICAL: Output language must be 简体中文 only.
       practiceTextAnswers,
       exitTicketAnswer,
       exitTicketAnswers,
+      exitTicketImageAnswers,
+      exitTicketInputMode,
       studentLog,
       tableData,
       textEditorContent,
@@ -2506,6 +2578,7 @@ CRITICAL: Output language must be 简体中文 only.
           acc[Number(rawTaskIndex)] = {
             ...taskInput,
             practiceImageAnswers: { ...(taskInput.practiceImageAnswers ?? {}) },
+            exitTicketImageAnswers: { ...(taskInput.exitTicketImageAnswers ?? {}) },
           };
           return acc;
         },
@@ -2514,6 +2587,7 @@ CRITICAL: Output language must be 简体中文 only.
       const normalized: SessionRecordPayload = {
         ...sessionPayload,
         practiceImageAnswers: { ...sessionPayload.practiceImageAnswers },
+        exitTicketImageAnswers: { ...sessionPayload.exitTicketImageAnswers },
         taskInputsByIndex: normalizedTaskInputsByIndex,
       };
 
@@ -2531,6 +2605,20 @@ CRITICAL: Output language must be 简体中文 only.
           taskInput.practiceImageAnswers[Number(rawQuestionIndex)] = url;
           if (taskIndex === currentTaskIndex) {
             normalized.practiceImageAnswers[Number(rawQuestionIndex)] = url;
+          }
+        }
+        for (const [rawQuestionIndex, image] of Object.entries(taskInput.exitTicketImageAnswers ?? {})) {
+          if (!isBase64Image(image)) continue;
+          const questionIndex = Number(rawQuestionIndex);
+          const url = await uploadPracticeImage(
+            image,
+            courseId,
+            Number.isFinite(taskIndex) ? taskIndex : currentTaskIndex,
+            1000 + (Number.isFinite(questionIndex) ? questionIndex : 0)
+          );
+          taskInput.exitTicketImageAnswers[Number(rawQuestionIndex)] = url;
+          if (taskIndex === currentTaskIndex) {
+            normalized.exitTicketImageAnswers[Number(rawQuestionIndex)] = url;
           }
         }
       }
@@ -3034,7 +3122,7 @@ CRITICAL: Output language must be 简体中文 only.
 
   const renderPhotoHandwriteInput = (
     mode: 'upload' | 'draw',
-    setMode: React.Dispatch<React.SetStateAction<'upload' | 'draw'>>,
+    setMode: (next: 'upload' | 'draw') => void,
     imageValue: string,
     setImageValue: React.Dispatch<React.SetStateAction<string>>,
     canvasRef: React.RefObject<SignatureCanvas>
@@ -3149,6 +3237,13 @@ CRITICAL: Output language must be 简体中文 only.
         )}
       </div>
     );
+  };
+
+  const getExitTicketCanvasRef = (idx: number): React.RefObject<SignatureCanvas> => {
+    if (!exitTicketCanvasRefs.current[idx]) {
+      exitTicketCanvasRefs.current[idx] = React.createRef<SignatureCanvas>();
+    }
+    return exitTicketCanvasRefs.current[idx];
   };
 
   const renderLeftWorkspace = () => {
@@ -3540,16 +3635,81 @@ CRITICAL: Output language must be 简体中文 only.
                         />
                       )}
                       <MathTextPreview text={ticket.question} className="text-sm text-slate-800 mb-2 [&_p]:mb-0" />
-                      <textarea
-                        value={exitTicketAnswers[idx] ?? (idx === 0 ? exitTicketAnswer : '')}
-                        onChange={(e) => {
-                          const value = e.target.value;
-                          setExitTicketAnswers((prev) => ({ ...prev, [idx]: value }));
-                          if (idx === 0) setExitTicketAnswer(value);
-                        }}
-                        placeholder={t('enterYourReviewAnswer')}
-                        className="w-full min-h-[96px] rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-200 resize-y"
-                      />
+                      {isOpenEndedQuestion(ticket) ? (
+                        <>
+                          {(() => {
+                            const mode = exitTicketInputMode[idx] || 'text';
+                            return (
+                              <>
+                                <div className="flex gap-2 mb-3">
+                                  <button
+                                    type="button"
+                                    onClick={() => setExitTicketInputMode((prev) => ({ ...prev, [idx]: 'text' }))}
+                                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                                      mode === 'text' ? 'bg-cyan-100 text-cyan-800 border border-cyan-300' : 'bg-white text-slate-600 border border-slate-300 hover:bg-slate-50'
+                                    }`}
+                                  >
+                                    <Type size={14} /> 文字输入
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setExitTicketInputMode((prev) => ({ ...prev, [idx]: 'upload' }))}
+                                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                                      mode === 'upload' ? 'bg-cyan-100 text-cyan-800 border border-cyan-300' : 'bg-white text-slate-600 border border-slate-300 hover:bg-slate-50'
+                                    }`}
+                                  >
+                                    <Camera size={14} /> 拍照上传
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setExitTicketInputMode((prev) => ({ ...prev, [idx]: 'draw' }))}
+                                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                                      mode === 'draw' ? 'bg-cyan-100 text-cyan-800 border border-cyan-300' : 'bg-white text-slate-600 border border-slate-300 hover:bg-slate-50'
+                                    }`}
+                                  >
+                                    <Pencil size={14} /> 屏幕手写
+                                  </button>
+                                </div>
+                                {mode === 'text' ? (
+                                  <textarea
+                                    value={exitTicketAnswers[idx] ?? (idx === 0 ? exitTicketAnswer : '')}
+                                    onChange={(e) => {
+                                      const value = e.target.value;
+                                      setExitTicketAnswers((prev) => ({ ...prev, [idx]: value }));
+                                      if (idx === 0) setExitTicketAnswer(value);
+                                    }}
+                                    placeholder={t('enterYourReviewAnswer')}
+                                    className="w-full min-h-[96px] rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-200 resize-y"
+                                  />
+                                ) : (
+                                  renderPhotoHandwriteInput(
+                                    mode,
+                                    (next) => setExitTicketInputMode((prev) => ({ ...prev, [idx]: next })),
+                                    exitTicketImageAnswers[idx] || '',
+                                    (next) =>
+                                      setExitTicketImageAnswers((prev) => ({
+                                        ...prev,
+                                        [idx]: typeof next === 'function' ? next(prev[idx] || '') : next,
+                                      })),
+                                    getExitTicketCanvasRef(idx)
+                                  )
+                                )}
+                              </>
+                            );
+                          })()}
+                        </>
+                      ) : (
+                        <textarea
+                          value={exitTicketAnswers[idx] ?? (idx === 0 ? exitTicketAnswer : '')}
+                          onChange={(e) => {
+                            const value = e.target.value;
+                            setExitTicketAnswers((prev) => ({ ...prev, [idx]: value }));
+                            if (idx === 0) setExitTicketAnswer(value);
+                          }}
+                          placeholder={t('enterYourReviewAnswer')}
+                          className="w-full min-h-[96px] rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-200 resize-y"
+                        />
+                      )}
                     </div>
                   ))}
                   {guidedExitTickets.some((item) => item.correctAnswer) && (

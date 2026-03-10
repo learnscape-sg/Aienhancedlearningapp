@@ -34,6 +34,8 @@ export interface TaskInputs {
   practiceCurrentIndex: number;
   exitTicketAnswer: string;
   exitTicketAnswers: Record<number, string>;
+  exitTicketImageAnswers: Record<number, string>;
+  exitTicketInputMode: Record<number, 'text' | 'upload' | 'draw'>;
 }
 
 export interface SessionRecordPayload {
@@ -48,6 +50,8 @@ export interface SessionRecordPayload {
   practiceCurrentIndex: number;
   exitTicketAnswer: string;
   exitTicketAnswers: Record<number, string>;
+  exitTicketImageAnswers: Record<number, string>;
+  exitTicketInputMode: Record<number, 'text' | 'upload' | 'draw'>;
   messages: ChatMessage[];
   visualizationData: VisualizationData | null;
   mindMapInput: string;
@@ -121,23 +125,36 @@ export function getSessionRecordStorageKey(courseId?: string): string {
 
 function filterTaskInputImagesForLocalStorage(taskInput: TaskInputs | undefined): TaskInputs | undefined {
   if (!taskInput) return undefined;
-  const filteredImages: Record<number, string> = {};
+  const filteredPracticeImages: Record<number, string> = {};
+  const filteredExitTicketImages: Record<number, string> = {};
   Object.entries(taskInput.practiceImageAnswers ?? {}).forEach(([rawIndex, value]) => {
     if (!isBase64Image(value)) {
-      filteredImages[Number(rawIndex)] = value;
+      filteredPracticeImages[Number(rawIndex)] = value;
+    }
+  });
+  Object.entries(taskInput.exitTicketImageAnswers ?? {}).forEach(([rawIndex, value]) => {
+    if (!isBase64Image(value)) {
+      filteredExitTicketImages[Number(rawIndex)] = value;
     }
   });
   return {
     ...taskInput,
-    practiceImageAnswers: filteredImages,
+    practiceImageAnswers: filteredPracticeImages,
+    exitTicketImageAnswers: filteredExitTicketImages,
   };
 }
 
 export function sanitizeSessionRecordForLocalStorage(payload: SessionRecordPayload): SessionRecordPayload {
   const safePracticeImages: Record<number, string> = {};
+  const safeExitTicketImages: Record<number, string> = {};
   Object.entries(payload.practiceImageAnswers ?? {}).forEach(([rawIndex, value]) => {
     if (!isBase64Image(value)) {
       safePracticeImages[Number(rawIndex)] = value;
+    }
+  });
+  Object.entries(payload.exitTicketImageAnswers ?? {}).forEach(([rawIndex, value]) => {
+    if (!isBase64Image(value)) {
+      safeExitTicketImages[Number(rawIndex)] = value;
     }
   });
 
@@ -155,6 +172,7 @@ export function sanitizeSessionRecordForLocalStorage(payload: SessionRecordPaylo
   return {
     ...payload,
     practiceImageAnswers: safePracticeImages,
+    exitTicketImageAnswers: safeExitTicketImages,
     taskInputsByIndex: safeTaskInputsByIndex,
     mindmapImageAnswer: isBase64Image(payload.mindmapImageAnswer) ? '' : payload.mindmapImageAnswer,
   };

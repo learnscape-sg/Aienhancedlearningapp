@@ -91,7 +91,7 @@ async function persistTaskDocumentAssets(markdown: string, topic: string): Promi
   const base = topic || '任务';
   const assets: PersistedDocumentAsset[] = [];
 
-  const mdFile = new File([markdown], `任务文档-${base}-${Date.now()}.md`, { type: 'text/markdown;charset=utf-8' });
+  const mdFile = new File([markdown], `任务文档-${base}-${Date.now()}.md`, { type: 'text/markdown' });
   const mdUploaded = await uploadMaterialResource(mdFile);
   assets.push({
     key: 'task-md',
@@ -905,7 +905,7 @@ export function TeachingResourcesPage() {
       const item = selectedVideoItem;
       if (item?.resourceKind === 'document') {
         const mime = (item.mimeType || '').toLowerCase();
-        if (mime === 'text/plain' || mime === 'text/markdown') {
+        if (mime === 'text/plain' || mime.startsWith('text/markdown')) {
           const { html } = await convertDocumentToHtml(item.url, item.mimeType);
           convertedHtml = html || undefined;
         }
@@ -1029,7 +1029,7 @@ export function TeachingResourcesPage() {
       window.alert('暂无可导出的任务文档');
       return;
     }
-    const blob = new Blob([markdown], { type: 'text/markdown;charset=utf-8' });
+    const blob = new Blob([markdown], { type: 'text/markdown' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;

@@ -53,6 +53,29 @@ function parsePreferences(prefs: unknown): ProfilePreferences {
   return {};
 }
 
+function isInvalidRefreshTokenError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error ?? '');
+  const normalized = message.toLowerCase();
+  return normalized.includes('invalid refresh token') || normalized.includes('refresh token not found');
+}
+
+async function clearLocalAuthState(): Promise<void> {
+  try {
+    await supabase.auth.signOut({ scope: 'local' });
+  } catch {
+    // ignore sign-out errors; we'll still clear local storage tokens.
+  }
+  if (typeof window === 'undefined') return;
+  const keysToRemove: string[] = [];
+  for (let idx = 0; idx < window.localStorage.length; idx += 1) {
+    const key = window.localStorage.key(idx);
+    if (key && key.includes('auth-token')) {
+      keysToRemove.push(key);
+    }
+  }
+  keysToRemove.forEach((key) => window.localStorage.removeItem(key));
+}
+
 /** Load profile + admin in parallel, merge by priority (profile > admin > null) */
 async function loadProfileFromSupabase(
   userId: string,
@@ -168,6 +191,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
       } catch (error) {
         console.error('[Auth] Error initializing auth:', error);
+        if (isInvalidRefreshTokenError(error)) {
+          await clearLocalAuthState();
+        }
         setUser(null);
         setPreferences({});
         setProfileResolved(true);
@@ -210,6 +236,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           })
           .catch((err) => {
             console.error('[Auth] onAuthStateChange 加载 profile 失败:', err);
+            if (isInvalidRefreshTokenError(err)) {
+              void clearLocalAuthState();
+              setUser(null);
+              setPreferences({});
+            }
             setProfileResolved(true);
           });
       }
