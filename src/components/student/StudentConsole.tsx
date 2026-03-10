@@ -110,6 +110,7 @@ interface GuidedKeyIdea {
   text: string;
   blanks?: string[];
   imageUrl?: string;
+  imageUrls?: string[];
 }
 
 interface GuidedQuestion {
@@ -118,6 +119,7 @@ interface GuidedQuestion {
   correctAnswer?: string;
   questionType?: 'multiple_choice' | 'short_answer' | 'true_false';
   imageUrl?: string;
+  imageUrls?: string[];
 }
 
 type OpenInputMode = 'text' | 'upload' | 'draw';
@@ -179,6 +181,22 @@ function parseGuidedPayload(payload?: string): GuidedPayload | null {
               question: String((item?.question ?? item?.q) || '').trim(),
               correctAnswer: (item?.answer ?? item?.a) != null ? String(item.answer ?? item.a) : undefined,
               options: Array.isArray(item?.options) ? (item.options as string[]) : undefined,
+              imageUrl: typeof item?.imageUrl === 'string'
+                ? item.imageUrl.trim() || undefined
+                : typeof item?.image_url === 'string'
+                  ? item.image_url.trim() || undefined
+                  : undefined,
+              imageUrls: Array.isArray(item?.imageUrls)
+                ? (item.imageUrls as unknown[])
+                    .map((url) => String(url || '').trim())
+                    .filter(Boolean)
+                    .slice(0, 3)
+                : Array.isArray(item?.image_urls)
+                  ? (item.image_urls as unknown[])
+                      .map((url) => String(url || '').trim())
+                      .filter(Boolean)
+                      .slice(0, 3)
+                  : undefined,
               questionType,
             };
           })
@@ -227,6 +245,16 @@ function isOpenEndedQuestion(question: GuidedQuestion): boolean {
     (!parsed.options?.length && /^(true|false)$/i.test((question.correctAnswer || '').trim()));
   if (isTrueFalse) return false;
   return parsed.options.length === 0;
+}
+
+function getGuidedItemImages(item: { imageUrl?: string; imageUrls?: string[] } | undefined): string[] {
+  if (!item) return [];
+  const list = Array.isArray(item.imageUrls)
+    ? item.imageUrls.map((url) => String(url || '').trim()).filter(Boolean)
+    : [];
+  if (list.length > 0) return list.slice(0, 3);
+  const single = (item.imageUrl || '').trim();
+  return single ? [single] : [];
 }
 
 function extractYouTubeVideoId(url: string): string | null {
@@ -3385,13 +3413,22 @@ CRITICAL: Output language must be 简体中文 only.
                           {idx + 1}
                         </div>
                         <div className="flex-1 rounded-lg border border-slate-200 p-4 bg-white shadow-sm">
-                          {idea.imageUrl && (
-                            <img
-                              src={idea.imageUrl}
-                              alt=""
-                              className="mb-3 max-h-48 w-auto max-w-full rounded border object-contain bg-slate-50"
-                            />
-                          )}
+                          {(() => {
+                            const images = getGuidedItemImages(idea);
+                            if (images.length === 0) return null;
+                            return (
+                              <div className="mb-3 flex flex-wrap gap-2">
+                                {images.map((url, imageIdx) => (
+                                  <img
+                                    key={`${url}-${imageIdx}`}
+                                    src={url}
+                                    alt=""
+                                    className="max-h-48 w-auto max-w-full rounded border object-contain bg-slate-50"
+                                  />
+                                ))}
+                              </div>
+                            );
+                          })()}
                           {(() => {
                             const text = idea?.text ?? '';
                             const parts = text.split('__KEY__');
@@ -3471,13 +3508,22 @@ CRITICAL: Output language must be 简体中文 only.
                     return (
                       <div className="space-y-4">
                         <div className="rounded-lg border border-slate-200 p-4 bg-slate-50/60">
-                          {q.imageUrl && (
-                            <img
-                              src={q.imageUrl}
-                              alt=""
-                              className="mb-3 max-h-48 w-auto max-w-full rounded border object-contain bg-white"
-                            />
-                          )}
+                          {(() => {
+                            const images = getGuidedItemImages(q);
+                            if (images.length === 0) return null;
+                            return (
+                              <div className="mb-3 flex flex-wrap gap-2">
+                                {images.map((url, imageIdx) => (
+                                  <img
+                                    key={`${url}-${imageIdx}`}
+                                    src={url}
+                                    alt=""
+                                    className="max-h-48 w-auto max-w-full rounded border object-contain bg-white"
+                                  />
+                                ))}
+                              </div>
+                            );
+                          })()}
                           <div className="text-sm font-semibold text-slate-800 mb-3 flex gap-1">
                             <span>{idx + 1}.</span>
                             <MathTextPreview text={parsed.stem} className="text-sm font-semibold text-slate-800 [&_p]:mb-0" />
@@ -3627,13 +3673,22 @@ CRITICAL: Output language must be 简体中文 only.
                   {(guidedExitTickets.length > 0 ? guidedExitTickets : [{ question: '请用1-2句话总结本节课你最重要的收获。' }]).map((ticket, idx) => (
                     <div key={`exit-ticket-${idx}`} className="mb-4 last:mb-0">
                       <p className="text-xs text-slate-500 mb-1">题目 {idx + 1}</p>
-                      {ticket.imageUrl && (
-                        <img
-                          src={ticket.imageUrl}
-                          alt=""
-                          className="mb-3 max-h-48 w-auto max-w-full rounded border object-contain bg-slate-50"
-                        />
-                      )}
+                      {(() => {
+                        const images = getGuidedItemImages(ticket);
+                        if (images.length === 0) return null;
+                        return (
+                          <div className="mb-3 flex flex-wrap gap-2">
+                            {images.map((url, imageIdx) => (
+                              <img
+                                key={`${url}-${imageIdx}`}
+                                src={url}
+                                alt=""
+                                className="max-h-48 w-auto max-w-full rounded border object-contain bg-slate-50"
+                              />
+                            ))}
+                          </div>
+                        );
+                      })()}
                       <MathTextPreview text={ticket.question} className="text-sm text-slate-800 mb-2 [&_p]:mb-0" />
                       {isOpenEndedQuestion(ticket) ? (
                         <>

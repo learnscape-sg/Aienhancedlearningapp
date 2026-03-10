@@ -115,6 +115,8 @@ export interface GeneratedQuestion {
   questionType?: 'multiple_choice' | 'short_answer' | 'true_false';
   /** Optional image URL (e.g. for 语文/历史/地理 - maps, charts, passages) */
   imageUrl?: string;
+  /** Optional image URLs (max 3). imageUrl keeps backward compatibility as the first one. */
+  imageUrls?: string[];
 }
 
 /** Key idea for guided notes (fill-in-the-blank). */
@@ -123,6 +125,8 @@ export interface KeyIdea {
   blanks: string[];
   /** Optional image URL to enrich the key idea */
   imageUrl?: string;
+  /** Optional image URLs (max 3). imageUrl keeps backward compatibility as the first one. */
+  imageUrls?: string[];
 }
 
 // --- StudentConsole: Chat, Exit Ticket, Visualization ---

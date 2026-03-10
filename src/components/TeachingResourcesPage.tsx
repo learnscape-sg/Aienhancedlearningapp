@@ -262,6 +262,30 @@ function keyIdeasToText(ideas: KeyIdea[]): string {
   return ideas.map((idea) => keyIdeaToRaw(idea)).join('\n');
 }
 
+const MAX_IMAGES_PER_ITEM = 3;
+
+function getImageUrlsFromItem(item: { imageUrl?: string; imageUrls?: string[] } | undefined): string[] {
+  if (!item) return [];
+  const fromList = Array.isArray(item.imageUrls)
+    ? item.imageUrls.map((url) => String(url || '').trim()).filter(Boolean)
+    : [];
+  if (fromList.length > 0) return fromList.slice(0, MAX_IMAGES_PER_ITEM);
+  const single = (item.imageUrl || '').trim();
+  return single ? [single] : [];
+}
+
+function withCompatibleImageFields<T extends { imageUrl?: string; imageUrls?: string[] }>(
+  item: T,
+  imageUrls: string[]
+): T {
+  const cleaned = imageUrls.map((url) => url.trim()).filter(Boolean).slice(0, MAX_IMAGES_PER_ITEM);
+  return {
+    ...item,
+    imageUrls: cleaned,
+    imageUrl: cleaned[0] || undefined,
+  };
+}
+
 /** Convert text to KeyIdeas, optionally preserving imageUrls by index from previous ideas */
 function textToKeyIdeas(text: string, preserveFrom?: KeyIdea[]): KeyIdea[] {
   const parsed = text
@@ -272,7 +296,7 @@ function textToKeyIdeas(text: string, preserveFrom?: KeyIdea[]): KeyIdea[] {
   if (!preserveFrom?.length) return parsed;
   return parsed.map((idea, idx) => ({
     ...idea,
-    imageUrl: preserveFrom[idx]?.imageUrl ?? idea.imageUrl,
+    ...withCompatibleImageFields(idea, getImageUrlsFromItem(preserveFrom[idx])),
   }));
 }
 
@@ -299,6 +323,18 @@ function parseTaskDesignQuestion(item: Record<string, unknown>): GeneratedQuesti
   }
 
   const imageUrl = (item?.imageUrl ?? item?.image_url) as string | undefined;
+  const imageUrlsRaw = Array.isArray(item?.imageUrls)
+    ? (item.imageUrls as unknown[])
+    : Array.isArray(item?.image_urls)
+      ? (item.image_urls as unknown[])
+      : [];
+  const imageUrls = imageUrlsRaw
+    .map((url) => String(url || '').trim())
+    .filter(Boolean)
+    .slice(0, MAX_IMAGES_PER_ITEM);
+  if (imageUrls.length === 0 && imageUrl?.trim()) {
+    imageUrls.push(imageUrl.trim());
+  }
   return {
     question: question.trim(),
     options,
@@ -306,7 +342,8 @@ function parseTaskDesignQuestion(item: Record<string, unknown>): GeneratedQuesti
     correctAnswer: answer != null ? String(answer).trim() : undefined,
     explanation: rubric != null ? String(rubric).trim() : undefined,
     questionType,
-    imageUrl: imageUrl?.trim() || undefined,
+    imageUrl: imageUrls[0] || undefined,
+    imageUrls,
   };
 }
 
@@ -771,19 +808,36 @@ export function TeachingResourcesPage() {
     }
   };
 
-  const handleKeyIdeaImageUpload = async (idx: number, file: File) => {
-    if (!/^image\//i.test(file.type)) {
+  const handleKeyIdeaImageUpload = async (idx: number, files: File[]) => {
+    if (!files.length) return;
+    if (files.some((file) => !/^image\//i.test(file.type))) {
       setError('请上传图片文件（PNG、JPG、GIF、WebP）');
       return;
     }
+    const current = getImageUrlsFromItem(keyIdeas[idx]);
+    const remaining = MAX_IMAGES_PER_ITEM - current.length;
+    if (remaining <= 0) {
+      setError(`每条关键要点最多上传 ${MAX_IMAGES_PER_ITEM} 张配图`);
+      return;
+    }
+    const selected = files.slice(0, remaining);
+    if (files.length > remaining) {
+      setError(`每条关键要点最多上传 ${MAX_IMAGES_PER_ITEM} 张配图，已自动忽略超出部分`);
+    } else {
+      setError(null);
+    }
     setUploadingKeyIdeaIndex(idx);
-    setError(null);
     try {
-      const uploaded = await uploadMaterialResource(file);
+      const uploadedUrls: string[] = [];
+      for (const file of selected) {
+        const uploaded = await uploadMaterialResource(file);
+        uploadedUrls.push(uploaded.url);
+      }
       setKeyIdeas((prev) => {
         const next = [...prev];
         if (!next[idx]) return prev;
-        next[idx] = { ...next[idx], imageUrl: uploaded.url };
+        const merged = Array.from(new Set([...getImageUrlsFromItem(next[idx]), ...uploadedUrls]));
+        next[idx] = withCompatibleImageFields(next[idx], merged);
         return next;
       });
     } catch (e) {
@@ -793,19 +847,36 @@ export function TeachingResourcesPage() {
     }
   };
 
-  const handlePracticeImageUpload = async (idx: number, file: File) => {
-    if (!/^image\//i.test(file.type)) {
+  const handlePracticeImageUpload = async (idx: number, files: File[]) => {
+    if (!files.length) return;
+    if (files.some((file) => !/^image\//i.test(file.type))) {
       setError('请上传图片文件（PNG、JPG、GIF、WebP）');
       return;
     }
+    const current = getImageUrlsFromItem(practiceQuestions[idx]);
+    const remaining = MAX_IMAGES_PER_ITEM - current.length;
+    if (remaining <= 0) {
+      setError(`每道练习题最多上传 ${MAX_IMAGES_PER_ITEM} 张配图`);
+      return;
+    }
+    const selected = files.slice(0, remaining);
+    if (files.length > remaining) {
+      setError(`每道练习题最多上传 ${MAX_IMAGES_PER_ITEM} 张配图，已自动忽略超出部分`);
+    } else {
+      setError(null);
+    }
     setUploadingPracticeImageIndex(idx);
-    setError(null);
     try {
-      const uploaded = await uploadMaterialResource(file);
+      const uploadedUrls: string[] = [];
+      for (const file of selected) {
+        const uploaded = await uploadMaterialResource(file);
+        uploadedUrls.push(uploaded.url);
+      }
       setPracticeQuestions((prev) => {
         const next = [...prev];
         if (!next[idx]) return prev;
-        next[idx] = { ...next[idx], imageUrl: uploaded.url };
+        const merged = Array.from(new Set([...getImageUrlsFromItem(next[idx]), ...uploadedUrls]));
+        next[idx] = withCompatibleImageFields(next[idx], merged);
         return next;
       });
     } catch (e) {
@@ -815,19 +886,36 @@ export function TeachingResourcesPage() {
     }
   };
 
-  const handleExitTicketImageUpload = async (idx: number, file: File) => {
-    if (!/^image\//i.test(file.type)) {
+  const handleExitTicketImageUpload = async (idx: number, files: File[]) => {
+    if (!files.length) return;
+    if (files.some((file) => !/^image\//i.test(file.type))) {
       setError('请上传图片文件（PNG、JPG、GIF、WebP）');
       return;
     }
+    const current = getImageUrlsFromItem(exitTicketQuestions[idx]);
+    const remaining = MAX_IMAGES_PER_ITEM - current.length;
+    if (remaining <= 0) {
+      setError(`每道离场券最多上传 ${MAX_IMAGES_PER_ITEM} 张配图`);
+      return;
+    }
+    const selected = files.slice(0, remaining);
+    if (files.length > remaining) {
+      setError(`每道离场券最多上传 ${MAX_IMAGES_PER_ITEM} 张配图，已自动忽略超出部分`);
+    } else {
+      setError(null);
+    }
     setUploadingExitTicketImageIndex(idx);
-    setError(null);
     try {
-      const uploaded = await uploadMaterialResource(file);
+      const uploadedUrls: string[] = [];
+      for (const file of selected) {
+        const uploaded = await uploadMaterialResource(file);
+        uploadedUrls.push(uploaded.url);
+      }
       setExitTicketQuestions((prev) => {
         const next = [...prev];
         if (!next[idx]) return prev;
-        next[idx] = { ...next[idx], imageUrl: uploaded.url };
+        const merged = Array.from(new Set([...getImageUrlsFromItem(next[idx]), ...uploadedUrls]));
+        next[idx] = withCompatibleImageFields(next[idx], merged);
         return next;
       });
     } catch (e) {
@@ -1725,13 +1813,14 @@ export function TeachingResourcesPage() {
                     <input
                       ref={keyIdeaImageInputRef}
                       type="file"
+                      multiple
                       accept="image/png,image/jpeg,image/jpg,image/gif,image/webp"
                       className="hidden"
                       onChange={(e) => {
-                        const file = e.target.files?.[0];
-                        if (file) {
+                        const files = Array.from(e.target.files || []);
+                        if (files.length > 0) {
                           const idx = keyIdeaImagePendingIndexRef.current;
-                          handleKeyIdeaImageUpload(idx, file);
+                          handleKeyIdeaImageUpload(idx, files);
                         }
                         e.target.value = '';
                       }}
@@ -1755,42 +1844,57 @@ export function TeachingResourcesPage() {
                               <span className="shrink-0 text-muted-foreground pt-0.5">{idx + 1}.</span>
                               <div className="flex-1 min-w-0">
                                 <MathTextPreview text={keyIdeaToRaw(idea)} className="[&_p]:mb-0" />
-                                <div className="mt-2 flex items-center gap-2">
-                                  {idea.imageUrl ? (
-                                    <>
-                                      <img
-                                        src={idea.imageUrl}
-                                        alt=""
-                                        className="h-20 w-auto max-w-[200px] rounded border object-contain bg-gray-50"
-                                      />
+                                {(() => {
+                                  const imageUrls = getImageUrlsFromItem(idea);
+                                  return (
+                                    <div className="mt-2 space-y-2">
+                                      {imageUrls.length > 0 && (
+                                        <div className="flex flex-wrap gap-2">
+                                          {imageUrls.map((url, imageIdx) => (
+                                            <div key={`${url}-${imageIdx}`} className="relative">
+                                              <img
+                                                src={url}
+                                                alt=""
+                                                className="h-20 w-auto max-w-[200px] rounded border object-contain bg-gray-50"
+                                              />
+                                              <button
+                                                type="button"
+                                                className="absolute -top-2 -right-2 h-5 w-5 rounded-full bg-black/70 text-white text-[10px]"
+                                                onClick={(ev) => {
+                                                  ev.stopPropagation();
+                                                  setKeyIdeas((prev) => {
+                                                    const next = [...prev];
+                                                    if (!next[idx]) return prev;
+                                                    const filtered = getImageUrlsFromItem(next[idx]).filter((_, i) => i !== imageIdx);
+                                                    next[idx] = withCompatibleImageFields(next[idx], filtered);
+                                                    return next;
+                                                  });
+                                                }}
+                                              >
+                                                ×
+                                              </button>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      )}
                                       <Button
                                         type="button"
                                         size="sm"
-                                        variant="ghost"
+                                        variant={imageUrls.length > 0 ? 'ghost' : 'outline'}
                                         className="h-8 text-xs"
-                                        onClick={(ev) => { ev.stopPropagation(); keyIdeaImagePendingIndexRef.current = idx; keyIdeaImageInputRef.current?.click(); }}
+                                        disabled={uploadingKeyIdeaIndex === idx || imageUrls.length >= MAX_IMAGES_PER_ITEM}
+                                        onClick={(ev) => {
+                                          ev.stopPropagation();
+                                          keyIdeaImagePendingIndexRef.current = idx;
+                                          keyIdeaImageInputRef.current?.click();
+                                        }}
                                       >
-                                        更换
+                                        {uploadingKeyIdeaIndex === idx ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4 mr-1" />}
+                                        {imageUrls.length >= MAX_IMAGES_PER_ITEM ? `最多 ${MAX_IMAGES_PER_ITEM} 张` : '添加图片'}
                                       </Button>
-                                    </>
-                                  ) : (
-                                    <Button
-                                      type="button"
-                                      size="sm"
-                                      variant="outline"
-                                      className="h-8 text-xs"
-                                      disabled={uploadingKeyIdeaIndex === idx}
-                                      onClick={(ev) => {
-                                        ev.stopPropagation();
-                                        keyIdeaImagePendingIndexRef.current = idx;
-                                        keyIdeaImageInputRef.current?.click();
-                                      }}
-                                    >
-                                      {uploadingKeyIdeaIndex === idx ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4 mr-1" />}
-                                      添加图片
-                                    </Button>
-                                  )}
-                                </div>
+                                    </div>
+                                  );
+                                })()}
                               </div>
                             </div>
                           ))}
@@ -1859,11 +1963,12 @@ export function TeachingResourcesPage() {
                 <input
                   ref={practiceImageInputRef}
                   type="file"
+                  multiple
                   accept="image/png,image/jpeg,image/jpg,image/gif,image/webp"
                   className="hidden"
                   onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (file) handlePracticeImageUpload(practiceImagePendingIndexRef.current, file);
+                    const files = Array.from(e.target.files || []);
+                    if (files.length > 0) handlePracticeImageUpload(practiceImagePendingIndexRef.current, files);
                     e.target.value = '';
                   }}
                 />
@@ -1896,39 +2001,52 @@ export function TeachingResourcesPage() {
                           placeholder="题目内容，公式用 $...$ 表示"
                           autoFocus
                         />
-                        <div className="flex items-center gap-2">
-                          {q.imageUrl ? (
-                            <>
-                              <img
-                                src={q.imageUrl}
-                                alt=""
-                                className="h-24 w-auto max-w-[240px] rounded border object-contain bg-gray-50"
-                              />
+                        {(() => {
+                          const imageUrls = getImageUrlsFromItem(q);
+                          return (
+                            <div className="space-y-2">
+                              {imageUrls.length > 0 && (
+                                <div className="flex flex-wrap gap-2">
+                                  {imageUrls.map((url, imageIdx) => (
+                                    <div key={`${url}-${imageIdx}`} className="relative">
+                                      <img
+                                        src={url}
+                                        alt=""
+                                        className="h-24 w-auto max-w-[240px] rounded border object-contain bg-gray-50"
+                                      />
+                                      <button
+                                        type="button"
+                                        className="absolute -top-2 -right-2 h-5 w-5 rounded-full bg-black/70 text-white text-[10px]"
+                                        onClick={() => {
+                                          const next = [...practiceQuestions];
+                                          if (!next[idx]) return;
+                                          const filtered = imageUrls.filter((_, i) => i !== imageIdx);
+                                          next[idx] = withCompatibleImageFields(next[idx], filtered);
+                                          setPracticeQuestions(next);
+                                        }}
+                                      >
+                                        ×
+                                      </button>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
                               <Button
                                 type="button"
                                 size="sm"
-                                variant="ghost"
-                                onClick={() => { practiceImagePendingIndexRef.current = idx; practiceImageInputRef.current?.click(); }}
+                                variant={imageUrls.length > 0 ? 'ghost' : 'outline'}
+                                disabled={uploadingPracticeImageIndex === idx || imageUrls.length >= MAX_IMAGES_PER_ITEM}
+                                onClick={() => {
+                                  practiceImagePendingIndexRef.current = idx;
+                                  practiceImageInputRef.current?.click();
+                                }}
                               >
-                                更换图片
+                                {uploadingPracticeImageIndex === idx ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4 mr-1" />}
+                                {imageUrls.length >= MAX_IMAGES_PER_ITEM ? `最多 ${MAX_IMAGES_PER_ITEM} 张` : '添加题目配图'}
                               </Button>
-                            </>
-                          ) : (
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="outline"
-                              disabled={uploadingPracticeImageIndex === idx}
-                              onClick={() => {
-                                practiceImagePendingIndexRef.current = idx;
-                                practiceImageInputRef.current?.click();
-                              }}
-                            >
-                              {uploadingPracticeImageIndex === idx ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4 mr-1" />}
-                              添加题目配图
-                            </Button>
-                          )}
-                        </div>
+                            </div>
+                          );
+                        })()}
                         {q.options?.length ? (
                           <div className="space-y-2" role="radiogroup" aria-label={`第 ${idx + 1} 题选项`}>
                             {q.options.map((opt, j) => {
@@ -2081,40 +2199,57 @@ export function TeachingResourcesPage() {
                         >
                           <MathTextPreview text={q.question} className="font-medium text-gray-900 [&_p]:mb-0" />
                         </div>
-                        {q.imageUrl ? (
-                          <div className="mb-4 flex items-center gap-2">
-                            <img
-                              src={q.imageUrl}
-                              alt=""
-                              className="max-h-48 w-auto max-w-full rounded border object-contain bg-gray-50"
-                            />
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="ghost"
-                              className="shrink-0"
-                              onClick={(e) => { e.stopPropagation(); practiceImagePendingIndexRef.current = idx; practiceImageInputRef.current?.click(); }}
-                            >
-                              更换
-                            </Button>
-                          </div>
-                        ) : (
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            className="mb-4"
-                            disabled={uploadingPracticeImageIndex === idx}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              practiceImagePendingIndexRef.current = idx;
-                              practiceImageInputRef.current?.click();
-                            }}
-                          >
-                            {uploadingPracticeImageIndex === idx ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4 mr-1" />}
-                            添加题目配图
-                          </Button>
-                        )}
+                        {(() => {
+                          const imageUrls = getImageUrlsFromItem(q);
+                          return (
+                            <div className="mb-4 space-y-2">
+                              {imageUrls.length > 0 && (
+                                <div className="flex flex-wrap gap-2">
+                                  {imageUrls.map((url, imageIdx) => (
+                                    <div key={`${url}-${imageIdx}`} className="relative">
+                                      <img
+                                        src={url}
+                                        alt=""
+                                        className="max-h-48 w-auto max-w-full rounded border object-contain bg-gray-50"
+                                      />
+                                      <button
+                                        type="button"
+                                        className="absolute -top-2 -right-2 h-5 w-5 rounded-full bg-black/70 text-white text-[10px]"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setPracticeQuestions((prev) => {
+                                            const next = [...prev];
+                                            if (!next[idx]) return prev;
+                                            const filtered = getImageUrlsFromItem(next[idx]).filter((_, i) => i !== imageIdx);
+                                            next[idx] = withCompatibleImageFields(next[idx], filtered);
+                                            return next;
+                                          });
+                                        }}
+                                      >
+                                        ×
+                                      </button>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant={imageUrls.length > 0 ? 'ghost' : 'outline'}
+                                className="mb-0"
+                                disabled={uploadingPracticeImageIndex === idx || imageUrls.length >= MAX_IMAGES_PER_ITEM}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  practiceImagePendingIndexRef.current = idx;
+                                  practiceImageInputRef.current?.click();
+                                }}
+                              >
+                                {uploadingPracticeImageIndex === idx ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4 mr-1" />}
+                                {imageUrls.length >= MAX_IMAGES_PER_ITEM ? `最多 ${MAX_IMAGES_PER_ITEM} 张` : '添加题目配图'}
+                              </Button>
+                            </div>
+                          );
+                        })()}
                         {(q.questionType === 'true_false' || (!q.options?.length && /^(true|false)$/i.test((q.correctAnswer || '').trim()))) ? (
                           <div className="flex gap-3 mb-4" role="radiogroup" aria-label="对或错">
                             {[
@@ -2301,11 +2436,12 @@ export function TeachingResourcesPage() {
                 <input
                   ref={exitTicketImageInputRef}
                   type="file"
+                  multiple
                   accept="image/png,image/jpeg,image/jpg,image/gif,image/webp"
                   className="hidden"
                   onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (file) handleExitTicketImageUpload(exitTicketImagePendingIndexRef.current, file);
+                    const files = Array.from(e.target.files || []);
+                    if (files.length > 0) handleExitTicketImageUpload(exitTicketImagePendingIndexRef.current, files);
                     e.target.value = '';
                   }}
                 />
@@ -2327,39 +2463,52 @@ export function TeachingResourcesPage() {
                               placeholder="题目内容，公式用 $...$ 表示"
                               autoFocus
                             />
-                            <div className="flex items-center gap-2">
-                              {q.imageUrl ? (
-                                <>
-                                  <img
-                                    src={q.imageUrl}
-                                    alt=""
-                                    className="h-24 w-auto max-w-[240px] rounded border object-contain bg-gray-50"
-                                  />
+                            {(() => {
+                              const imageUrls = getImageUrlsFromItem(q);
+                              return (
+                                <div className="space-y-2">
+                                  {imageUrls.length > 0 && (
+                                    <div className="flex flex-wrap gap-2">
+                                      {imageUrls.map((url, imageIdx) => (
+                                        <div key={`${url}-${imageIdx}`} className="relative">
+                                          <img
+                                            src={url}
+                                            alt=""
+                                            className="h-24 w-auto max-w-[240px] rounded border object-contain bg-gray-50"
+                                          />
+                                          <button
+                                            type="button"
+                                            className="absolute -top-2 -right-2 h-5 w-5 rounded-full bg-black/70 text-white text-[10px]"
+                                            onClick={() => {
+                                              const next = [...exitTicketQuestions];
+                                              if (!next[idx]) return;
+                                              const filtered = imageUrls.filter((_, i) => i !== imageIdx);
+                                              next[idx] = withCompatibleImageFields(next[idx], filtered);
+                                              setExitTicketQuestions(next);
+                                            }}
+                                          >
+                                            ×
+                                          </button>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
                                   <Button
                                     type="button"
                                     size="sm"
-                                    variant="ghost"
-                                    onClick={() => { exitTicketImagePendingIndexRef.current = idx; exitTicketImageInputRef.current?.click(); }}
+                                    variant={imageUrls.length > 0 ? 'ghost' : 'outline'}
+                                    disabled={uploadingExitTicketImageIndex === idx || imageUrls.length >= MAX_IMAGES_PER_ITEM}
+                                    onClick={() => {
+                                      exitTicketImagePendingIndexRef.current = idx;
+                                      exitTicketImageInputRef.current?.click();
+                                    }}
                                   >
-                                    更换图片
+                                    {uploadingExitTicketImageIndex === idx ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4 mr-1" />}
+                                    {imageUrls.length >= MAX_IMAGES_PER_ITEM ? `最多 ${MAX_IMAGES_PER_ITEM} 张` : '添加题目配图'}
                                   </Button>
-                                </>
-                              ) : (
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  variant="outline"
-                                  disabled={uploadingExitTicketImageIndex === idx}
-                                  onClick={() => {
-                                    exitTicketImagePendingIndexRef.current = idx;
-                                    exitTicketImageInputRef.current?.click();
-                                  }}
-                                >
-                                  {uploadingExitTicketImageIndex === idx ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4 mr-1" />}
-                                  添加题目配图
-                                </Button>
-                              )}
-                            </div>
+                                </div>
+                              );
+                            })()}
                             <div>
                               <label className="text-sm font-medium text-gray-700">参考答案</label>
                               <Textarea
@@ -2412,40 +2561,57 @@ export function TeachingResourcesPage() {
                             >
                               <MathTextPreview text={q.question} className="font-medium text-gray-900 [&_p]:mb-0" />
                             </div>
-                            {q.imageUrl ? (
-                              <div className="mb-3 flex items-center gap-2">
-                                <img
-                                  src={q.imageUrl}
-                                  alt=""
-                                  className="max-h-48 w-auto max-w-full rounded border object-contain bg-gray-50"
-                                />
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  variant="ghost"
-                                  className="shrink-0"
-                                  onClick={(e) => { e.stopPropagation(); exitTicketImagePendingIndexRef.current = idx; exitTicketImageInputRef.current?.click(); }}
-                                >
-                                  更换
-                                </Button>
-                              </div>
-                            ) : (
-                              <Button
-                                type="button"
-                                size="sm"
-                                variant="outline"
-                                className="mb-3"
-                                disabled={uploadingExitTicketImageIndex === idx}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  exitTicketImagePendingIndexRef.current = idx;
-                                  exitTicketImageInputRef.current?.click();
-                                }}
-                              >
-                                {uploadingExitTicketImageIndex === idx ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4 mr-1" />}
-                                添加题目配图
-                              </Button>
-                            )}
+                            {(() => {
+                              const imageUrls = getImageUrlsFromItem(q);
+                              return (
+                                <div className="mb-3 space-y-2">
+                                  {imageUrls.length > 0 && (
+                                    <div className="flex flex-wrap gap-2">
+                                      {imageUrls.map((url, imageIdx) => (
+                                        <div key={`${url}-${imageIdx}`} className="relative">
+                                          <img
+                                            src={url}
+                                            alt=""
+                                            className="max-h-48 w-auto max-w-full rounded border object-contain bg-gray-50"
+                                          />
+                                          <button
+                                            type="button"
+                                            className="absolute -top-2 -right-2 h-5 w-5 rounded-full bg-black/70 text-white text-[10px]"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              setExitTicketQuestions((prev) => {
+                                                const next = [...prev];
+                                                if (!next[idx]) return prev;
+                                                const filtered = getImageUrlsFromItem(next[idx]).filter((_, i) => i !== imageIdx);
+                                                next[idx] = withCompatibleImageFields(next[idx], filtered);
+                                                return next;
+                                              });
+                                            }}
+                                          >
+                                            ×
+                                          </button>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant={imageUrls.length > 0 ? 'ghost' : 'outline'}
+                                    className="mb-0"
+                                    disabled={uploadingExitTicketImageIndex === idx || imageUrls.length >= MAX_IMAGES_PER_ITEM}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      exitTicketImagePendingIndexRef.current = idx;
+                                      exitTicketImageInputRef.current?.click();
+                                    }}
+                                  >
+                                    {uploadingExitTicketImageIndex === idx ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4 mr-1" />}
+                                    {imageUrls.length >= MAX_IMAGES_PER_ITEM ? `最多 ${MAX_IMAGES_PER_ITEM} 张` : '添加题目配图'}
+                                  </Button>
+                                </div>
+                              );
+                            })()}
                             <div className="flex items-center gap-2">
                               <Button
                                 variant="ghost"
