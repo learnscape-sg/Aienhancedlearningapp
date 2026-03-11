@@ -46,7 +46,9 @@ import {
   restoreCourse,
   listClassGroups,
   getCourseAssignments,
+  getTaskAssignments,
   removeCourseAssignment,
+  removeTaskAssignment,
   listCourseShares,
   createCourseShare,
   deleteCourseShare,
@@ -194,6 +196,7 @@ export function CourseManagementPage({ initialCourseTab }: { initialCourseTab?: 
   // --- Shared dialog state ---
   const [selectedClasses, setSelectedClasses] = useState<string[]>([]);
   const [selectedGroups, setSelectedGroups] = useState<string[]>([]);
+  const [assignedTaskClasses, setAssignedTaskClasses] = useState<Array<{ id: string; name: string; grade?: string; studentCount: number }>>([]);
   const [assignedClasses, setAssignedClasses] = useState<Array<{ id: string; name: string; grade?: string; studentCount: number }>>([]);
   const [assignedGroups, setAssignedGroups] = useState<Array<{ id: string; name: string; classId: string; studentCount: number }>>([]);
   const [allGroupsByClass, setAllGroupsByClass] = useState<Record<string, Array<{ id: string; name: string; studentCount: number }>>>({});
@@ -531,13 +534,29 @@ export function CourseManagementPage({ initialCourseTab }: { initialCourseTab?: 
     setSelectedTaskIds((prev) => (prev.includes(taskId) ? prev.filter((id) => id !== taskId) : [...prev, taskId]));
   };
 
-  const openTaskAssignDialog = (taskIds: string[]) => {
+  const openTaskAssignDialog = async (taskIds: string[]) => {
     if (!taskIds.length) return;
     setSelectedTaskIdsForAssign(taskIds);
     setSelectedClasses([]);
+    setAssignedTaskClasses([]);
     setPublishMode('now');
     setScheduledPublishAt('');
     setTaskAssignDialogOpen(true);
+    if (!user?.id) return;
+    try {
+      const res = await getTaskAssignments(taskIds, user.id);
+      setAssignedTaskClasses(
+        (res.classes ?? []).map((c) => ({
+          id: c.id,
+          name: c.name,
+          grade: c.grade,
+          studentCount: c.studentCount,
+        }))
+      );
+    } catch (err) {
+      console.error('Failed to load assigned classes for tasks:', err);
+      setAssignedTaskClasses([]);
+    }
   };
 
   const handleTaskPreview = async (taskId: string) => {
@@ -619,6 +638,7 @@ export function CourseManagementPage({ initialCourseTab }: { initialCourseTab?: 
         setSelectedClasses([]);
         setSelectedTaskIdsForAssign([]);
         setSelectedTaskIds([]);
+        setAssignedTaskClasses([]);
       } catch (err) {
         console.error('Scheduled assign failed:', err);
         alert(err instanceof Error ? err.message : '定时发送设置失败');
@@ -640,11 +660,25 @@ export function CourseManagementPage({ initialCourseTab }: { initialCourseTab?: 
       setSelectedClasses([]);
       setSelectedTaskIdsForAssign([]);
       setSelectedTaskIds([]);
+      setAssignedTaskClasses([]);
     } catch (err) {
       console.error('Assign task failed:', err);
       alert(err instanceof Error ? err.message : '分配失败，请重试');
     } finally {
       setAssigning(false);
+    }
+  };
+
+  const handleRemoveTaskAssignment = async (classId: string) => {
+    if (!user?.id || selectedTaskIdsForAssign.length === 0) return;
+    try {
+      await removeTaskAssignment(selectedTaskIdsForAssign, user.id, classId);
+      setAssignedTaskClasses((prev) => prev.filter((c) => c.id !== classId));
+      setSelectedClasses((prev) => prev.filter((id) => id !== classId));
+      await refreshCourses();
+    } catch (err) {
+      console.error('Remove task assignment failed:', err);
+      alert(err instanceof Error ? err.message : '移除分配失败，请重试');
     }
   };
 
@@ -1458,6 +1492,31 @@ export function CourseManagementPage({ initialCourseTab }: { initialCourseTab?: 
                   />
                 )}
               </div>
+              <div>
+                <p className="text-sm font-medium mb-2">已分配班级（可移除）</p>
+                {assignedTaskClasses.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">当前暂无已分配班级</p>
+                ) : (
+                  <div className="space-y-2">
+                    {assignedTaskClasses.map((c) => (
+                      <div key={c.id} className="flex items-center justify-between border rounded-md p-2">
+                        <div className="text-sm">
+                          <span className="font-medium">{c.name}</span>
+                          <span className="text-muted-foreground ml-2">{c.grade || '未设年级'} · {c.studentCount} 人</span>
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleRemoveTaskAssignment(c.id)}
+                          className="text-red-600 hover:text-red-700"
+                        >
+                          移除
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
               <p className="text-sm font-medium mb-2">选择要分配的班级（可多选）</p>
               {classesLoading ? (
                 <div className="flex justify-center py-6">
@@ -1467,27 +1526,32 @@ export function CourseManagementPage({ initialCourseTab }: { initialCourseTab?: 
                 <p className="text-muted-foreground py-4 text-center">暂无班级，请先在班级管理页创建</p>
               ) : (
                 <div className="space-y-2">
-                  {classes.map((c) => (
-                    <div
-                      key={c.id}
-                      className={`flex items-center p-3 border rounded-lg cursor-pointer hover:bg-gray-50 ${selectedClasses.includes(c.id) ? 'bg-blue-50 border-blue-300' : ''}`}
-                      onClick={() => handleClassToggle(c.id)}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={selectedClasses.includes(c.id)}
-                        onChange={() => handleClassToggle(c.id)}
-                        className="mr-3 w-4 h-4"
-                      />
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2">
-                          <span className="font-medium">{c.name}</span>
-                          <Badge variant="secondary" className="text-xs">{c.grade || '未设年级'}</Badge>
+                  {classes.map((c) => {
+                    const alreadyAssigned = assignedTaskClasses.some((a) => a.id === c.id);
+                    return (
+                      <div
+                        key={c.id}
+                        className={`flex items-center p-3 border rounded-lg transition-colors ${alreadyAssigned ? 'bg-gray-50 opacity-70' : 'cursor-pointer hover:bg-gray-50'} ${selectedClasses.includes(c.id) ? 'bg-blue-50 border-blue-300' : ''}`}
+                        onClick={() => !alreadyAssigned && handleClassToggle(c.id)}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selectedClasses.includes(c.id)}
+                          disabled={alreadyAssigned}
+                          onChange={() => !alreadyAssigned && handleClassToggle(c.id)}
+                          className="mr-3 w-4 h-4"
+                        />
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium">{c.name}</span>
+                            <Badge variant="secondary" className="text-xs">{c.grade || '未设年级'}</Badge>
+                            {alreadyAssigned && <Badge variant="outline" className="text-xs">已分配</Badge>}
+                          </div>
+                          <p className="text-sm text-muted-foreground mt-1">{c.studentCount} 名学生</p>
                         </div>
-                        <p className="text-sm text-muted-foreground mt-1">{c.studentCount} 名学生</p>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </CardContent>

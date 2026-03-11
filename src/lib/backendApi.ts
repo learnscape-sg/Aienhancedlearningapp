@@ -774,6 +774,27 @@ export async function getCourseAssignments(
   );
 }
 
+export async function getTaskAssignments(
+  taskIds: string[],
+  teacherId: string
+): Promise<{
+  classes: CourseAssignmentClass[];
+  groups: CourseAssignmentGroup[];
+}> {
+  const normalizedTaskIds = taskIds.map((id) => id.trim()).filter(Boolean);
+  if (normalizedTaskIds.length === 0) {
+    return { classes: [], groups: [] };
+  }
+  const params = new URLSearchParams({
+    taskIds: normalizedTaskIds.join(','),
+    teacherId,
+  });
+  return apiCall(
+    `/api/assignments?${params.toString()}`,
+    { method: 'GET' }
+  );
+}
+
 export async function removeCourseAssignment(
   courseId: string,
   teacherId: string,
@@ -782,6 +803,23 @@ export async function removeCourseAssignment(
   const params = new URLSearchParams({ courseId, teacherId });
   if (options.classId) params.set('classId', options.classId);
   if (options.groupId) params.set('groupId', options.groupId);
+  return apiCall(`/api/assignments?${params.toString()}`, { method: 'DELETE' });
+}
+
+export async function removeTaskAssignment(
+  taskIds: string[],
+  teacherId: string,
+  classId: string
+): Promise<{ success: boolean }> {
+  const normalizedTaskIds = taskIds.map((id) => id.trim()).filter(Boolean);
+  if (normalizedTaskIds.length === 0) {
+    return { success: true };
+  }
+  const params = new URLSearchParams({
+    taskIds: normalizedTaskIds.join(','),
+    teacherId,
+    classId,
+  });
   return apiCall(`/api/assignments?${params.toString()}`, { method: 'DELETE' });
 }
 
