@@ -53,6 +53,8 @@ import {
   type ClassGroup,
 } from '@/lib/backendApi';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from './ui/tabs';
+import { useFirstClickHint } from './guides/useFirstClickHint';
+import { FirstClickHintDialog } from './guides/FirstClickHintDialog';
 
 interface ClassWithCount extends ClassItem {
   studentCount: number;
@@ -118,6 +120,10 @@ export function ClassManagementPage() {
   const [addToGroupId, setAddToGroupId] = useState<string | null>(null);
   const [selectedStudentsForGroup, setSelectedStudentsForGroup] = useState<string[]>([]);
   const [addingToGroup, setAddingToGroup] = useState(false);
+  const addExistingHint = useFirstClickHint('teacherClassAddExisting');
+  const createNewClassHint = useFirstClickHint('teacherClassCreateNew');
+  const createAccountHint = useFirstClickHint('teacherClassCreateAccount');
+  const searchExistingAccountHint = useFirstClickHint('teacherClassSearchExistingAccount');
 
   const normalizeClassRows = (rows: ClassItem[]): ClassWithCount[] =>
     (rows ?? []).map((c) => ({
@@ -506,15 +512,24 @@ export function ClassManagementPage() {
               <div className="flex items-center gap-2">
                 <Button
                   size="sm"
-                  onClick={() => {
-                    setAddExistingOpen(true);
-                    setExistingGrade('');
-                    setExistingClassId('');
-                  }}
+                  onClick={() =>
+                    addExistingHint.runWithHint(() => {
+                      setAddExistingOpen(true);
+                      setExistingGrade('');
+                      setExistingClassId('');
+                    })
+                  }
                 >
                   从全校选班
                 </Button>
-                <Button size="sm" onClick={() => setNewClassOpen(true)}>
+                <Button
+                  size="sm"
+                  onClick={() =>
+                    createNewClassHint.runWithHint(() => {
+                      setNewClassOpen(true);
+                    })
+                  }
+                >
                   <UserPlus className="w-4 h-4 mr-1" />
                   新建
                 </Button>
@@ -586,16 +601,25 @@ export function ClassManagementPage() {
                 <div className="flex items-center gap-2">
                   <Button
                     size="sm"
-                    onClick={() => {
-                      setBulkCreateOpen(true);
-                      setBulkCreateError('');
-                      setBulkCreateResult(null);
-                    }}
+                    onClick={() =>
+                      createAccountHint.runWithHint(() => {
+                        setBulkCreateOpen(true);
+                        setBulkCreateError('');
+                        setBulkCreateResult(null);
+                      })
+                    }
                   >
                     <UserPlus className="w-4 h-4 mr-1" />
                     创建新账号
                   </Button>
-                  <Button size="sm" onClick={() => setAddStudentOpen(true)}>
+                  <Button
+                    size="sm"
+                    onClick={() =>
+                      searchExistingAccountHint.runWithHint(() => {
+                        setAddStudentOpen(true);
+                      })
+                    }
+                  >
                     <UserPlus className="w-4 h-4 mr-1" />
                     搜索已有账号
                   </Button>
@@ -1150,6 +1174,38 @@ export function ClassManagementPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      <FirstClickHintDialog
+        open={addExistingHint.open}
+        onOpenChange={addExistingHint.setOpen}
+        onCancel={addExistingHint.handleCancel}
+        onConfirm={addExistingHint.handleConfirm}
+        hint={addExistingHint.hint}
+        language={addExistingHint.language}
+      />
+      <FirstClickHintDialog
+        open={createNewClassHint.open}
+        onOpenChange={createNewClassHint.setOpen}
+        onCancel={createNewClassHint.handleCancel}
+        onConfirm={createNewClassHint.handleConfirm}
+        hint={createNewClassHint.hint}
+        language={createNewClassHint.language}
+      />
+      <FirstClickHintDialog
+        open={createAccountHint.open}
+        onOpenChange={createAccountHint.setOpen}
+        onCancel={createAccountHint.handleCancel}
+        onConfirm={createAccountHint.handleConfirm}
+        hint={createAccountHint.hint}
+        language={createAccountHint.language}
+      />
+      <FirstClickHintDialog
+        open={searchExistingAccountHint.open}
+        onOpenChange={searchExistingAccountHint.setOpen}
+        onCancel={searchExistingAccountHint.handleCancel}
+        onConfirm={searchExistingAccountHint.handleConfirm}
+        hint={searchExistingAccountHint.hint}
+        language={searchExistingAccountHint.language}
+      />
     </div>
   );
 }

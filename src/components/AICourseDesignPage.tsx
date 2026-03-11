@@ -54,6 +54,8 @@ import { saveCourseMetaToSupabase } from '../lib/coursesRepository';
 import { downloadMarkdownAsPdf, markdownToPdfBlob } from '../lib/markdownToPdf';
 import { SUBJECT_OPTIONS, CUSTOM_SUBJECT_OPTION, splitSubjectValue } from '../lib/subjects';
 import { TaskPreviewEdit } from './TaskPreviewEdit';
+import { useFirstClickHint } from './guides/useFirstClickHint';
+import { FirstClickHintDialog } from './guides/FirstClickHintDialog';
 
 type Step = 'form' | 'generating' | 'preview' | 'created';
 
@@ -171,6 +173,8 @@ export function AICourseDesignPage({ onNextStep }: AICourseDesignPageProps) {
   const [regeneratingTaskId, setRegeneratingTaskId] = useState<string | null>(null);
   const [previewTaskIndex, setPreviewTaskIndex] = useState(0);
   const [pdfDownloading, setPdfDownloading] = useState<'task' | 'guide' | null>(null);
+  const generateHint = useFirstClickHint('teacherCourseDesignGenerate');
+  const createCourseHint = useFirstClickHint('teacherCourseDesignCreateCourse');
 
   useEffect(() => {
     if (!plan) return;
@@ -679,7 +683,7 @@ export function AICourseDesignPage({ onNextStep }: AICourseDesignPageProps) {
               </select>
             </div>
             <Button
-              onClick={runGeneration}
+              onClick={() => generateHint.runWithHint(runGeneration)}
               className="w-full h-12"
             >
               <Target className="w-5 h-5 mr-2" />
@@ -1009,7 +1013,7 @@ export function AICourseDesignPage({ onNextStep }: AICourseDesignPageProps) {
             )}
             <div className="flex gap-3">
               <Button
-                onClick={handleCreateCourse}
+                onClick={() => createCourseHint.runWithHint(handleCreateCourse)}
                 disabled={createLoading}
               >
                 {createLoading ? (
@@ -1083,6 +1087,22 @@ export function AICourseDesignPage({ onNextStep }: AICourseDesignPageProps) {
           </CardContent>
         </Card>
       )}
+      <FirstClickHintDialog
+        open={generateHint.open}
+        onOpenChange={generateHint.setOpen}
+        onCancel={generateHint.handleCancel}
+        onConfirm={generateHint.handleConfirm}
+        hint={generateHint.hint}
+        language={generateHint.language}
+      />
+      <FirstClickHintDialog
+        open={createCourseHint.open}
+        onOpenChange={createCourseHint.setOpen}
+        onCancel={createCourseHint.handleCancel}
+        onConfirm={createCourseHint.handleConfirm}
+        hint={createCourseHint.hint}
+        language={createCourseHint.language}
+      />
     </div>
   );
 }

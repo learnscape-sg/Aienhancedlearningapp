@@ -36,6 +36,9 @@ import { shouldUseStudentTabletCompat, getCompatViewportContent } from '@/config
 import { appConfig } from '@/config/appConfig';
 import { LoadingScreen } from './components/LoadingScreen';
 import { LAST_LEARNING_TTL_MS, SESSION_RECORD_STORAGE_PREFIX } from '@/constants/learningSession';
+import { useGuide } from './components/guides/GuideProvider';
+import { GuideTourOverlay } from './components/guides/GuideTourOverlay';
+import { guideCatalog } from './components/guides/guideCatalog';
 
 // Teacher platform components
 import { TeacherOverview } from './components/TeacherOverview';
@@ -50,6 +53,7 @@ const TEACHER_SECTIONS = ['overview', 'course-design', 'courses', 'materials', '
 
 function AppContent() {
   const { user, loading, profileResolved, login } = useAuth();
+  const { activeTourId, shouldShow, startTour } = useGuide();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { i18n } = useTranslation();
@@ -70,6 +74,16 @@ function AppContent() {
   const [pdfData, setPdfData] = useState<{ fileName: string; grade: string; interests: string[] } | null>(null);
   const [tutorQuestionTrigger, setTutorQuestionTrigger] = useState<{ selectedText: string; context: string; timestamp: number } | null>(null);
   const [courseDesignData, setCourseDesignData] = useState<any>(null);
+
+  useEffect(() => {
+    const teacherDashboardTourId = guideCatalog.teacherDashboardV1.id;
+    if (!user || user.role !== 'teacher') return;
+    if (appState !== 'dashboard') return;
+    if (activeSection !== 'overview') return;
+    if (activeTourId) return;
+    if (!shouldShow(teacherDashboardTourId)) return;
+    startTour(teacherDashboardTourId);
+  }, [user?.id, user?.role, appState, activeSection, activeTourId, shouldShow, startTour]);
 
   // Apply tenant-scoped tablet color compat (hex overrides for older Chromium/WebView)
   useEffect(() => {
@@ -512,18 +526,21 @@ function AppContent() {
   // Render teacher platform (admin sees all tenant data when logged in)
   if (user?.role === 'teacher' || user?.role === 'admin') {
     return (
-      <RoleBasedLayout
-        sidebar={
-          <TeacherSidebar
-            activeSection={activeSection}
-            onSectionChange={handleSectionChange}
-            languageSpace={languageSpace}
-            onLanguageSpaceChange={handleLanguageSpaceChange}
-            navPolicy={navPolicy}
-          />
-        }
-        content={renderTeacherContent()}
-      />
+      <>
+        <RoleBasedLayout
+          sidebar={
+            <TeacherSidebar
+              activeSection={activeSection}
+              onSectionChange={handleSectionChange}
+              languageSpace={languageSpace}
+              onLanguageSpaceChange={handleLanguageSpaceChange}
+              navPolicy={navPolicy}
+            />
+          }
+          content={renderTeacherContent()}
+        />
+        <GuideTourOverlay />
+      </>
     );
   }
 

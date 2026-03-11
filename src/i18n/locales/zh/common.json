@@ -4,5 +4,13 @@
   "restoreTitle": "还原到小窗口 (ESC)",
   "parseError": "解析错误",
   "renderError": "渲染思维导图时出错",
-  "syntaxError": "语法错误"
+  "syntaxError": "语法错误",
+  "guide": {
+    "skip": "跳过引导",
+    "next": "下一步",
+    "finish": "完成",
+    "cancel": "取消",
+    "confirmContinue": "我知道了并继续",
+    "stepLabel": "步骤 {{current}}/{{total}}"
+  }
 }

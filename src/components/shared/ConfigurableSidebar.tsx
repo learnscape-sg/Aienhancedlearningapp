@@ -18,6 +18,8 @@ interface ConfigurableSidebarProps {
   onSectionChange: (section: string) => void;
   onLanguageSpaceChange: (space: LanguageSpace) => void;
   onLogout: () => Promise<void>;
+  sidebarGuideId?: string;
+  itemGuideIds?: Record<string, string>;
 }
 
 export function ConfigurableSidebar({
@@ -32,9 +34,11 @@ export function ConfigurableSidebar({
   onSectionChange,
   onLanguageSpaceChange,
   onLogout,
+  sidebarGuideId,
+  itemGuideIds,
 }: ConfigurableSidebarProps) {
   return (
-    <div className="w-64 bg-sidebar border-r border-sidebar-border flex flex-col h-screen">
+    <div className="w-64 bg-sidebar border-r border-sidebar-border flex flex-col h-screen" data-guide-id={sidebarGuideId}>
       <div className="p-6 border-b border-sidebar-border">
         <div className="flex items-center space-x-3">
           <div className="w-8 h-8 bg-sidebar-primary rounded-lg flex items-center justify-center">
@@ -94,6 +98,7 @@ export function ConfigurableSidebar({
                   : 'text-muted-foreground hover:text-sidebar-foreground hover:bg-sidebar-accent'
               }`}
               onClick={() => onSectionChange(item.id)}
+              data-guide-id={itemGuideIds?.[item.id]}
             >
               <Icon className="w-5 h-5 mr-3" />
               {languageSpace === 'zh' ? item.nameZh : item.nameEn}

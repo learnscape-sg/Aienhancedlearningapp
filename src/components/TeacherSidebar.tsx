@@ -36,6 +36,13 @@ export function TeacherSidebar({
       onSectionChange={onSectionChange}
       onLanguageSpaceChange={onLanguageSpaceChange}
       onLogout={logout}
+      sidebarGuideId="teacher-sidebar-nav"
+      itemGuideIds={{
+        materials: 'teacher-nav-materials',
+        'course-design': 'teacher-nav-course-design',
+        classes: 'teacher-nav-classes',
+        settings: 'teacher-nav-settings',
+      }}
     />
   );
 }

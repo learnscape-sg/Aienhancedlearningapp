@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { AuthProvider } from './components/AuthContext';
 import { FontSizeProvider } from './contexts/FontSizeContext';
+import { GuideProvider } from './components/guides/GuideProvider';
 import { FeedbackButton } from './components/shared/FeedbackButton';
 import App from './App.tsx';
 import { CoursePage } from './components/student/CoursePage';
@@ -19,25 +20,27 @@ const MAINTENANCE_MODE = false;
 
 createRoot(document.getElementById('root')!).render(
   <AuthProvider>
-    <FontSizeProvider>
-    <BrowserRouter>
-      <FeedbackButton />
-      {MAINTENANCE_MODE ? (
-        <MaintenancePage />
-      ) : (
-        <Routes>
-          <Route path="/" element={<App />} />
-          <Route path="/app" element={<App />} />
-          <Route path="/app/:space" element={<App />} />
-          <Route path="/shared-course/:token" element={<SharedCourseLandingPage />} />
-          <Route path="/shared-twin/:token" element={<SharedTwinLandingPage />} />
-          <Route path="/forgot-password" element={<ForgotPasswordPage />} />
-          <Route path="/reset-password" element={<ResetPasswordPage />} />
-          <Route path="/course/:id" element={<CoursePage />} />
-          <Route path="/admin/*" element={<AdminPortal />} />
-        </Routes>
-      )}
-    </BrowserRouter>
-    </FontSizeProvider>
+    <GuideProvider>
+      <FontSizeProvider>
+      <BrowserRouter>
+        <FeedbackButton />
+        {MAINTENANCE_MODE ? (
+          <MaintenancePage />
+        ) : (
+          <Routes>
+            <Route path="/" element={<App />} />
+            <Route path="/app" element={<App />} />
+            <Route path="/app/:space" element={<App />} />
+            <Route path="/shared-course/:token" element={<SharedCourseLandingPage />} />
+            <Route path="/shared-twin/:token" element={<SharedTwinLandingPage />} />
+            <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+            <Route path="/reset-password" element={<ResetPasswordPage />} />
+            <Route path="/course/:id" element={<CoursePage />} />
+            <Route path="/admin/*" element={<AdminPortal />} />
+          </Routes>
+        )}
+      </BrowserRouter>
+      </FontSizeProvider>
+    </GuideProvider>
   </AuthProvider>
 );

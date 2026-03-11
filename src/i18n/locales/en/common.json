@@ -4,5 +4,13 @@
   "restoreTitle": "Restore to small window (ESC)",
   "parseError": "Parse error",
   "renderError": "Error rendering mind map",
-  "syntaxError": "Syntax error"
+  "syntaxError": "Syntax error",
+  "guide": {
+    "skip": "Skip",
+    "next": "Next",
+    "finish": "Finish",
+    "cancel": "Cancel",
+    "confirmContinue": "Got it, continue",
+    "stepLabel": "Step {{current}}/{{total}}"
+  }
 }

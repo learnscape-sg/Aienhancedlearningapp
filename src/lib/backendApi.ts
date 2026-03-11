@@ -45,7 +45,13 @@ export type ProductEventName =
   | 'class_deleted'
   | 'students_batch_created_for_class'
   | 'language_switched'
-  | 'feedback_submitted';
+  | 'feedback_submitted'
+  | 'guide_shown'
+  | 'guide_step_next'
+  | 'guide_skipped'
+  | 'guide_completed'
+  | 'hint_shown'
+  | 'hint_confirmed';
 
 const getBaseUrl = (): string => {
   const url = import.meta.env.VITE_API_URL;
